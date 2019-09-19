@@ -25,7 +25,9 @@ package jdk.internal.foreign.abi;
 import jdk.incubator.foreign.FunctionDescriptor;
 
 import java.lang.invoke.MethodType;
+import java.util.Arrays;
 import java.util.List;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 public class CallingSequence {

@@ -819,6 +819,54 @@ void MachCallRuntimeNode::dump_spec(outputStream *st) const {
 }
 #endif
 //=============================================================================
+uint MachCallNativeNode::size_of() const { return sizeof(*this); }
+bool MachCallNativeNode::cmp( const Node &n ) const {
+  MachCallNativeNode &call = (MachCallNativeNode&)n;
+  return MachCallNode::cmp(call) && !strcmp(_name,call._name) && cmp_regs(call);
+}
+bool MachCallNativeNode::cmp_regs( MachCallNativeNode& call ) const {
+  if (_arg_regs_cnt!= call._arg_regs_cnt) {
+    return false;
+  }
+  for (uint i = 0; i < _arg_regs_cnt; i++) {
+    if (_arg_regs[i] != call._arg_regs[i] ) {
+      return false;
+    }
+  }
+
+  if (_ret_regs_cnt != call._ret_regs_cnt) {
+    return false;
+  }
+  for (uint i = 0; i < _ret_regs_cnt; i++) {
+    if (_ret_regs[i] != call._ret_regs[i] ) {
+      return false;
+    }
+  }
+  return true;
+}
+#ifndef PRODUCT
+void MachCallNativeNode::dump_regs(outputStream *st) const {
+  st->print("_arg_regs{ ");
+  for (uint i = 0; i < _arg_regs_cnt; i++) {
+    _arg_regs[i]->print_on(st);
+    st->print(", ");
+  }
+  st->print("} ");
+  st->print("_ret_regs{ ");
+  for (uint i = 0; i < _ret_regs_cnt; i++) {
+    _ret_regs[i]->print_on(st);
+    st->print(", ");
+  }
+  st->print("} ");
+}
+void MachCallNativeNode::dump_spec(outputStream *st) const {
+  st->print("%s ",_name);
+  dump_regs(st);
+  st->print("shadow_space_bytes: %d ", _shadow_space_bytes);
+  MachCallNode::dump_spec(st);
+}
+#endif
+//=============================================================================
 // A shared JVMState for all HaltNodes.  Indicates the start of debug info
 // is at TypeFunc::Parms.  Only required for SOE register spill handling -
 // to indicate where the stack-slot-only debug info inputs begin.

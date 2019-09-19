@@ -459,6 +459,11 @@ int MachCallRuntimeNode::ret_addr_offset() {
   return offset;
 }
 
+int MachCallNativeNode::ret_addr_offset() {
+  // FIXME return size of emitted code? What to do here?
+  return 0;
+}
+
 // Indicate if the safepoint node needs the polling page as an input,
 // it does if the polling page is more than disp32 away.
 bool SafePointNode::needs_polling_address_input()
@@ -12641,6 +12646,159 @@ instruct CallLeafDirect(method meth)
   ins_cost(300);
   format %{ "call_leaf,runtime " %}
   ins_encode(clear_avx, Java_To_Runtime(meth));
+  ins_pipe(pipe_slow);
+%}
+
+//
+instruct CallNativeDirect(method meth)
+%{
+  match(CallNative);
+  effect(USE meth);
+
+  ins_cost(300);
+  format %{ "call_native " %}
+  ins_encode %{
+    if(_need_transition) {
+      __ block_comment("{ thread state transition java to native");
+      // FIXME r15 and r10 might be used by the target ABI to pass arguments
+      address last_pc = __ pc();
+      // sp and pc needed for walkable stack frame in safepoint poll slow path
+      __ set_last_Java_frame(r15_thread, rsp, noreg, last_pc); /* thread, sp, fp, pc. Kills r10 */
+      __ movl(Address(r15_thread, JavaThread::thread_state_offset()), _thread_in_native);
+      __ block_comment("} thread state transition java to native");
+    }
+
+    if (_shadow_space_bytes != 0) {
+      __ subptr(rsp, _shadow_space_bytes);
+    }
+    // FIXME can library be unloaded? Can the target address change? Do we need some dependency?
+    __ call(ExternalAddress((address) $meth$$method));
+    if (_shadow_space_bytes != 0) {
+      __ addptr(rsp, _shadow_space_bytes);
+    }
+
+    assert(_ret_regs_cnt <= 1
+      || (_ret_regs_cnt == 2 && !_ret_regs[1]->is_valid()), "no multi-reg returns");
+    bool need_spills = _ret_regs_cnt != 0;
+    VMReg ret_reg = need_spills ? _ret_regs[0] : VMRegImpl::Bad();
+
+    // Unpack native results
+    switch (_return_type) {
+      case T_CHAR  :
+        assert(ret_reg->is_Register(), "FIXME");
+        __ movzwl(ret_reg->as_Register(), ret_reg->as_Register());
+        break;
+      case T_BYTE  :
+        assert(ret_reg->is_Register(), "FIXME");
+        __ sign_extend_byte(ret_reg->as_Register());
+        break;
+      case T_SHORT :
+        assert(ret_reg->is_Register(), "FIXME");
+        __ sign_extend_short(ret_reg->as_Register());
+        break;
+      case T_INT   :
+      case T_DOUBLE:
+      case T_FLOAT :
+      case T_VOID  :
+      case T_LONG  :
+        break; /* nothing to do */
+      default      : ShouldNotReachHere();
+    }
+
+    if(_need_transition) {
+      __ block_comment("{ thread state transition native to java");
+      // FIXME r15 might be volatile (killed by call above)
+      __ restore_cpu_control_state_after_jni();
+
+      __ movl(Address(r15_thread, JavaThread::thread_state_offset()), _thread_in_native_trans);
+
+      if (os::is_MP()) {
+        // Force this write out before the read below
+        __ membar(Assembler::Membar_mask_bits(
+              Assembler::LoadLoad | Assembler::LoadStore |
+              Assembler::StoreLoad | Assembler::StoreStore));
+      }
+
+      Label L_after_safepoint_poll;
+      Label L_safepoint_poll_slow_path;
+
+      __ block_comment("safepoint poll");
+      __ safepoint_poll(L_safepoint_poll_slow_path, r15_thread, rscratch1);
+      __ cmpl(Address(r15_thread, JavaThread::suspend_flags_offset()), 0);
+      __ jcc(Assembler::notEqual, L_safepoint_poll_slow_path);
+      // change thread state
+      __ movl(Address(r15_thread, JavaThread::thread_state_offset()), _thread_in_Java);
+
+      __ bind(L_after_safepoint_poll);
+
+      __ block_comment("reguard stack check");
+      Label L_reguard;
+      Label L_after_reguard;
+      __ cmpl(Address(r15_thread, JavaThread::stack_guard_state_offset()), JavaThread::stack_guard_yellow_reserved_disabled);
+      __ jcc(Assembler::equal, L_reguard);
+      __ bind(L_after_reguard);
+
+      __ reset_last_Java_frame(r15_thread, /* clear_fp = */ false);
+
+      Label L_done;
+      __ jmp(L_done);
+      __ block_comment("} thread state transition native to java");
+
+      //////////////////////////////////////////////////////////////////////////////
+
+      __ block_comment("{ L_safepoint_poll_slow_path");
+      __ bind(L_safepoint_poll_slow_path);
+      __ vzeroupper();
+
+      if (need_spills) {
+        __ spill_register(ret_reg);
+      }
+
+      __ mov(c_rarg0, r15_thread);
+      __ mov(r12, rsp); // remember sp
+      __ subptr(rsp, frame::arg_reg_save_area_bytes); // windows
+      __ andptr(rsp, -16); // align stack as required by ABI
+      __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, JavaThread::check_special_condition_for_native_trans)));
+      __ mov(rsp, r12); // restore sp
+      __ reinit_heapbase();
+
+      if (need_spills) {
+        __ fill_register(ret_reg);
+      }
+
+      __ jmp(L_after_safepoint_poll);
+      __ block_comment("} L_safepoint_poll_slow_path");
+
+
+      //////////////////////////////////////////////////////////////////////////////
+
+      __ block_comment("{ L_reguard");
+      __ bind(L_reguard);
+      __ vzeroupper();
+
+      if (need_spills) {
+        __ spill_register(ret_reg);
+      }
+
+      __ mov(r12, rsp); // remember sp
+      __ subptr(rsp, frame::arg_reg_save_area_bytes); // windows
+      __ andptr(rsp, -16); // align stack as required by ABI
+      __ call(RuntimeAddress(CAST_FROM_FN_PTR(address, SharedRuntime::reguard_yellow_pages)));
+      __ mov(rsp, r12); // restore sp
+      __ reinit_heapbase();
+
+      if (need_spills) {
+        __ fill_register(ret_reg);
+      }
+
+      __ jmp(L_after_reguard);
+      __ block_comment("} L_reguard");
+
+      //////////////////////////////////////////////////////////////////////////////
+
+      __ bind(L_done);
+    }
+  %}
   ins_pipe(pipe_slow);
 %}
 

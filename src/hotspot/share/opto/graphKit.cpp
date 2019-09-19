@@ -24,6 +24,11 @@
 
 #include "precompiled.hpp"
 #include "ci/ciUtilities.hpp"
+#include "ci/ciNativeEntryPoint.hpp"
+#include "ci/ciObjArray.hpp"
+#include "ci/ciVMStorage.hpp"
+#include "ci/ciABIDescriptor.hpp"
+#include "asm/register.hpp"
 #include "compiler/compileLog.hpp"
 #include "gc/shared/barrierSet.hpp"
 #include "gc/shared/c2/barrierSetC2.hpp"
@@ -2558,6 +2563,102 @@ Node* GraphKit::make_runtime_call(int flags,
   }
   return call;
 
+}
+
+//-----------------------------make_native_call-------------------------------
+Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNativeEntryPoint* nep) {
+  address call_addr = nep->entry_point();
+  uint n_filtered_args = nargs - 2; // -fallback, -nep;
+
+  ResourceMark rm;
+  Node** argument_nodes = NEW_RESOURCE_ARRAY(Node*, n_filtered_args);
+  const Type** arg_types = NEW_RESOURCE_ARRAY(const Type*, n_filtered_args);
+  VMReg* arg_regs = NEW_ARENA_ARRAY(C->node_arena(), VMReg, n_filtered_args);
+
+  ciObjArray* argRegs = nep->argMoves();
+  {
+    for (uint vm_arg_pos = 0, java_arg_read_pos = 0;
+        vm_arg_pos < n_filtered_args; vm_arg_pos++) {
+      uint vm_unfiltered_arg_pos = vm_arg_pos + 1; // +1 to skip fallback handle argument
+      Node* node = argument(vm_unfiltered_arg_pos);
+      const Type* type = call_type->domain()->field_at(TypeFunc::Parms + vm_unfiltered_arg_pos);
+      VMReg reg = type == Type::HALF
+        ? VMRegImpl::Bad()
+        : argRegs->obj_at(java_arg_read_pos++)->as_vm_storage()->as_VMReg();
+
+      argument_nodes[vm_arg_pos] = node;
+      arg_types[vm_arg_pos] = type;
+      arg_regs[vm_arg_pos] = reg;
+    }
+  }
+
+  uint n_returns = call_type->range()->cnt() - TypeFunc::Parms;
+   // FIXME LEAKED -> allocating in node_arena() doesn't work,
+   // that seems to be freed after matching, so doesn't stay alive until lowering
+  VMReg* ret_regs = NEW_C_HEAP_ARRAY(VMReg, n_returns, mtInternal);
+  const Type** ret_types = NEW_RESOURCE_ARRAY(const Type*, n_returns);
+
+  ciObjArray* retRegs = nep->returnMoves();
+  {
+    for (uint vm_ret_pos = 0, java_ret_read_pos = 0;
+        vm_ret_pos < n_returns; vm_ret_pos++) { // 0 or 1
+      const Type* type = call_type->range()->field_at(TypeFunc::Parms + vm_ret_pos);
+      VMReg reg = type == Type::HALF
+        ? VMRegImpl::Bad()
+        : retRegs->obj_at(java_ret_read_pos++)->as_vm_storage()->as_VMReg();
+
+      ret_regs[vm_ret_pos] = reg;
+      ret_types[vm_ret_pos] = type;
+    }
+  }
+
+  const TypeFunc* new_call_type = TypeFunc::make(
+    TypeTuple::make_func(n_filtered_args, arg_types),
+    TypeTuple::make_func(n_returns, ret_types)
+  );
+  CallNativeNode* call = new CallNativeNode(new_call_type, call_addr, "native_call", TypePtr::BOTTOM,
+                                            arg_regs, n_filtered_args,
+                                            ret_regs, n_returns,
+                                            nep->abi_descriptor()->shadow_space(), nep->need_transition(),
+                                            nep->method_type()->rtype()->basic_type());
+
+  if (call->_need_transition) {
+    // FIXME this uses JVMState, do we need to return another one?
+    add_safepoint_edges(call);
+  }
+
+  set_predefined_input_for_runtime_call(call);
+
+  for (uint i = 0; i < n_filtered_args; i++) {
+    call->init_req(i + TypeFunc::Parms, argument_nodes[i]);
+  }
+
+  Node* c = gvn().transform(call);
+  assert(c == call, "cannot disappear");
+
+  set_predefined_output_for_runtime_call(call);
+
+  Node* ret;
+  if (method() == NULL || method()->return_type()->basic_type() == T_VOID) {
+    ret = top();
+  } else {
+    Node* current_value = NULL;
+    for (uint vm_ret_pos = 0; vm_ret_pos < n_returns; vm_ret_pos++) {
+      if (new_call_type->range()->field_at(TypeFunc::Parms + vm_ret_pos)  == Type::HALF) {
+        // is this needed?
+        gvn().transform(new ProjNode(call, TypeFunc::Parms + vm_ret_pos));
+      } else {
+        assert(current_value == NULL, "Must not overwrite");
+        current_value = gvn().transform(new ProjNode(call, TypeFunc::Parms + vm_ret_pos));
+      }
+    }
+    assert(current_value != NULL, "Should not be null");
+    ret = current_value;
+  }
+
+  push_node(method()->return_type()->basic_type(), ret);
+
+  return call;
 }
 
 //------------------------------merge_memory-----------------------------------

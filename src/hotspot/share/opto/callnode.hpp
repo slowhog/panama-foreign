@@ -48,6 +48,7 @@ class       CallDynamicJavaNode;
 class     CallRuntimeNode;
 class       CallLeafNode;
 class         CallLeafNoFPNode;
+class     CallNativeNode;
 class     AllocateNode;
 class       AllocateArrayNode;
 class     BoxLockNode;
@@ -799,6 +800,48 @@ public:
   }
   virtual int   Opcode() const;
   virtual bool        guaranteed_safepoint()  { return false; }
+#ifndef PRODUCT
+  virtual void  dump_spec(outputStream *st) const;
+#endif
+};
+
+//------------------------------CallNativeNode-----------------------------------
+// Make a direct call into a foreign function with an arbitrary ABI
+// safepoints
+class CallNativeNode : public CallNode {
+  virtual bool cmp( const Node &n ) const;
+  virtual uint size_of() const;
+
+  bool cmp_regs( CallNativeNode& call ) const;
+#ifndef PRODUCT
+  void dump_regs(outputStream *st) const;
+#endif
+public:
+  const VMReg* _arg_regs;
+  const uint   _arg_regs_cnt;
+  const VMReg* _ret_regs;
+  const uint   _ret_regs_cnt;
+  const int _shadow_space_bytes;
+  const bool _need_transition;
+  const BasicType _return_type; // unerased
+
+  CallNativeNode(const TypeFunc* tf, address addr, const char* name,
+               const TypePtr* adr_type,
+               const VMReg* arg_regs, uint arg_regs_cnt,
+               const VMReg* ret_regs, uint ret_regs_cnt,
+               int shadow_space_bytes, bool need_transition,
+               BasicType return_type)
+    : CallNode(tf, addr, adr_type), _arg_regs(arg_regs), _arg_regs_cnt(arg_regs_cnt),
+      _ret_regs(ret_regs), _ret_regs_cnt(ret_regs_cnt), _shadow_space_bytes(shadow_space_bytes),
+      _need_transition(need_transition), _return_type(return_type)
+  {
+    init_class_id(Class_CallNative);
+    _name = name;
+  }
+  virtual int   Opcode() const;
+  virtual bool guaranteed_safepoint()  { return _need_transition; }
+  virtual Node* match(const ProjNode *proj, const Matcher *m);
+  virtual void  calling_convention( BasicType* sig_bt, VMRegPair *parm_regs, uint argcnt ) const;
 #ifndef PRODUCT
   virtual void  dump_spec(outputStream *st) const;
 #endif

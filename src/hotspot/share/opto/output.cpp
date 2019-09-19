@@ -1472,7 +1472,9 @@ void PhaseOutput::fill_buffer(CodeBuffer* cb, uint* blk_starts) {
           // Save the return address
           call_returns[block->_pre_order] = current_offset + mcall->ret_addr_offset();
 
-          if (mcall->is_MachCallLeaf()) {
+          if (mcall->is_MachCallLeaf() || (mcall->is_MachCallNative()
+              && !(mcall->as_MachCallNative()->_need_transition))) {
+              // skip observing safepoint below (needs JVMS)
             is_mcall = false;
             is_sfn = false;
           }

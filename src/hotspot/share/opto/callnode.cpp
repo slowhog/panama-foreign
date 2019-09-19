@@ -43,6 +43,7 @@
 #include "opto/rootnode.hpp"
 #include "opto/runtime.hpp"
 #include "utilities/powerOfTwo.hpp"
+#include "code/vmreg.hpp"
 
 // Portions of code courtesy of Clifford Click
 
@@ -1082,9 +1083,128 @@ void CallRuntimeNode::dump_spec(outputStream *st) const {
 }
 #endif
 
+//=============================================================================
+uint CallNativeNode::size_of() const { return sizeof(*this); }
+bool CallNativeNode::cmp( const Node &n ) const {
+  CallNativeNode &call = (CallNativeNode&)n;
+  return CallNode::cmp(call) && !strcmp(_name,call._name) && cmp_regs(call);
+}
+bool CallNativeNode::cmp_regs( CallNativeNode& call ) const {
+  if (_arg_regs_cnt != call._arg_regs_cnt) {
+    return false;
+  }
+  for (uint i = 0; i < _arg_regs_cnt; i++) {
+    if (_arg_regs[i] != call._arg_regs[i] ) {
+      return false;
+    }
+  }
+
+  if (_ret_regs_cnt != call._ret_regs_cnt) {
+    return false;
+  }
+  for (uint i = 0; i < _ret_regs_cnt; i++) {
+    if (_ret_regs[i] != call._ret_regs[i] ) {
+      return false;
+    }
+  }
+  return true;
+}
+Node* CallNativeNode::match(const ProjNode *proj, const Matcher *matcher) {
+  switch (proj->_con) {
+    case TypeFunc::Control:
+    case TypeFunc::I_O:
+    case TypeFunc::Memory:
+      return new MachProjNode(this,proj->_con,RegMask::Empty,MachProjNode::unmatched_proj);
+    case TypeFunc::ReturnAdr:
+    case TypeFunc::FramePtr:
+      ShouldNotReachHere();
+    case TypeFunc::Parms:
+    default: {
+      if(tf()->range()->field_at(proj->_con) == Type::HALF) {
+        assert(_ret_regs[proj->_con - TypeFunc::Parms] == VMRegImpl::Bad());
+        // 2nd half of doubles and longs
+        return new MachProjNode(this,proj->_con, RegMask::Empty, (uint)OptoReg::Bad);
+      }
+
+      const BasicType bt = tf()->range()->field_at(proj->_con)->basic_type();
+      OptoReg::Name optoreg = OptoReg::as_OptoReg(_ret_regs[proj->_con - TypeFunc::Parms]);
+      OptoRegPair regs;
+      if (bt == T_DOUBLE || bt == T_LONG) {
+        regs.set2(optoreg);
+      } else {
+        regs.set1(optoreg);
+      }
+      RegMask rm = RegMask(regs.first());
+      if( OptoReg::is_valid(regs.second()) )
+        rm.Insert( regs.second() );
+      return new MachProjNode(this,proj->_con,rm,tf()->range()->field_at(proj->_con)->ideal_reg());
+    }
+  }
+  return NULL;
+}
+#ifndef PRODUCT
+void CallNativeNode::dump_regs(outputStream *st) const {
+  st->print("_arg_regs{ ");
+  for (uint i = 0; i < _arg_regs_cnt; i++) {
+    _arg_regs[i]->print_on(st);
+    st->print(", ");
+  }
+  st->print("} ");
+  st->print("_ret_regs{ ");
+  for (uint i = 0; i < _ret_regs_cnt; i++) {
+    _ret_regs[i]->print_on(st);
+    st->print(", ");
+  }
+  st->print("} ");
+}
+void CallNativeNode::dump_spec(outputStream *st) const {
+  st->print("# ");
+  st->print("%s ", _name);
+  dump_regs(st);
+  st->print("shadow_space_bytes: %d ", _shadow_space_bytes);
+  CallNode::dump_spec(st);
+}
+#endif
+
 //------------------------------calling_convention-----------------------------
 void CallRuntimeNode::calling_convention( BasicType* sig_bt, VMRegPair *parm_regs, uint argcnt ) const {
   Matcher::c_calling_convention( sig_bt, parm_regs, argcnt );
+}
+
+void CallNativeNode::calling_convention( BasicType* sig_bt, VMRegPair *parm_regs, uint argcnt ) const {
+  assert((tf()->domain()->cnt() - TypeFunc::Parms) == argcnt, "arg counts must match!");
+#ifndef PRODUCT
+  for (uint i = 0; i < argcnt; i++) {
+    assert(tf()->domain()->field_at(TypeFunc::Parms + i)->basic_type() == sig_bt[i], "types must match!");
+  }
+#endif
+  for (uint i = 0; i < argcnt; i++) {
+    switch (sig_bt[i]) {
+      case T_BOOLEAN:
+      case T_CHAR:
+      case T_BYTE:
+      case T_SHORT:
+      case T_INT:
+      case T_FLOAT:
+        assert(i < _arg_regs_cnt, "oob access");
+        parm_regs[i].set1(_arg_regs[i]);
+        break;
+      case T_LONG:
+      case T_DOUBLE:
+        assert((i + 1) < argcnt && sig_bt[i + 1] == T_VOID, "expecting half");
+        assert(i < _arg_regs_cnt, "oob access");
+        parm_regs[i].set2(_arg_regs[i]);
+        break;
+      case T_VOID: // Halves of longs and doubles
+        assert(i != 0 && (sig_bt[i - 1] == T_LONG || sig_bt[i - 1] == T_DOUBLE), "expecting half");
+        assert(_arg_regs[i] == VMRegImpl::Bad(), "expecting bad reg");
+        parm_regs[i].set_bad();
+        break;
+      default:
+        ShouldNotReachHere();
+        break;
+    }
+  }
 }
 
 //=============================================================================

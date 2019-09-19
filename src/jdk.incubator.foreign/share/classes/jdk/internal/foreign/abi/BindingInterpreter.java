@@ -28,6 +28,7 @@ import jdk.incubator.foreign.MemorySegment;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.Utils;
 
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.util.ArrayDeque;
@@ -43,7 +44,6 @@ public class BindingInterpreter {
     private static final VarHandle VH_LONG = MemoryHandles.varHandle(long.class, ByteOrder.nativeOrder());
     private static final VarHandle VH_FLOAT = MemoryHandles.varHandle(float.class, ByteOrder.nativeOrder());
     private static final VarHandle VH_DOUBLE = MemoryHandles.varHandle(double.class, ByteOrder.nativeOrder());
-
     static void unbox(Object arg, List<Binding> bindings, Function<VMStorage,
             MemoryAddress> ptrFunction, List<? super MemorySegment> buffers) {
         Deque<Object> stack = new ArrayDeque<>();
@@ -64,12 +64,7 @@ public class BindingInterpreter {
                 }
                 case COPY_BUFFER -> {
                     Binding.Copy binding = (Binding.Copy) b;
-                    MemorySegment operand = (MemorySegment) stack.pop();
-                    assert operand.byteSize() == binding.size() : "operand size mismatch";
-                    MemorySegment copy = MemorySegment.allocateNative(binding.size(), binding.alignment());
-                    MemoryAddress.copy(operand.baseAddress(), copy.baseAddress(), binding.size());
-                    buffers.add(copy);
-                    stack.push(copy);
+                    stack.push(copyBuffer((MemorySegment) stack.pop(), binding.size(), binding.alignment(), buffers));
                 }
                 case ALLOC_BUFFER ->
                     throw new UnsupportedOperationException();
@@ -82,6 +77,15 @@ public class BindingInterpreter {
                 default -> throw new IllegalArgumentException("Unsupported tag: " + b);
             }
         }
+    }
+
+    static MemorySegment copyBuffer(MemorySegment operand, long size, long alignment,
+                                    List<? super MemorySegment> tempBuffers) {
+        assert operand.byteSize() == size : "operand size mismatch";
+        MemorySegment copy = MemorySegment.allocateNative(size, alignment);
+        MemoryAddress.copy(operand.baseAddress(), copy.baseAddress(), size);
+        tempBuffers.add(copy);
+        return copy;
     }
 
     static Object box(List<Binding> bindings, Function<VMStorage, MemoryAddress> ptrFunction) {
@@ -126,7 +130,7 @@ public class BindingInterpreter {
        return stack.pop();
     }
 
-    private static void writeOverSized(MemoryAddress ptr, Class<?> type, Object o) {
+    static void writeOverSized(MemoryAddress ptr, Class<?> type, Object o) {
         // use VH_LONG for integers to zero out the whole register in the process
         if (type == long.class) {
             VH_LONG.set(ptr, (long) o);
@@ -147,7 +151,7 @@ public class BindingInterpreter {
         }
     }
 
-    private static void write(MemoryAddress ptr, Class<?> type, Object o) {
+    static void write(MemoryAddress ptr, Class<?> type, Object o) {
         if (type == long.class) {
             VH_LONG.set(ptr, (long) o);
         } else if (type == int.class) {
@@ -167,7 +171,7 @@ public class BindingInterpreter {
         }
     }
 
-    private static Object read(MemoryAddress ptr, Class<?> type) {
+    static Object read(MemoryAddress ptr, Class<?> type) {
         if (type == long.class) {
             return (long) VH_LONG.get(ptr);
         } else if (type == int.class) {
