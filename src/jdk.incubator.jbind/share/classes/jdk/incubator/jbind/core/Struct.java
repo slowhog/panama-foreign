@@ -4,9 +4,7 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,18 +21,31 @@
  * questions.
  */
 
-/**
- * Defines the experimental foreign memory access API.
- *
- * {@Incubating}
- *
- * @moduleGraph
- */
-module jdk.incubator.foreign {
-    exports jdk.incubator.foreign;
-    exports jdk.internal.foreign.abi.aarch64 to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.internal.foreign.abi.x64.sysv to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.internal.foreign.abi.x64.windows to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.incubator.foreign.unsafe to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.internal.foreign to jdk.incubator.jextract, jdk.incubator.jbind;
+package jdk.incubator.jbind.core;
+
+import java.lang.invoke.VarHandle;
+import jdk.incubator.foreign.GroupLayout;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
+
+public abstract class Struct<T extends Struct<T>> {
+    private final MemoryAddress addr;
+
+    protected Struct(MemoryAddress addr) {
+        this.addr = addr;
+    }
+
+    public abstract GroupLayout getLayout();
+
+    public MemoryAddress ptr() {
+        return addr;
+    };
+
+    protected final MemoryAddress getFieldAddr(String name) {
+        return addr.addOffset(getLayout().offset(MemoryLayout.PathElement.groupElement(name)) >> 3);
+    }
+
+    protected final VarHandle getFieldHandle(String name, Class<?> carrier) {
+        return getLayout().varHandle(carrier, MemoryLayout.PathElement.groupElement(name));
+    }
 }

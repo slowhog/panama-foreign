@@ -4,9 +4,7 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -22,19 +20,22 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
+package jdk.incubator.jbind;
 
-/**
- * Defines the experimental foreign memory access API.
- *
- * {@Incubating}
- *
- * @moduleGraph
- */
-module jdk.incubator.foreign {
-    exports jdk.incubator.foreign;
-    exports jdk.internal.foreign.abi.aarch64 to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.internal.foreign.abi.x64.sysv to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.internal.foreign.abi.x64.windows to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.incubator.foreign.unsafe to jdk.incubator.jextract, jdk.incubator.jbind;
-    exports jdk.internal.foreign to jdk.incubator.jextract, jdk.incubator.jbind;
+import jdk.incubator.jextract.Declaration;
+import java.nio.file.Path;
+
+public class Filters {
+    private final PatternFilter<Path> headers;
+    private final PatternFilter<String> symbols;
+
+    public Filters(PatternFilter<Path> headers, PatternFilter<String> symbols) {
+        this.headers = headers;
+        this.symbols = symbols;
+    }
+
+    public static Filters createDefault() {
+        return new Filters(PatternFilter.empty(), PatternFilter.empty());
+    }
+
 }

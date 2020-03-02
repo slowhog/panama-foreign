@@ -30,10 +30,12 @@
  */
 module jdk.internal.opt {
     exports jdk.internal.joptsimple to
+        jdk.incubator.jbind,
         jdk.incubator.jextract,
         jdk.jlink,
         jdk.jshell;
 
     exports jdk.internal.joptsimple.util to
+        jdk.incubator.jbind,
         jdk.incubator.jextract;
 }
