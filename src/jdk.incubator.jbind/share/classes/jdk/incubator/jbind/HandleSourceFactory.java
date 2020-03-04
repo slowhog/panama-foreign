@@ -41,7 +41,6 @@ public class HandleSourceFactory extends  AbstractCodeFactory implements Declara
     private final Set<String> constants = new HashSet<>();
     protected final JavaSourceBuilder builder = new JavaSourceBuilder();
     protected final TypeTranslator typeTranslator = new TypeTranslator();
-    PrettyPrinter printer = new PrettyPrinter();
     private final Configurations ctx;
 
     static JavaFileObject[] generate(Configurations ctx, Declaration.Scoped decl, String clsName, String pkgName, List<String> libraryNames, List<String> libraryPaths) {

@@ -123,18 +123,17 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
 
     @Override
     public Void visitVariable(Declaration.Variable tree, Declaration parent) {
-        PrettyPrinter printer = new PrettyPrinter();
         String fieldName = tree.name();
         assert !fieldName.isEmpty();
         Type type = tree.type();
         if (tree.kind() == Declaration.Variable.Kind.BITFIELD) {
-            System.err.println("Encounter bitfield: " + printer.print(tree));
-            System.err.println("  Enclosing declaration: " + printer.print(parent));
+            System.err.println("Encounter bitfield: " + tree.toString());
+            System.err.println("  Enclosing declaration: " + parent.toString());
         }
         MemoryLayout layout = tree.layout().orElse(Type.layoutFor(type).orElse(null));
         if (layout == null) {
             //no layout - abort
-            System.err.println("Skip without layout: " + new PrettyPrinter().print(tree));
+            System.err.println("Skip without layout: " + tree.toString());
             return null;
         }
 
@@ -148,7 +147,7 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
 
         if (clzName.isEmpty()) {
             System.err.println("Anonymous field typename for " + fieldName);
-            System.err.println("  Type declaration for the field is " + printer.print(((Type.Declared) type).tree()));
+            System.err.println("  Type declaration for the field is " + ((Type.Declared) type).tree().toString());
             // skip for now
             return null;
         }

@@ -48,7 +48,6 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     final DeclarationSet uniqVariables = new DeclarationSet("variable");
     final DeclarationSet uniqTypes = new DeclarationSet("type declaration");
     final DeclarationMatch comparator = new DeclarationMatch();
-    final PrettyPrinter printer = new PrettyPrinter();
     final PatternFilter<Path> headers;
     final PatternFilter<String> symbols;
 
@@ -111,6 +110,8 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                         description, position(d.pos())));
             }
             Declaration existing = decls.get(name);
+
+
             if (existing == null) {
                 decls.put(name, d);
             } else {
@@ -119,8 +120,8 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 } else {
                     log.print(Level.WARNING, String.format("Mismatched %s: %s\n\t%s\n\t%s",
                             description, name, position(d.pos()), position(existing.pos())));
-                    log.print(Level.WARNING, String.format("  Now: ") + printer.print(d));
-                    log.print(Level.WARNING, String.format("  Old: ") + printer.print(existing));
+                    log.print(Level.WARNING, String.format("  Now: ") + d.toString());
+                    log.print(Level.WARNING, String.format("  Old: ") + d.toString());
                 }
             }
         }
