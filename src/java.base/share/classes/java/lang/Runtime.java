@@ -27,6 +27,9 @@
 package java.lang;
 
 import java.io.*;
+import java.lang.ClassLoader.NativeLibrary;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodHandles.Lookup;
 import java.math.BigInteger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -35,7 +38,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.StringTokenizer;
 
+import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.access.foreign.NativeLibraryProxy;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
 
@@ -733,7 +738,7 @@ public class Runtime {
         load0(Reflection.getCallerClass(), filename);
     }
 
-    void load0(Class<?> fromClass, String filename) {
+    NativeLibraryProxy load0(Class<?> fromClass, String filename) {
         SecurityManager security = System.getSecurityManager();
         if (security != null) {
             security.checkLink(filename);
@@ -742,7 +747,7 @@ public class Runtime {
             throw new UnsatisfiedLinkError(
                 "Expecting an absolute path of the library: " + filename);
         }
-        ClassLoader.loadLibrary(fromClass, filename, true);
+        return ClassLoader.loadLibrary(fromClass, filename, true);
     }
 
     /**
@@ -795,7 +800,23 @@ public class Runtime {
         loadLibrary0(Reflection.getCallerClass(), libname);
     }
 
-    void loadLibrary0(Class<?> fromClass, String libname) {
+    /**
+     * Panama specific: find library given name and lookup.
+     * See {@link JavaLangAccess#loadLibrary(Lookup, String)}.
+     */
+    NativeLibrary loadLibrary(MethodHandles.Lookup lookup, String libname) {
+        return loadLibrary0(lookup.lookupClass(), libname);
+    }
+
+    /**
+     * Panama specific: find default system library.
+     * See {@link JavaLangAccess#defaultLibrary()}.
+     */
+    NativeLibrary defaultLibrary() {
+        return NativeLibrary.defaultLibrary;
+    }
+
+    NativeLibrary loadLibrary0(Class<?> fromClass, String libname) {
         SecurityManager security = System.getSecurityManager();
         if (security != null) {
             security.checkLink(libname);
@@ -804,7 +825,7 @@ public class Runtime {
             throw new UnsatisfiedLinkError(
                 "Directory separator should not appear in library name: " + libname);
         }
-        ClassLoader.loadLibrary(fromClass, libname, false);
+        return ClassLoader.loadLibrary(fromClass, libname, false);
     }
 
     /**
