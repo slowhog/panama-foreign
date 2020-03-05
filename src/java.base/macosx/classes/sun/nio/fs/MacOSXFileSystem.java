@@ -25,12 +25,17 @@
 
 package sun.nio.fs;
 
-import java.nio.file.*;
-import java.io.IOException;
-import java.util.*;
 import java.util.regex.Pattern;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemorySegment;
+import jdk.internal.panama.LibMacOS;
+import sun.nio.FFIUtils;
+import sun.nio.FFIUtils.Scope;
 
-import static sun.nio.fs.MacOSXNativeDispatcher.*;
+import static jdk.incubator.foreign.MemoryLayouts.SysV.C_SHORT;
+import static jdk.internal.macos.cf.CFString_h.kCFStringEncodingUTF16;
+import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormC;
+import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormD;
 
 /**
  * MacOS implementation of FileSystem
@@ -47,10 +52,39 @@ class MacOSXFileSystem extends BsdFileSystem {
         return Pattern.compile(expr, Pattern.CANON_EQ) ;
     }
 
+    private static char[] normalizePath(char[] path, int form) {
+        if (path.length == 0) {
+            return null;
+        }
+        MemoryAddress csref =
+                LibMacOS.CFStringCreateMutable(MemoryAddress.NULL, 0);
+        if (FFIUtils.isNull(csref)) {
+            throw new OutOfMemoryError("native heap");
+        }
+        try (Scope s = FFIUtils.localScope()) {
+            long byteCounts = C_SHORT.byteSize() * path.length;
+            MemoryAddress buf = s.allocate(byteCounts);
+            MemoryAddress.copy(MemorySegment.ofArray(path).baseAddress(), buf, byteCounts);
+            LibMacOS.CFStringAppendCharacters(csref, buf, path.length);
+            LibMacOS.CFStringNormalize(csref, form);
+            long len = LibMacOS.CFStringGetLength(csref);
+            byteCounts = C_SHORT.byteSize() * (len + 1);
+            buf = s.allocate(byteCounts);
+            LibMacOS.CFStringGetCString(csref, buf, byteCounts, kCFStringEncodingUTF16);
+            char[] rv = new char[(int) len];
+            // minus the terminating 0
+            byteCounts -= C_SHORT.byteSize();
+            MemoryAddress.copy(buf, MemorySegment.ofArray(rv).baseAddress(), byteCounts);
+            return rv;
+        } finally {
+            LibMacOS.CFRelease(csref);
+        }
+    }
+
     char[] normalizeNativePath(char[] path) {
         for (char c : path) {
             if (c > 0x80)
-                return normalizepath(path, kCFStringNormalizationFormD);
+                return normalizePath(path, kCFStringNormalizationFormD);
         }
         return path;
     }
@@ -58,7 +92,7 @@ class MacOSXFileSystem extends BsdFileSystem {
     String normalizeJavaPath(String path) {
         for (int i = 0; i < path.length(); i++) {
             if (path.charAt(i) > 0x80)
-                return new String(normalizepath(path.toCharArray(),
+                return new String(normalizePath(path.toCharArray(),
                                   kCFStringNormalizationFormC));
         }
         return path;

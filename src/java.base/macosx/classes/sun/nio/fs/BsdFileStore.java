@@ -25,9 +25,13 @@
 
 package sun.nio.fs;
 
-import java.nio.file.attribute.*;
-import java.util.*;
 import java.io.IOException;
+import java.util.Arrays;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.internal.panama.LibC.statfs;
+import jdk.internal.panama.LibC;
+import sun.nio.FFIUtils;
+import sun.nio.FFIUtils.Scope;
 
 /**
  * Bsd implementation of FileStore
@@ -42,6 +46,16 @@ class BsdFileStore
 
     BsdFileStore(UnixFileSystem fs, UnixMountEntry entry) throws IOException {
         super(fs, entry);
+    }
+
+    private byte[] getmntonname(UnixPath path) throws UnixException {
+        try (Scope s = FFIUtils.localScope()) {
+            MemoryAddress cPath = UnixNativeDispatcher.copyToNativeBytes(path, s);
+            statfs buf = statfs.allocate(s::allocate);
+            UnixNativeDispatcher.throwUnixExceptionIf(
+                    0 != LibC.statfs(cPath, buf.ptr()));
+            return FFIUtils.toByteArray(buf.f_mntonname$ptr());
+        }
     }
 
     /**
@@ -64,7 +78,7 @@ class BsdFileStore
         // step 2: find mount point
         byte[] dir = null;
         try {
-            dir = BsdNativeDispatcher.getmntonname(path);
+            dir = getmntonname(path);
         } catch (UnixException x) {
             x.rethrowAsIOException(path);
         }

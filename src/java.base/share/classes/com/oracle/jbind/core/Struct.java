@@ -1,12 +1,10 @@
 /*
- * Copyright (c) 2008, 2012, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,19 +21,31 @@
  * questions.
  */
 
-package sun.nio.fs;
+package com.oracle.jbind.core;
 
-import java.security.AccessController;
-import java.security.PrivilegedAction;
+import java.lang.invoke.VarHandle;
+import jdk.incubator.foreign.GroupLayout;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
 
-/**
- * MacOSX specific system calls.
- */
+public abstract class Struct<T extends Struct<T>> {
+    private final MemoryAddress addr;
 
-class MacOSXNativeDispatcher {
-    private MacOSXNativeDispatcher() { }
+    protected Struct(MemoryAddress addr) {
+        this.addr = addr;
+    }
 
-    static final int kCFStringNormalizationFormC = 2;
-    static final int kCFStringNormalizationFormD = 0;
-    static native char[] normalizepath(char[] path, int form);
+    public abstract GroupLayout getLayout();
+
+    public MemoryAddress ptr() {
+        return addr;
+    };
+
+    protected final MemoryAddress getFieldAddr(String name) {
+        return addr.addOffset(getLayout().offset(MemoryLayout.PathElement.groupElement(name)) >> 3);
+    }
+
+    protected final VarHandle getFieldHandle(String name, Class<?> carrier) {
+        return getLayout().varHandle(carrier, MemoryLayout.PathElement.groupElement(name));
+    }
 }

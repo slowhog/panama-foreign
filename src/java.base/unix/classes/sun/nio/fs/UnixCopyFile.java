@@ -35,9 +35,24 @@ import java.nio.file.LinkPermission;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import jdk.incubator.foreign.MemoryAddress;
+import sun.nio.FFIUtils;
 
+import static jdk.incubator.foreign.MemoryLayouts.SysV.C_INT;
+import static jdk.incubator.foreign.MemoryLayouts.SysV.C_UCHAR;
+import static jdk.internal.panama.sys.errno_h.ECANCELED;
+import static sun.nio.FFIUtils.Scope;
+import static sun.nio.FFIUtils.errno;
+import static sun.nio.FFIUtils.localScope;
+import static sun.nio.fs.UnixConstants.EEXIST;
+import static sun.nio.fs.UnixConstants.EISDIR;
+import static sun.nio.fs.UnixConstants.ENOTEMPTY;
+import static sun.nio.fs.UnixConstants.EXDEV;
+import static sun.nio.fs.UnixConstants.O_CREAT;
+import static sun.nio.fs.UnixConstants.O_EXCL;
+import static sun.nio.fs.UnixConstants.O_RDONLY;
+import static sun.nio.fs.UnixConstants.O_WRONLY;
 import static sun.nio.fs.UnixNativeDispatcher.*;
-import static sun.nio.fs.UnixConstants.*;
 
 
 /**
@@ -622,8 +637,36 @@ class UnixCopyFile {
 
     // -- native methods --
 
-    static native void transfer(int dst, int src, long addressToPollForCancel)
-        throws UnixException;
+    static void transfer(int dst, int src, long addressToPollForCancel) throws UnixException {
+        try (Scope s = localScope()) {
+            MemoryAddress buf = s.allocateArray(C_UCHAR, 8192);
+            MemoryAddress cancel = FFIUtils.resizePointer(MemoryAddress.ofLong(addressToPollForCancel), C_INT.byteSize());
+            while (true) {
+                int n = UnixNativeDispatcher.read(src, buf, 8192);
+                if (n <= 0) {
+                    if (n < 0) {
+                        // Should never reach here as read would have thrown already
+                        throw new UnixException(errno());
+                    }
+                    return;
+                }
+                if ((addressToPollForCancel != 0) && FFIUtils.CTypeAccess.readInt(cancel) != 0) {
+                    throw new UnixException(ECANCELED);
+                }
+                int pos = 0;
+                int len = n;
+                do {
+                    n = UnixNativeDispatcher.write(dst, buf.addOffset(pos), len);
+                    if (n == -1) {
+                        // Should never reach here as read would have thrown already
+                        throw new UnixException(errno());
+                    }
+                    pos += n;
+                    len -= n;
+                } while (len > 0);
+            }
+        }
+    }
 
     static {
         jdk.internal.loader.BootLoader.loadLibrary("nio");

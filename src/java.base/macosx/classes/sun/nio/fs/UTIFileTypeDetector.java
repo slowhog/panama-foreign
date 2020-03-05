@@ -27,17 +27,70 @@ package sun.nio.fs;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemorySegment;
+import jdk.internal.panama.LibMacOS;
+import sun.nio.FFIUtils;
+import sun.nio.FFIUtils.Scope;
+
+import static jdk.incubator.foreign.MemoryLayouts.SysV.C_SHORT;
 
 /**
  * File type detector that uses a file extension to look up its MIME type
  * via the Apple Uniform Type Identifier interfaces.
  */
 class UTIFileTypeDetector extends AbstractFileTypeDetector {
+
     UTIFileTypeDetector() {
         super();
     }
 
-    private native String probe0(String fileExtension) throws IOException;
+    private String toJavaString(MemoryAddress cfStr) {
+        if (cfStr == MemoryAddress.NULL) {
+            return null;
+        }
+
+        long strLength = LibMacOS.CFStringGetLength(cfStr);
+        long byteCounts = C_SHORT.byteSize() * strLength;
+        MemoryAddress src = LibMacOS.CFStringGetCharactersPtr(cfStr);
+        if (src == MemoryAddress.NULL) {
+            try (MemorySegment buf = MemorySegment.allocateNative(byteCounts)) {
+                src = buf.baseAddress();
+                LibMacOS.CFStringGetCharacters(cfStr, LibMacOS.__CFRangeMake(0, strLength), src);
+            }
+        }
+        return new String(FFIUtils.toByteArray(src, byteCounts));
+    }
+
+    private String probe0(String fileExtension) {
+        try (Scope s = FFIUtils.localScope()) {
+            char[] tmp = fileExtension.toCharArray();
+            long bytes = C_SHORT.byteSize() * tmp.length;
+            MemoryAddress buf = s.allocate(bytes);
+            MemoryAddress.copy(MemorySegment.ofArray(tmp).baseAddress(), buf, C_SHORT.byteSize() * tmp.length);
+            var ext = LibMacOS.CFStringCreateWithCharacters(MemoryAddress.NULL,
+                    buf, bytes);
+            if (FFIUtils.isNull(ext)) {
+                return null;
+            }
+            var uti = LibMacOS.UTTypeCreatePreferredIdentifierForTag(
+                    LibMacOS.kUTTagClassFilenameExtension$get(), ext, MemoryAddress.NULL);
+            LibMacOS.CFRelease(ext);
+            if (FFIUtils.isNull(uti)) {
+                return null;
+            }
+            var mimeType = LibMacOS.UTTypeCopyPreferredTagWithClass(uti,
+                    LibMacOS.kUTTagClassMIMEType$get());
+            LibMacOS.CFRelease(uti);
+            if (FFIUtils.isNull(mimeType)) {
+                return null;
+            }
+
+            String result = toJavaString(mimeType);
+            LibMacOS.CFRelease(mimeType);
+            return result;
+        }
+    }
 
     @Override
     protected String implProbeContentType(Path path) throws IOException {

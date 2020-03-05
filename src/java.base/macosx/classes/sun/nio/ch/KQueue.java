@@ -26,7 +26,18 @@
 package sun.nio.ch;
 
 import java.io.IOException;
+import jdk.incubator.foreign.GroupLayout;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
 import jdk.internal.misc.Unsafe;
+import jdk.internal.panama.LibC;
+import jdk.internal.panama.LibC.kevent;
+import jdk.internal.panama.LibC.timespec;
+import sun.nio.FFIUtils;
+import sun.nio.FFIUtils.Scope;
+
+import static jdk.internal.panama.sys.errno_h.EINTR;
+import static sun.nio.FFIUtils.localScope;
 
 /**
  * Provides access to the BSD kqueue facility.
@@ -36,6 +47,7 @@ class KQueue {
     private KQueue() { }
 
     private static final Unsafe unsafe = Unsafe.getUnsafe();
+    private static final MemoryAddress nullPtr = MemoryAddress.NULL;
 
     /**
      * struct kevent {
@@ -47,10 +59,10 @@ class KQueue {
      *        void            *udata;         // opaque user data identifier
      * };
      */
-    private static final int SIZEOF_KQUEUEEVENT    = keventSize();
-    private static final int OFFSET_IDENT          = identOffset();
-    private static final int OFFSET_FILTER         = filterOffset();
-    private static final int OFFSET_FLAGS          = flagsOffset();
+    private static final int SIZEOF_KQUEUEEVENT;
+    private static final int OFFSET_IDENT;
+    private static final int OFFSET_FILTER;
+    private static final int OFFSET_FLAGS;
 
     // filters
     static final int EVFILT_READ  = -1;
@@ -98,24 +110,72 @@ class KQueue {
         return unsafe.getShort(address + OFFSET_FLAGS);
     }
 
-    // -- Native methods --
+    static int create() throws IOException {
+        int kqfd = LibC.kqueue();
+        if (kqfd < 0) {
+            throw new IOException("kqueue failed");
+        }
+        return kqfd;
+    }
 
-    private static native int keventSize();
+    static int register(int kqfd, int fd, int filter, int flags) {
+        try (FFIUtils.Scope s = FFIUtils.localScope()) {
+            kevent ev = kevent.allocate(s::allocate);
+            ev.ident$set(fd);
+            ev.filter$set((short) filter);
+            ev.flags$set((short) flags);
+            ev.fflags$set(0);
+            ev.data$set(0);
+            ev.udata$set(nullPtr);
 
-    private static native int identOffset();
+            int rv, errno;
+            do {
+                rv = LibC.kevent(kqfd, ev.ptr(), 1, nullPtr, 0, nullPtr);
+                if (rv == -1) {
+                    errno = FFIUtils.errno();
+                    if (errno != EINTR) {
+                        return errno;
+                    }
+                }
+            } while (rv == -1);
+            return 0;
+        }
+    }
 
-    private static native int filterOffset();
+    static int poll(int kqfd, long pollAddress, int nevents, long timeout)
+        throws IOException {
+        try (Scope s = localScope()) {
+            MemoryAddress tsp;
+            if (timeout >= 0) {
+                timespec ts = timespec.allocate(s::allocate);
+                ts.tv_sec$set(timeout / 1000);
+                ts.tv_nsec$set((timeout % 1000) * 1000_000);
+                tsp = ts.ptr();
+            } else {
+                tsp = nullPtr;
+            }
+            int res = LibC.kevent(kqfd, nullPtr, 0,
+                    MemoryAddress.ofLong(pollAddress),
+                    nevents, tsp);
 
-    private static native int flagsOffset();
-
-    static native int create() throws IOException;
-
-    static native int register(int kqfd, int fd, int filter, int flags);
-
-    static native int poll(int kqfd, long pollAddress, int nevents, long timeout)
-        throws IOException;
+            if (res < 0) {
+                int errno = FFIUtils.errno();
+                if (errno == EINTR) {
+                    return IOStatus.INTERRUPTED;
+                } else {
+                    throw new IOException("kqueue failed");
+                }
+            }
+            return res;
+        }
+    }
 
     static {
         IOUtil.load();
+        GroupLayout layout = kevent.kevent$LAYOUT;
+        SIZEOF_KQUEUEEVENT = (int) layout.byteSize();
+        OFFSET_FILTER = (int) layout.offset(MemoryLayout.PathElement.groupElement("filter")) >> 3;
+        OFFSET_IDENT = (int) layout.offset(MemoryLayout.PathElement.groupElement("ident")) >> 3;
+        OFFSET_FLAGS = (int) layout.offset(MemoryLayout.PathElement.groupElement("flags")) >> 3;
     }
 }
