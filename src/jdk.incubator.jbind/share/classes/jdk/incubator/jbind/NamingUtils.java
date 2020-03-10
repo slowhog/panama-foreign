@@ -98,10 +98,10 @@ public class NamingUtils {
     }
 
     public static String getSymbolInLib(Declaration d) {
-        String symbol = d.getAttribute("AsmLabelAttr")
+        return d.getAttribute("AsmLabelAttr")
             .map(l -> l.get(0))
             .map(String.class::cast)
+            .map(s -> isMacOS ? s.substring(1) : s)
             .orElse(d.name());
-        return (isMacOS) ? symbol.substring(1) : symbol;
     }
 }
