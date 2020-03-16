@@ -1087,27 +1087,7 @@ void CallRuntimeNode::dump_spec(outputStream *st) const {
 uint CallNativeNode::size_of() const { return sizeof(*this); }
 bool CallNativeNode::cmp( const Node &n ) const {
   CallNativeNode &call = (CallNativeNode&)n;
-  return CallNode::cmp(call) && !strcmp(_name,call._name) && cmp_regs(call);
-}
-bool CallNativeNode::cmp_regs( CallNativeNode& call ) const {
-  if (_arg_regs_cnt != call._arg_regs_cnt) {
-    return false;
-  }
-  for (uint i = 0; i < _arg_regs_cnt; i++) {
-    if (_arg_regs[i] != call._arg_regs[i] ) {
-      return false;
-    }
-  }
-
-  if (_ret_regs_cnt != call._ret_regs_cnt) {
-    return false;
-  }
-  for (uint i = 0; i < _ret_regs_cnt; i++) {
-    if (_ret_regs[i] != call._ret_regs[i] ) {
-      return false;
-    }
-  }
-  return true;
+  return CallNode::cmp(call) && !strcmp(_name,call._name) && _arg_regs == call._arg_regs && _ret_regs == call._ret_regs;
 }
 Node* CallNativeNode::match(const ProjNode *proj, const Matcher *matcher) {
   switch (proj->_con) {
@@ -1121,13 +1101,13 @@ Node* CallNativeNode::match(const ProjNode *proj, const Matcher *matcher) {
     case TypeFunc::Parms:
     default: {
       if(tf()->range()->field_at(proj->_con) == Type::HALF) {
-        assert(_ret_regs[proj->_con - TypeFunc::Parms] == VMRegImpl::Bad());
+        assert(_ret_regs.at(proj->_con - TypeFunc::Parms) == VMRegImpl::Bad());
         // 2nd half of doubles and longs
         return new MachProjNode(this,proj->_con, RegMask::Empty, (uint)OptoReg::Bad);
       }
 
       const BasicType bt = tf()->range()->field_at(proj->_con)->basic_type();
-      OptoReg::Name optoreg = OptoReg::as_OptoReg(_ret_regs[proj->_con - TypeFunc::Parms]);
+      OptoReg::Name optoreg = OptoReg::as_OptoReg(_ret_regs.at(proj->_con - TypeFunc::Parms));
       OptoRegPair regs;
       if (bt == T_DOUBLE || bt == T_LONG) {
         regs.set2(optoreg);
@@ -1145,14 +1125,14 @@ Node* CallNativeNode::match(const ProjNode *proj, const Matcher *matcher) {
 #ifndef PRODUCT
 void CallNativeNode::dump_regs(outputStream *st) const {
   st->print("_arg_regs{ ");
-  for (uint i = 0; i < _arg_regs_cnt; i++) {
-    _arg_regs[i]->print_on(st);
+  for (int i = 0; i < _arg_regs.length(); i++) {
+    _arg_regs.at(i)->print_on(st);
     st->print(", ");
   }
   st->print("} ");
   st->print("_ret_regs{ ");
-  for (uint i = 0; i < _ret_regs_cnt; i++) {
-    _ret_regs[i]->print_on(st);
+  for (int i = 0; i < _ret_regs.length(); i++) {
+    _ret_regs.at(i)->print_on(st);
     st->print(", ");
   }
   st->print("} ");
@@ -1186,18 +1166,18 @@ void CallNativeNode::calling_convention( BasicType* sig_bt, VMRegPair *parm_regs
       case T_SHORT:
       case T_INT:
       case T_FLOAT:
-        assert(i < _arg_regs_cnt, "oob access");
-        parm_regs[i].set1(_arg_regs[i]);
+        assert(i < (uint) _arg_regs.length(), "oob access");
+        parm_regs[i].set1(_arg_regs.at(i));
         break;
       case T_LONG:
       case T_DOUBLE:
         assert((i + 1) < argcnt && sig_bt[i + 1] == T_VOID, "expecting half");
-        assert(i < _arg_regs_cnt, "oob access");
-        parm_regs[i].set2(_arg_regs[i]);
+        assert(i < (uint) _arg_regs.length(), "oob access");
+        parm_regs[i].set2(_arg_regs.at(i));
         break;
       case T_VOID: // Halves of longs and doubles
         assert(i != 0 && (sig_bt[i - 1] == T_LONG || sig_bt[i - 1] == T_DOUBLE), "expecting half");
-        assert(_arg_regs[i] == VMRegImpl::Bad(), "expecting bad reg");
+        assert(_arg_regs.at(i) == VMRegImpl::Bad(), "expecting bad reg");
         parm_regs[i].set_bad();
         break;
       default:

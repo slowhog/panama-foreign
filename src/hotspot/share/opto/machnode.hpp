@@ -31,6 +31,7 @@
 #include "opto/multnode.hpp"
 #include "opto/node.hpp"
 #include "opto/regmask.hpp"
+#include "utilities/growableArray.hpp"
 
 class BiasedLockingCounters;
 class BufferBlob;
@@ -1019,10 +1020,8 @@ class MachCallNativeNode: public MachCallNode {
 #endif
 public:
   const char *_name;
-  const VMReg* _arg_regs;
-  uint   _arg_regs_cnt;
-  const VMReg* _ret_regs;
-  uint   _ret_regs_cnt;
+  GrowableArray<VMReg> _arg_regs;
+  GrowableArray<VMReg> _ret_regs;
   int _shadow_space_bytes;
   bool _need_transition;
   BasicType _return_type;

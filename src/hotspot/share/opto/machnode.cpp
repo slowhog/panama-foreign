@@ -822,39 +822,19 @@ void MachCallRuntimeNode::dump_spec(outputStream *st) const {
 uint MachCallNativeNode::size_of() const { return sizeof(*this); }
 bool MachCallNativeNode::cmp( const Node &n ) const {
   MachCallNativeNode &call = (MachCallNativeNode&)n;
-  return MachCallNode::cmp(call) && !strcmp(_name,call._name) && cmp_regs(call);
-}
-bool MachCallNativeNode::cmp_regs( MachCallNativeNode& call ) const {
-  if (_arg_regs_cnt!= call._arg_regs_cnt) {
-    return false;
-  }
-  for (uint i = 0; i < _arg_regs_cnt; i++) {
-    if (_arg_regs[i] != call._arg_regs[i] ) {
-      return false;
-    }
-  }
-
-  if (_ret_regs_cnt != call._ret_regs_cnt) {
-    return false;
-  }
-  for (uint i = 0; i < _ret_regs_cnt; i++) {
-    if (_ret_regs[i] != call._ret_regs[i] ) {
-      return false;
-    }
-  }
-  return true;
+  return MachCallNode::cmp(call) && !strcmp(_name,call._name) && _arg_regs == call._arg_regs && _ret_regs == call._ret_regs;
 }
 #ifndef PRODUCT
 void MachCallNativeNode::dump_regs(outputStream *st) const {
   st->print("_arg_regs{ ");
-  for (uint i = 0; i < _arg_regs_cnt; i++) {
-    _arg_regs[i]->print_on(st);
+  for (int i = 0; i < _arg_regs.length(); i++) {
+    _arg_regs.at(i)->print_on(st);
     st->print(", ");
   }
   st->print("} ");
   st->print("_ret_regs{ ");
-  for (uint i = 0; i < _ret_regs_cnt; i++) {
-    _ret_regs[i]->print_on(st);
+  for (int i = 0; i < _ret_regs.length(); i++) {
+    _ret_regs.at(i)->print_on(st);
     st->print(", ");
   }
   st->print("} ");

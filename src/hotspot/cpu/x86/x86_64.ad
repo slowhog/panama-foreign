@@ -12677,10 +12677,10 @@ instruct CallNativeDirect(method meth)
       __ addptr(rsp, _shadow_space_bytes);
     }
 
-    assert(_ret_regs_cnt <= 1
-      || (_ret_regs_cnt == 2 && !_ret_regs[1]->is_valid()), "no multi-reg returns");
-    bool need_spills = _ret_regs_cnt != 0;
-    VMReg ret_reg = need_spills ? _ret_regs[0] : VMRegImpl::Bad();
+    assert(_ret_regs.length() <= 1
+      || (_ret_regs.length() == 2 && !_ret_regs.at(1)->is_valid()), "no multi-reg returns");
+    bool need_spills = _ret_regs.length() != 0;
+    VMReg ret_reg = need_spills ? _ret_regs.at(0) : VMRegImpl::Bad();
 
     // Unpack native results
     switch (_return_type) {

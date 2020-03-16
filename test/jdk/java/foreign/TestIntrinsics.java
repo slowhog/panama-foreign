@@ -28,9 +28,10 @@
  *          jdk.incubator.foreign/jdk.internal.foreign.abi
  *          java.base/sun.security.action
  * @build NativeTestHelper
- * @run testng/othervm -Xbatch TestIntrinsics
+ * @run testng/othervm -Djdk.incubator.foreign.Foreign=permit -Xbatch TestIntrinsics
  */
 
+import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
@@ -49,7 +50,7 @@ import static org.testng.Assert.assertEquals;
 
 public class TestIntrinsics extends NativeTestHelper {
 
-    static final SystemABI abi = SystemABI.getInstance();
+    static final SystemABI abi = Foreign.getInstance().getSystemABI();
     static final LibraryLookup lookup = LibraryLookup.ofLibrary(MethodHandles.lookup(), "Intrinsics");
 
     private static final MethodHandle MH_empty;

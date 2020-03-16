@@ -51,6 +51,7 @@
 #include "runtime/sharedRuntime.hpp"
 #include "utilities/bitMap.inline.hpp"
 #include "utilities/powerOfTwo.hpp"
+#include "utilities/growableArray.hpp"
 
 //----------------------------GraphKit-----------------------------------------
 // Main utility constructor.
@@ -2573,7 +2574,7 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
   ResourceMark rm;
   Node** argument_nodes = NEW_RESOURCE_ARRAY(Node*, n_filtered_args);
   const Type** arg_types = NEW_RESOURCE_ARRAY(const Type*, n_filtered_args);
-  VMReg* arg_regs = NEW_ARENA_ARRAY(C->node_arena(), VMReg, n_filtered_args);
+  GrowableArray<VMReg> arg_regs(C->comp_arena(), n_filtered_args, n_filtered_args, VMRegImpl::Bad());
 
   ciObjArray* argRegs = nep->argMoves();
   {
@@ -2588,14 +2589,14 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
 
       argument_nodes[vm_arg_pos] = node;
       arg_types[vm_arg_pos] = type;
-      arg_regs[vm_arg_pos] = reg;
+      arg_regs.at_put(vm_arg_pos, reg);
     }
   }
 
   uint n_returns = call_type->range()->cnt() - TypeFunc::Parms;
-   // FIXME LEAKED -> allocating in node_arena() doesn't work,
-   // that seems to be freed after matching, so doesn't stay alive until lowering
-  VMReg* ret_regs = NEW_C_HEAP_ARRAY(VMReg, n_returns, mtInternal);
+   // FIXME allocating in node_arena() doesn't work,
+   // that seems to be freed/overwritten after matching, so doesn't stay alive until lowering
+  GrowableArray<VMReg> ret_regs(C->comp_arena(), n_returns, n_returns, VMRegImpl::Bad());
   const Type** ret_types = NEW_RESOURCE_ARRAY(const Type*, n_returns);
 
   ciObjArray* retRegs = nep->returnMoves();
@@ -2607,7 +2608,7 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
         ? VMRegImpl::Bad()
         : retRegs->obj_at(java_ret_read_pos++)->as_vm_storage()->as_VMReg();
 
-      ret_regs[vm_ret_pos] = reg;
+      ret_regs.at_put(vm_ret_pos, reg);
       ret_types[vm_ret_pos] = type;
     }
   }
@@ -2617,8 +2618,8 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
     TypeTuple::make_func(n_returns, ret_types)
   );
   CallNativeNode* call = new CallNativeNode(new_call_type, call_addr, "native_call", TypePtr::BOTTOM,
-                                            arg_regs, n_filtered_args,
-                                            ret_regs, n_returns,
+                                            arg_regs,
+                                            ret_regs,
                                             nep->abi_descriptor()->shadow_space(), nep->need_transition(),
                                             nep->method_type()->rtype()->basic_type());
 

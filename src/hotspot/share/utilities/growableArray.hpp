@@ -212,6 +212,21 @@ template<class E> class GrowableArray : public GenericGrowableArray {
                                 // Does nothing for resource and arena objects
   ~GrowableArray()              { if (on_C_heap()) clear_and_deallocate(); }
 
+  bool operator==(const GrowableArray<E>& rhs) const {
+    if (_len != rhs._len)
+      return false;
+    for (int i = 0; i < _len; i++) {
+      if (at(i) != rhs.at(i)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  bool operator!=(const GrowableArray<E>& rhs) const {
+    return !(*this == rhs);
+  }
+
   void  clear()                 { _len = 0; }
   int   length() const          { return _len; }
   int   max_length() const      { return _max; }

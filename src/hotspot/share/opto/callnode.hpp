@@ -32,6 +32,7 @@
 #include "opto/phaseX.hpp"
 #include "opto/replacednodes.hpp"
 #include "opto/type.hpp"
+#include "utilities/growableArray.hpp"
 
 // Portions of code courtesy of Clifford Click
 
@@ -817,22 +818,20 @@ class CallNativeNode : public CallNode {
   void dump_regs(outputStream *st) const;
 #endif
 public:
-  const VMReg* _arg_regs;
-  const uint   _arg_regs_cnt;
-  const VMReg* _ret_regs;
-  const uint   _ret_regs_cnt;
+  GrowableArray<VMReg> _arg_regs;
+  GrowableArray<VMReg> _ret_regs;
   const int _shadow_space_bytes;
   const bool _need_transition;
   const BasicType _return_type; // unerased
 
   CallNativeNode(const TypeFunc* tf, address addr, const char* name,
                const TypePtr* adr_type,
-               const VMReg* arg_regs, uint arg_regs_cnt,
-               const VMReg* ret_regs, uint ret_regs_cnt,
+               const GrowableArray<VMReg>& arg_regs,
+               const GrowableArray<VMReg>& ret_regs,
                int shadow_space_bytes, bool need_transition,
                BasicType return_type)
-    : CallNode(tf, addr, adr_type), _arg_regs(arg_regs), _arg_regs_cnt(arg_regs_cnt),
-      _ret_regs(ret_regs), _ret_regs_cnt(ret_regs_cnt), _shadow_space_bytes(shadow_space_bytes),
+    : CallNode(tf, addr, adr_type), _arg_regs(arg_regs),
+      _ret_regs(ret_regs), _shadow_space_bytes(shadow_space_bytes),
       _need_transition(need_transition), _return_type(return_type)
   {
     init_class_id(Class_CallNative);

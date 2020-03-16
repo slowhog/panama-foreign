@@ -1178,9 +1178,7 @@ MachNode *Matcher::match_sfpt( SafePointNode *sfpt ) {
       CallNativeNode* call_native = call->as_CallNative();
       mach_call_native->_name = call_native->_name;
       mach_call_native->_arg_regs = call_native->_arg_regs;
-      mach_call_native->_arg_regs_cnt = call_native->_arg_regs_cnt;
       mach_call_native->_ret_regs = call_native->_ret_regs;
-      mach_call_native->_ret_regs_cnt = call_native->_ret_regs_cnt;
       mach_call_native->_shadow_space_bytes = call_native->_shadow_space_bytes;
       mach_call_native->_need_transition = call_native->_need_transition;
       mach_call_native->_return_type = call_native->_return_type;
