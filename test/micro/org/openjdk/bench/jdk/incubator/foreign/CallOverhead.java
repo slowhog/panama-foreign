@@ -22,8 +22,10 @@
  */
 package org.openjdk.bench.jdk.incubator.foreign;
 
+import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
+import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.SystemABI;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
@@ -49,21 +51,31 @@ import static jdk.incubator.foreign.MemoryLayouts.C_INT;
 @Fork(3)
 public class CallOverhead {
 
-    static final SystemABI abi = SystemABI.getInstance();
+    static final SystemABI abi = Foreign.getInstance().getSystemABI();
     static final MethodHandle func;
     static final MethodHandle identity;
+    static final MethodHandle func_trivial;
+    static final MethodHandle identity_trivial;
 
     static {
         System.loadLibrary("CallOverheadJNI");
 
         try {
             LibraryLookup ll = LibraryLookup.ofLibrary(MethodHandles.lookup(), "CallOverhead");
-            func = abi.downcallHandle(ll.lookup("func"),
-                    MethodType.methodType(void.class),
-                    FunctionDescriptor.ofVoid());
-            identity = abi.downcallHandle(ll.lookup("identity"),
-                    MethodType.methodType(int.class, int.class),
-                    FunctionDescriptor.of(C_INT, C_INT));
+            {
+                MemoryAddress addr = ll.lookup("func");
+                MethodType mt = MethodType.methodType(void.class);
+                FunctionDescriptor fd = FunctionDescriptor.ofVoid();
+                func = abi.downcallHandle(addr, mt, fd);
+                func_trivial = abi.downcallHandle(addr, mt, fd.withAttribute(FunctionDescriptor.IS_TRIVIAL, "true"));
+            }
+            {
+                MemoryAddress addr = ll.lookup("identity");
+                MethodType mt = MethodType.methodType(int.class, int.class);
+                FunctionDescriptor fd = FunctionDescriptor.of(C_INT, C_INT);
+                identity = abi.downcallHandle(addr, mt, fd);
+                identity_trivial = abi.downcallHandle(addr, mt, fd.withAttribute(FunctionDescriptor.IS_TRIVIAL, "true"));
+            }
         } catch (NoSuchMethodException e) {
             throw new BootstrapMethodError(e);
         }
@@ -83,6 +95,11 @@ public class CallOverhead {
     }
 
     @Benchmark
+    public void panama_blank_trivial() throws Throwable {
+        func_trivial.invokeExact();
+    }
+
+    @Benchmark
     public int jni_identity() throws Throwable {
         return identity(10);
     }
@@ -90,5 +107,10 @@ public class CallOverhead {
     @Benchmark
     public int panama_identity() throws Throwable {
         return (int) identity.invokeExact(10);
+    }
+
+    @Benchmark
+    public int panama_identity_trivial() throws Throwable {
+        return (int) identity_trivial.invokeExact(10);
     }
 }

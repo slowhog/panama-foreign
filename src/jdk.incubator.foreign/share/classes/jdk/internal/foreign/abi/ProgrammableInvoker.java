@@ -167,7 +167,7 @@ public class ProgrammableInvoker {
                     .map(Binding.Move::storage)
                     .map(VMStorage::toInternal)
                     .toArray(jdk.internal.invoke.VMStorage[]::new),
-                true /* needs state transition */);
+                !callingSequence.isTrivial());
 
         List<MemorySegment> tempBuffers = new ArrayList<>();
         int copies = 0;

@@ -26,6 +26,7 @@
 
 package jdk.internal.foreign;
 
+import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
@@ -279,5 +280,13 @@ public final class Utils {
 
     private static long addressToLong(MemoryAddress value) {
         return ((MemoryAddressImpl)value).unsafeGetOffset();
+    }
+
+    public static boolean isTrivial(FunctionDescriptor cDesc) {
+        return cDesc.attribute(FunctionDescriptor.IS_TRIVIAL)
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .map(Boolean::parseBoolean)
+                .orElse(false);
     }
 }

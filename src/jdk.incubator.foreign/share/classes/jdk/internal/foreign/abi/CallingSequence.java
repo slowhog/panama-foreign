@@ -33,14 +33,16 @@ import java.util.stream.Stream;
 public class CallingSequence {
     private final MethodType mt;
     private final FunctionDescriptor desc;
+    private final boolean isTrivial;
 
     private final List<Binding> returnBindings;
     private final List<List<Binding>> argumentBindings;
 
     public CallingSequence(MethodType mt, FunctionDescriptor desc,
-                           List<List<Binding>> argumentBindings, List<Binding> returnBindings) {
+                           boolean isTrivial, List<List<Binding>> argumentBindings, List<Binding> returnBindings) {
         this.mt = mt;
         this.desc = desc;
+        this.isTrivial = isTrivial;
         this.returnBindings = returnBindings;
         this.argumentBindings = argumentBindings;
     }
@@ -88,5 +90,9 @@ public class CallingSequence {
 
     public FunctionDescriptor functionDesc() {
         return desc;
+    }
+
+    public boolean isTrivial() {
+        return isTrivial;
     }
 }

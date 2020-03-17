@@ -123,6 +123,8 @@ public class CallArranger {
                     List.of(move(rax, long.class)));
         }
 
+        csb.setTrivial(Utils.isTrivial(cDesc));
+
         return new Bindings(csb.build(), returnInMemory, argCalc.storageCalculator.nVectorReg);
     }
 
