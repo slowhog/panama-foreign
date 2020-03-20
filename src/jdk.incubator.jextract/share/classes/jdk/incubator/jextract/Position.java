@@ -52,6 +52,21 @@ public interface Position {
     int col();
 
     /**
+     * The origin position lead to inclusion of this position. Return NO_POSITION if this position is root.
+     * @return The origin position
+     * @apiNote The origin() chain should never form a loop.
+     */
+    Position origin();
+
+    default int depth() {
+        int depth = 0;
+        for (Position p = this; p != Position.NO_POSITION; p = p.origin()) {
+            depth++;
+        }
+        return depth;
+    }
+
+    /**
      * An empty position instance; this can be used to model <em>synthetic</em> program elements which are not
      * defined in any input file.
      */
@@ -69,6 +84,16 @@ public interface Position {
         @Override
         public int col() {
             return 0;
+        }
+
+        @Override
+        public Position origin() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public String toString() {
+            return "N/A";
         }
     };
 }

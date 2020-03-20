@@ -49,25 +49,26 @@ class PrettyPrinter implements Declaration.Visitor<Void, Void> {
     void indent() {
         builder.append("                                                                                           ".substring(0, align));
     }
-    
+
     StringBuilder builder = new StringBuilder();
 
     private void getAttributes(Declaration decl) {
         Set<String> attrs = decl.attributeNames();
-        if (attrs.isEmpty()) {
-            return;
-        }
         incr();
-        indent();
-        for (String k: attrs) {
-            builder.append("Attr: ");
-            builder.append(k);
-            builder.append(" -> [");
-            builder.append(decl.getAttribute(k).get().stream()
-                .map(Constable::toString)
-                .collect(Collectors.joining(", ")));
-            builder.append("]\n");
+        if (! attrs.isEmpty()) {
+            indent();
+            for (String k: attrs) {
+                builder.append("Attr: ");
+                builder.append(k);
+                builder.append(" -> [");
+                builder.append(decl.getAttribute(k).get().stream()
+                    .map(Constable::toString)
+                    .collect(Collectors.joining(", ")));
+                builder.append("]\n");
+            }
         }
+        indent();
+        builder.append("Position: " + decl.pos() + "\n");
         decr();
     }
 
@@ -168,8 +169,8 @@ class PrettyPrinter implements Declaration.Visitor<Void, Void> {
     }
 
     public static String position(Position pos) {
-        return String.format("%s:%d:%d",
+        return String.format("%s:%d:%d@%d",
                 pos.path() == null ? "N/A" : pos.path().toString(),
-                pos.line(), pos.col());
+                pos.line(), pos.col(), pos.depth());
     }
 }

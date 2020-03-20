@@ -152,6 +152,11 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         public int col() {
             return 0;
         }
+
+        @Override
+        public Position origin() {
+            return Position.NO_POSITION;
+        }
     }
 
     List<JavaFileObject> generateHeader(Path file, Collection<Declaration> members) {
@@ -171,9 +176,10 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 .filter(d -> headers.filter(d.pos().path()))
                 .filter(d -> symbols.filter(d.name()))
                 .toArray(Declaration[]::new));
-        return Arrays.asList(StaticWrapperSourceFactory.generate(
-                root, ctx.getMainClsName(),
-                ctx.targetPackageName(), ctx.getLibs(), ctx.getLibPaths()));
+        return Arrays.asList(
+                StaticWrapperSourceFactory.generate(
+                    root, ctx.getMainClsName(),
+                    ctx.targetPackageName(), ctx.getLibs(), ctx.getLibPaths()));
     }
 
     public List<JavaFileObject> generate(Declaration.Scoped decl) {
