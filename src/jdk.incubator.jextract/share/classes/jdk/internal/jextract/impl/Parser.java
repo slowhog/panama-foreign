@@ -25,6 +25,11 @@
  */
 package jdk.internal.jextract.impl;
 
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.JextractTask;
 import jdk.incubator.jextract.Position;
@@ -37,18 +42,14 @@ import jdk.internal.clang.SourceLocation;
 import jdk.internal.clang.SourceRange;
 import jdk.internal.clang.TranslationUnit;
 
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Optional;
-
 class Parser {
     private final TreeMaker treeMaker;
     private final JextractTask.ConstantParser constantParser;
+    private final PositionTracker tracker;
 
     public Parser(JextractTask.ConstantParser constantParser) {
-        this.treeMaker = new TreeMaker();
+        this.tracker = new PositionTracker();
+        this.treeMaker = new TreeMaker(tracker);
         this.constantParser = constantParser;
     }
 
@@ -68,8 +69,10 @@ class Parser {
 
         List<Declaration> decls = new ArrayList<>();
         Cursor tuCursor = tu.getCursor();
+        tracker.start(path);
         tuCursor.children().
             forEach(c -> {
+                tracker.track(c);
                 SourceLocation loc = c.getSourceLocation();
                 if (loc == null) {
                     return;
@@ -79,7 +82,6 @@ class Parser {
                 if (src == null) {
                     return;
                 }
-
 
                 if (c.isDeclaration()) {
                     if (c.kind() == CursorKind.UnexposedDecl ||
@@ -123,10 +125,10 @@ class Parser {
 
         @Override
         public Optional<Declaration.Constant> parseConstant(Position pos, String name, String[] tokens) {
-            if (!(pos instanceof TreeMaker.CursorPosition)) {
+            if (!(pos instanceof CursorPosition)) {
                 return Optional.empty();
             } else {
-                Cursor cursor = ((TreeMaker.CursorPosition)pos).cursor();
+                Cursor cursor = ((CursorPosition)pos).cursor();
                 if (cursor.isMacroFunctionLike()) {
                     return Optional.empty();
                 } else {

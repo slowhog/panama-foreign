@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,38 +22,8 @@
  */
 
 #include "common_def.h"
+#include "empty.h"
+#include "depth2.h"
+#include "depth2and3.h"
 
-#ifdef _WIN32
-// Windows doesn't really support asm symbol, this is similar approach for C code to
-// achieve similar, but this won't work with Panama until we support such Macro
-#ifdef ADD
-#define foo fooA
-#define func funcA
-#else
-#define foo fooB
-#define func funcB
-#endif //ADD
-#endif // _WIN32
-
-// We do 3 declarations to make sure we will pick up alias no matter the sequence of encounter
-// Without alias
-EXPORT extern int foo;
-EXPORT int func (int x, int y);
-
-// With alias
-#ifdef ADD
-
-EXPORT extern int foo ALIAS(fooA);
-EXPORT int func (int x, int y) ALIAS(funcA);
-
-#else
-
-EXPORT extern int foo ALIAS(fooB);
-EXPORT int func (int x, int y) ALIAS(funcB);
-
-#endif // ADD
-
-// Without alias again
-EXPORT extern int foo;
-EXPORT int func (int x, int y);
-
+EXPORT int depth1();
