@@ -51,8 +51,10 @@ import static sun.security.action.GetBooleanAction.privilegedGetProperty;
 public class ProgrammableInvoker {
     private static final boolean DEBUG =
         privilegedGetProperty("jdk.internal.foreign.ProgrammableInvoker.DEBUG");
-    private static final boolean OLD_INVOKER =
-        privilegedGetProperty("jdk.internal.foreign.ProgrammableInvoker.OLD_INVOKER");
+    private static final boolean NO_SPEC =
+        privilegedGetProperty("jdk.internal.foreign.ProgrammableInvoker.NO_SPEC");
+    private static final boolean NO_INTRINSICS =
+        privilegedGetProperty("jdk.internal.foreign.ProgrammableInvoker.NO_INTRINSICS");
 
     private static final JavaLangInvokeAccess JLIA = SharedSecrets.getJavaLangInvokeAccess();
     private static final VarHandle VH_LONG = MemoryHandles.varHandle(long.class, ByteOrder.nativeOrder());
@@ -125,7 +127,7 @@ public class ProgrammableInvoker {
     }
 
     public MethodHandle getBoundMethodHandle() {
-        if (OLD_INVOKER) {
+        if (NO_SPEC) {
             return getFallbackHandle();
         }
 
@@ -154,20 +156,25 @@ public class ProgrammableInvoker {
                 .asCollector(Object[].class, intrinsicType.parameterCount())
                 .asType(intrinsicType);
 
-        MethodHandle intrinsicHandle = JLIA.nativeMethodHandle(
+        MethodHandle intrinsicHandle;
+        if (NO_INTRINSICS) {
+            intrinsicHandle = lowLevelFallback;
+        } else {
+            intrinsicHandle = JLIA.nativeMethodHandle(
                 intrinsicType,
                 lowLevelFallback,
                 addr,
                 abi.toInternal(),
                 callingSequence.moveBindings()
-                    .map(Binding.Move::storage)
-                    .map(VMStorage::toInternal)
-                    .toArray(jdk.internal.invoke.VMStorage[]::new),
+                        .map(Binding.Move::storage)
+                        .map(VMStorage::toInternal)
+                        .toArray(jdk.internal.invoke.VMStorage[]::new),
                 Arrays.stream(retMoves)
-                    .map(Binding.Move::storage)
-                    .map(VMStorage::toInternal)
-                    .toArray(jdk.internal.invoke.VMStorage[]::new),
+                        .map(Binding.Move::storage)
+                        .map(VMStorage::toInternal)
+                        .toArray(jdk.internal.invoke.VMStorage[]::new),
                 !callingSequence.isTrivial());
+        }
 
         List<MemorySegment> tempBuffers = new ArrayList<>();
         int copies = 0;

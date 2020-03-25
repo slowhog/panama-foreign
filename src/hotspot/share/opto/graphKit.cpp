@@ -2594,8 +2594,6 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
   }
 
   uint n_returns = call_type->range()->cnt() - TypeFunc::Parms;
-   // FIXME allocating in node_arena() doesn't work,
-   // that seems to be freed/overwritten after matching, so doesn't stay alive until lowering
   GrowableArray<VMReg> ret_regs(C->comp_arena(), n_returns, n_returns, VMRegImpl::Bad());
   const Type** ret_types = NEW_RESOURCE_ARRAY(const Type*, n_returns);
 
@@ -2620,7 +2618,8 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
   CallNativeNode* call = new CallNativeNode(new_call_type, call_addr, "native_call", TypePtr::BOTTOM,
                                             arg_regs,
                                             ret_regs,
-                                            nep->abi_descriptor()->shadow_space(), nep->need_transition(),
+                                            nep->abi_descriptor()->shadow_space(),
+                                            nep->need_transition(),
                                             nep->method_type()->rtype()->basic_type());
 
   if (call->_need_transition) {
@@ -2646,7 +2645,7 @@ Node* GraphKit::make_native_call(const TypeFunc* call_type, uint nargs, ciNative
     Node* current_value = NULL;
     for (uint vm_ret_pos = 0; vm_ret_pos < n_returns; vm_ret_pos++) {
       if (new_call_type->range()->field_at(TypeFunc::Parms + vm_ret_pos)  == Type::HALF) {
-        // is this needed?
+        // FIXME is this needed?
         gvn().transform(new ProjNode(call, TypeFunc::Parms + vm_ret_pos));
       } else {
         assert(current_value == NULL, "Must not overwrite");

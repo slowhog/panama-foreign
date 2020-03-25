@@ -862,15 +862,6 @@ JVMState* NativeCallGenerator::generate(JVMState* jvms) {
 
   Node* call = kit.make_native_call(tf(), method()->arg_size(), _nep); // -fallback, - nep
 
-  if (call == NULL) {
-    // intrinsification failed
-    if (kit.C->log() != NULL) {
-      kit.C->log()->elem("l2n_intrinsification_failure fallback_action=%s", "calling fallback generator");
-    }
-    print_inlining_failure(kit.C, method(), jvms->depth() - 1, jvms->bci(), "Could not intrinsify linkToNative");
-    return NULL; // FIXME  this triggers an assertion
-  }
-
   kit.C->print_inlining_update(this);
   address addr = _nep->entry_point();
   if (kit.C->log() != NULL) {
@@ -1008,12 +999,7 @@ CallGenerator* CallGenerator::for_method_handle_inline(JVMState* jvms, ciMethod*
       if (nep->Opcode() == Op_ConP) {
         const TypeOopPtr* oop_ptr = nep->bottom_type()->is_oopptr();
         ciNativeEntryPoint* nep = oop_ptr->const_oop()->as_native_entry_point();
-        if (EnableL2NIntrinsic) {
-          return new NativeCallGenerator(callee, nep);
-        } else {
-          print_inlining_failure(C, callee, jvms->depth() - 1, jvms->bci(), "L2N intrinsic dissabled");
-          return NULL;
-        }
+        return new NativeCallGenerator(callee, nep);
       } else {
         // can this happen?
         print_inlining_failure(C, callee, jvms->depth() - 1, jvms->bci(),

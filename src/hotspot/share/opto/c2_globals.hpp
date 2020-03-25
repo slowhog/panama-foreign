@@ -750,8 +750,5 @@
                                                                             \
   diagnostic(bool, ExpandSubTypeCheckAtParseTime, false,                    \
           "Do not use subtype check macro node")                            \
-                                                                            \
-  develop(bool, EnableL2NIntrinsic, true,                                   \
-          "Enable experimental linkToNative intrinsic")                     \
 
 #endif // SHARE_OPTO_C2_GLOBALS_HPP

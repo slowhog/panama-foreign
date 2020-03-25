@@ -169,9 +169,13 @@ void MethodHandles::jump_to_lambda_form(MacroAssembler* _masm,
   //NOT_PRODUCT({ FlagSetting fs(TraceMethodHandles, true); trace_method_handle(_masm, "LZMH"); });
 
   // Load the invoker, as MH -> MH.form -> LF.vmentry
+  __ verify_oop(recv);
   __ load_heap_oop(method_temp, Address(recv, NONZERO(java_lang_invoke_MethodHandle::form_offset_in_bytes())), temp2);
+  __ verify_oop(method_temp);
   __ load_heap_oop(method_temp, Address(method_temp, NONZERO(java_lang_invoke_LambdaForm::vmentry_offset_in_bytes())), temp2);
+  __ verify_oop(method_temp);
   __ load_heap_oop(method_temp, Address(method_temp, NONZERO(java_lang_invoke_MemberName::method_offset_in_bytes())), temp2);
+  __ verify_oop(method_temp);
   __ access_load_at(T_ADDRESS, IN_HEAP, method_temp,
                     Address(method_temp, NONZERO(java_lang_invoke_ResolvedMethodName::vmtarget_offset_in_bytes())),
                     noreg, noreg);
