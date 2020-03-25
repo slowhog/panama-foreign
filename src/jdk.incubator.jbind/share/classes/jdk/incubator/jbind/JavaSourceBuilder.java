@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
@@ -45,7 +46,7 @@ import jdk.incubator.jextract.Declaration;
  * method is called to get overall generated source string.
  */
 class JavaSourceBuilder {
-    private static final String ABI = SystemABI.getInstance().name();
+    private static final String ABI = Foreign.getInstance().getSystemABI().name();
     // buffer
     protected StringBuffer sb;
     // current line alignment (number of 4-spaces)
@@ -81,8 +82,7 @@ class JavaSourceBuilder {
 
     private static String AbiTypes() {
         String prefix = "jdk.incubator.foreign.MemoryLayouts.";
-        String abi = SystemABI.getInstance().name();
-        switch (abi) {
+        switch (ABI) {
             case SystemABI.ABI_SYSV:
                 return prefix + "SysV";
             case SystemABI.ABI_WINDOWS:
@@ -90,7 +90,7 @@ class JavaSourceBuilder {
             case SystemABI.ABI_AARCH64:
                 return prefix + "AArch64ABI";
             default:
-                throw new UnsupportedOperationException("Unsupported ABI: " + abi);
+                throw new UnsupportedOperationException("Unsupported ABI: " + ABI);
         }
     }
 
@@ -270,10 +270,6 @@ class JavaSourceBuilder {
 
     protected void addVarHandle(String name, Class<?> type, Declaration parent, int dimensions) {
         String ty = type.getName();
-        if (ty.contains("MemoryAddress")) {
-            ty = "long";
-        } else if (ty.contains("MemorySegment")) {
-        }
         indent();
         sb.append(PUB_MODS + "VarHandle " + getVarHandleName(name, parent) + " = \n");
         incrAlign();
@@ -520,10 +516,8 @@ class JavaSourceBuilder {
         String typeName = type.getName();
         if (typeName.contains("MemoryAddress")) {
             typeName = "MemoryAddress";
-            vhGetStmt = "MemoryAddress.ofLong((long) " + vhGetStmt + ")";
-        } else {
-            vhGetStmt = "(" + typeName +") " + vhGetStmt;
         }
+        vhGetStmt = "(" + typeName +") " + vhGetStmt;
         sb.append(parent == null ? PUB_MODS : PUB_CLS_MODS);
         sb.append(typeName + " " + name + "$get(");
         for (int i = 0; i < dimensions; i++) {
@@ -551,10 +545,8 @@ class JavaSourceBuilder {
         }
         if (typeName.contains("MemoryAddress")) {
             typeName = "MemoryAddress";
-            vhParam += ", ForeignUnsafe.getUnsafeOffset(x)";
-        } else {
-            vhParam += ", x";
         }
+        vhParam += ", x";
         sb.append(parent == null ? PUB_MODS : PUB_CLS_MODS);
         sb.append("void " + name + "$set(");
         for (int i = 0; i < dimensions; i++) {

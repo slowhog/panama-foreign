@@ -49,7 +49,6 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
 
     public JavaFileObject[] generate(Declaration.Scoped decl) {
         builder.addPackagePrefix(pkgName);
-        builder.addImport("jdk.incubator.foreign.unsafe.ForeignUnsafe");
         builder.addImport("java.util.function.LongFunction");
         builder.addLineBreak();
         builder.classBegin(clsName);

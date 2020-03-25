@@ -34,16 +34,15 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Optional;
 import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.SystemABI;
-import jdk.incubator.foreign.unsafe.ForeignUnsafe;
 
 public class RuntimeHelper {
-
-    private final static SystemABI ABI = SystemABI.getInstance();
-
+    private final static Foreign FOREIGN = Foreign.getInstance();
+    private final static SystemABI ABI = FOREIGN.getSystemABI();
     private final static ClassLoader LOADER = RuntimeHelper.class.getClassLoader();
 
     private final static MethodHandles.Lookup MH_LOOKUP = MethodHandles.lookup();
@@ -84,7 +83,7 @@ public class RuntimeHelper {
 
     private static  MemoryAddress uncheck(MemoryAddress addr, MemoryLayout layout) {
         try {
-            return ForeignUnsafe.ofNativeUnchecked(addr, layout.byteSize()).baseAddress();
+            return FOREIGN.ofNativeUnchecked(addr, layout.byteSize()).baseAddress();
         } catch (Exception e) {
             return addr;
         }
