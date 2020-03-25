@@ -22,6 +22,7 @@
  */
 #include <jni.h>
 #include <stdlib.h>
+#include <math.h>
 
 #ifdef _WIN64
 #define EXPORT __declspec(dllexport)
