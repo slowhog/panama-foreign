@@ -1,6 +1,7 @@
 -t jdk.internal.panama
 -C -isysroot
 -C /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+-J-Djdk.incubator.foreign.Foreign=permit
 # -I /Users/hjen/lib/clang/lib/clang/9.0.0/include
 --package-map /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include=jdk.internal.panama
 --package-map /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types=jdk.internal.panama.systypes
