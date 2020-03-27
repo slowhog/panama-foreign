@@ -72,8 +72,8 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
             return this;
         }
 
-        public List<JavaFileObject> generate(Declaration.Scoped root) {
-            return new JavaSourceFactory(ctx, symbols, headers).generate(root);
+        public List<JavaFileObject> generate(Declaration.Scoped root, int max_depth) {
+            return new JavaSourceFactory(ctx, symbols, headers).generate(root, max_depth);
         }
     }
 
@@ -168,13 +168,14 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 ctx.getLibs(), ctx.getLibPaths()));
     }
 
-    List<JavaFileObject> generateLib() {
+    List<JavaFileObject> generateLib(int max_depth) {
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION, Stream.concat(
                 uniqTypes.decls.values().stream(), Stream.concat(
                 uniqVariables.decls.values().stream(),
                 uniqFunctions.decls.values().stream()))
                 .filter(d -> headers.filter(d.pos().path()))
                 .filter(d -> symbols.filter(d.name()))
+                .filter(d -> d.pos().depth() <= max_depth)
                 .toArray(Declaration[]::new));
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(
@@ -182,7 +183,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                     ctx.targetPackageName(), ctx.getLibs(), ctx.getLibPaths()));
     }
 
-    public List<JavaFileObject> generate(Declaration.Scoped decl) {
+    public List<JavaFileObject> generate(Declaration.Scoped decl, int max_depth) {
         decl.accept(this, ctx);
 
         List<JavaFileObject> files = new ArrayList<>();
@@ -191,7 +192,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 .filter(e -> headers.filter(e.getKey()))
                 .map(e -> generateHeader(e.getKey(), e.getValue()))
                 .forEach(files::addAll);
-        files.addAll(generateLib());
+        files.addAll(generateLib(max_depth));
         return files;
     }
 

@@ -81,6 +81,8 @@ public class Main {
         parser.accepts("include-symbols", Log.format("help.include", "symbols")).withRequiredArg();
         parser.accepts("exclude-headers", Log.format("help.exclude", "headers")).withRequiredArg();
         parser.accepts("include-headers", Log.format("help.include", "headers")).withRequiredArg();
+        parser.accepts("max-depth", Log.format("help.max_depth")).withRequiredArg()
+                .ofType(int.class).defaultsTo(1);
         // option is expected to specify paths to load shared libraries
         parser.accepts("l", Log.format("help.l")).withRequiredArg();
         parser.accepts("log", Log.format("help.log")).withRequiredArg();
@@ -250,7 +252,7 @@ public class Main {
         JavaFileObject[] files = JavaSourceFactory.of(ctx)
                 .withHeaderFilter(headers.buildPathMatcher())
                 .withSymbolFilter(symbols.buildRegexMatcher())
-                .generate(root)
+                .generate(root, (int) optionSet.valueOf("max-depth"))
                 .toArray(JavaFileObject[]::new);
         jextract.write(ctx.getOutputPath(), files);
     }
