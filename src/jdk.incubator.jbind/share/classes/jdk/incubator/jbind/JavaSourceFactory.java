@@ -168,14 +168,29 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 ctx.getLibs(), ctx.getLibPaths()));
     }
 
+    public boolean toBeIncluded(Declaration decl, int max_depth) {
+        if (symbols.isExcluded(decl.name())) {
+            return false;
+        }
+        Position pos = decl.pos();
+        if (headers.isExcluded(pos.path())) {
+            return false;
+        }
+        if (symbols.isIncluded(decl.name())) {
+            return true;
+        }
+        if (headers.isIncluded(pos.path())) {
+            return true;
+        }
+        return pos.depth() <= max_depth;
+    }
+
     List<JavaFileObject> generateLib(int max_depth) {
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION, Stream.concat(
                 uniqTypes.decls.values().stream(), Stream.concat(
                 uniqVariables.decls.values().stream(),
                 uniqFunctions.decls.values().stream()))
-                .filter(d -> headers.filter(d.pos().path()))
-                .filter(d -> symbols.filter(d.name()))
-                .filter(d -> d.pos().depth() <= max_depth)
+                .filter(d -> toBeIncluded(d, max_depth))
                 .toArray(Declaration[]::new));
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(

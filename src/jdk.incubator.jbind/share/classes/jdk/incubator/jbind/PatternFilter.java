@@ -75,11 +75,11 @@ class PatternFilter<T> {
         return !includes.isEmpty();
     }
 
-    protected boolean isIncluded(T name) {
+    public boolean isIncluded(T name) {
         return includes.stream().anyMatch(p -> p.test(name));
     }
 
-    protected boolean isExcluded(T name) {
+    public boolean isExcluded(T name) {
         return excludes.stream().anyMatch(p -> p.test(name));
     }
 
