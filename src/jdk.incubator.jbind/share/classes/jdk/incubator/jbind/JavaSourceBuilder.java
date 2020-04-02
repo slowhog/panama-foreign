@@ -40,6 +40,8 @@ import jdk.incubator.foreign.SystemABI;
 import jdk.incubator.foreign.ValueLayout;
 import jdk.incubator.jextract.Declaration;
 
+import static jdk.incubator.foreign.SystemABI.NATIVE_TYPE;
+
 /**
  * A helper class to generate header interface class in source form.
  * After aggregating various constituents of a .java source, build
@@ -205,26 +207,10 @@ class JavaSourceBuilder {
 
     private void addLayout(MemoryLayout l) {
         if (l instanceof ValueLayout) {
-            SystemABI.Type type = l.abiType().orElseThrow(()->new AssertionError("Should not get here: " + l));
-            sb.append(switch (type) {
-                case BOOL -> "C_BOOL";
-                case SIGNED_CHAR -> "C_SCHAR";
-                case UNSIGNED_CHAR -> "C_UCHAR";
-                case CHAR -> "C_CHAR";
-                case SHORT -> "C_SHORT";
-                case UNSIGNED_SHORT -> "C_USHORT";
-                case INT -> "C_INT";
-                case UNSIGNED_INT -> "C_UINT";
-                case LONG -> "C_LONG";
-                case UNSIGNED_LONG -> "C_ULONG";
-                case LONG_LONG -> "C_LONGLONG";
-                case UNSIGNED_LONG_LONG -> "C_ULONGLONG";
-                case FLOAT -> "C_FLOAT";
-                case DOUBLE -> "C_DOUBLE";
-                case LONG_DOUBLE -> "C_LONGDOUBLE";
-                case POINTER -> "C_POINTER";
-                default -> { throw new RuntimeException("should not reach here: " + type); }
-            });
+            SystemABI.Type type = l.attribute(NATIVE_TYPE)
+                                   .map(SystemABI.Type.class::cast)
+                                   .orElseThrow(()->new AssertionError("Should not get here: " + l));
+            sb.append(TypeTranslator.typeToLayoutName(type));
         } else if (l instanceof SequenceLayout) {
             sb.append("MemoryLayout.ofSequence(");
             if (((SequenceLayout) l).elementCount().isPresent()) {
@@ -233,7 +219,9 @@ class JavaSourceBuilder {
             addLayout(((SequenceLayout) l).elementLayout());
             sb.append(")");
         } else if (l instanceof GroupLayout) {
-            SystemABI.Type type = l.abiType().orElse(null);
+            SystemABI.Type type = l.attribute(NATIVE_TYPE)
+                                   .map(SystemABI.Type.class::cast)
+                                   .orElse(null);
             if (type == SystemABI.Type.COMPLEX_LONG_DOUBLE) {
                 if (!ABI.equals(SystemABI.ABI_SYSV)) {
                     throw new RuntimeException("complex long double is supported only for SysV ABI");
