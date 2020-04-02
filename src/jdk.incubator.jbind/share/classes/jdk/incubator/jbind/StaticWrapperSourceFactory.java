@@ -28,14 +28,17 @@ package jdk.incubator.jbind;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Type;
 import java.lang.invoke.MethodType;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.tools.JavaFileObject;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryLayout;
 
 public class StaticWrapperSourceFactory extends AbstractCodeFactory implements Declaration.Visitor<Void, Declaration> {
+    private final Set<String> constants = new HashSet<>();
     protected final JavaSourceBuilder builder = new JavaSourceBuilder();
     protected final TypeTranslator typeTranslator = new TypeTranslator();
 
@@ -171,7 +174,6 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
             builder.addVHGetter(fieldName, clazz, parent, dimensions);
             builder.addVHSetter(fieldName, clazz, parent, dimensions);
         }
-        builder.addLineBreak();
         return null;
     }
 
@@ -200,11 +202,25 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
                     builder.classBegin(true, clsName, "Struct<" + clsName + ">");
                     builder.addStructConstructor(clsName);
                     builder.addLayoutMethod(name, (GroupLayout) d.layout().get());
-                    d.members().forEach(fieldTree -> fieldTree.accept(this, d.name().isEmpty() ? parent : d));
+                    d.members().forEach(fieldTree -> {
+                        builder.addLineBreak();
+                        fieldTree.accept(this, d.name().isEmpty() ? parent : d);
+                    });
                     builder.classEnd();
                     break;
             }
         }
+        return null;
+    }
+
+    @Override
+    public Void visitConstant(Declaration.Constant constant, Declaration parent) {
+        if (!constants.add(constant.name())) {
+            //skip
+            return null;
+        }
+
+        builder.addConstant(constant.name(), typeTranslator.getJavaType(constant.type()), constant.value());
         return null;
     }
 

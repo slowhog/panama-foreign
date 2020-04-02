@@ -311,9 +311,9 @@ class JavaSourceBuilder {
         sb.append("}\n");
         indent();
         sb.append("return " + mhVar + ";\n");
+        decrAlign();
         indent();
         sb.append("}\n");
-        decrAlign();
     }
 
     protected void addAddressLookup(String name, String symbol) {

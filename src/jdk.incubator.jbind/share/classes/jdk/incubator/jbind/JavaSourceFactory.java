@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Predicate;
 import java.util.logging.Level;
 import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
@@ -118,10 +119,11 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 if (DeclarationMatch.match(existing, d)) {
                     log.print(Level.INFO, String.format("Matching %s: %s", description, name));
                 } else {
-                    log.print(Level.WARNING, String.format("Mismatched %s: %s\n\t%s\n\t%s",
+                    log.print(Level.WARNING, String.format("Override mismatched %s: %s\n\t%s\n\t%s",
                             description, name, position(d.pos()), position(existing.pos())));
                     log.print(Level.WARNING, String.format("  Now: ") + d.toString());
                     log.print(Level.WARNING, String.format("  Old: ") + d.toString());
+                    decls.put(name, d);
                 }
             }
         }
@@ -185,12 +187,12 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         return pos.depth() <= max_depth;
     }
 
-    List<JavaFileObject> generateLib(int max_depth) {
+    List<JavaFileObject> generateLib(Predicate<Declaration> filter) {
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION, Stream.concat(
                 uniqTypes.decls.values().stream(), Stream.concat(
                 uniqVariables.decls.values().stream(),
                 uniqFunctions.decls.values().stream()))
-                .filter(d -> toBeIncluded(d, max_depth))
+                .filter(filter)
                 .toArray(Declaration[]::new));
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(
@@ -199,6 +201,19 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     }
 
     public List<JavaFileObject> generate(Declaration.Scoped decl, int max_depth) {
+        Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION,
+                decl.members().stream()
+                    .filter(d -> toBeIncluded(d, max_depth))
+                    .flatMap(d -> SymbolDependencyCollector.collect(d).stream())
+                    .toArray(Declaration[]::new));
+
+        return Arrays.asList(
+                StaticWrapperSourceFactory.generate(
+                    root, ctx.getMainClsName(),
+                    ctx.targetPackageName(), ctx.getLibs(), ctx.getLibPaths()));
+    }
+
+    private List<JavaFileObject> generateAll(Declaration.Scoped decl, int max_depth) {
         decl.accept(this, ctx);
 
         List<JavaFileObject> files = new ArrayList<>();
@@ -207,7 +222,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 .filter(e -> headers.filter(e.getKey()))
                 .map(e -> generateHeader(e.getKey(), e.getValue()))
                 .forEach(files::addAll);
-        files.addAll(generateLib(max_depth));
+        files.addAll(generateLib(d -> toBeIncluded(d, max_depth)));
         return files;
     }
 
