@@ -62,6 +62,7 @@ public class SymbolDependencyCollector implements Declaration.Visitor<List<Decla
             Declaration d = t.tree();
             if (! base.contains(d)) {
                 base.add(0, d);
+                base.addAll(0, SymbolDependencyCollector.collect(d));
             }
             return base;
         }

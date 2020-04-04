@@ -138,7 +138,7 @@ class JavaSourceBuilder {
     protected void classEnd() {
         decrAlign();
         indent();
-        sb.append("}\n\n");
+        sb.append("}\n");
     }
 
     protected void addLibraries(String[] libraryNames, String[] libraryPaths) {
@@ -177,12 +177,12 @@ class JavaSourceBuilder {
         sb.append("return new " + name + "(allocator.apply(" + layoutVar + ".byteSize() * count));\n");
         decrAlign();
         indent();
-        sb.append("}\n\n");
+        sb.append("}\n");
         indent();
         sb.append(PUB_MODS + name + " allocate(LongFunction<MemoryAddress> allocator) { return allocate(allocator, 1); }\n");
         indent();
         sb.append(PUB_CLS_MODS + name + " offset(int count) { return at(ptr().addOffset("
-                + layoutVar + ".byteSize() * count)); }\n\n");
+                + layoutVar + ".byteSize() * count)); }\n");
     }
 
     protected void addLayoutMethod(String elementName, GroupLayout layout) {
@@ -202,7 +202,7 @@ class JavaSourceBuilder {
         sb.append(";\n");
         decrAlign();
         indent();
-        sb.append("}\n\n");
+        sb.append("}\n");
     }
 
     private void addLayout(MemoryLayout l) {

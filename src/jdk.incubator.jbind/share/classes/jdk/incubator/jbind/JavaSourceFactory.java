@@ -48,6 +48,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     final DeclarationSet uniqFunctions = new DeclarationSet("function prototype");
     final DeclarationSet uniqVariables = new DeclarationSet("variable");
     final DeclarationSet uniqTypes = new DeclarationSet("type declaration");
+    final DeclarationSet uniqConstants = new DeclarationSet("constant definition");
     final DeclarationMatch comparator = new DeclarationMatch();
     final PatternFilter<Path> headers;
     final PatternFilter<String> symbols;
@@ -111,7 +112,6 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                         description, position(d.pos())));
             }
             Declaration existing = decls.get(name);
-
 
             if (existing == null) {
                 decls.put(name, d);
@@ -201,11 +201,18 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     }
 
     public List<JavaFileObject> generate(Declaration.Scoped decl, int max_depth) {
+        decl.members().stream()
+                .filter(d -> toBeIncluded(d, max_depth))
+                .flatMap(d -> SymbolDependencyCollector.collect(d).stream())
+                .forEach(d -> d.accept(this, ctx));
+
+        List<Declaration> candidates = new ArrayList<>();
+        candidates.addAll(uniqConstants.members());
+        candidates.addAll(uniqTypes.members());
+        candidates.addAll(uniqVariables.members());
+        candidates.addAll(uniqFunctions.members());
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION,
-                decl.members().stream()
-                    .filter(d -> toBeIncluded(d, max_depth))
-                    .flatMap(d -> SymbolDependencyCollector.collect(d).stream())
-                    .toArray(Declaration[]::new));
+                candidates.toArray(Declaration[]::new));
 
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(
@@ -258,8 +265,9 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     }
 
     @Override
-    public Void visitConstant(Declaration.Constant d, Configurations ctx) {
-        return visitDeclaration(d, ctx);
+    public Void visitConstant(Declaration.Constant constant, Configurations ctx) {
+        uniqConstants.add(constant);
+        return visitDeclaration(constant, ctx);
     }
 
     @Override

@@ -86,6 +86,7 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         }
 
         MethodType mtype = typeTranslator.getMethodType(funcTree.type());
+        builder.addLineBreak();
         builder.addMethodHandle(funcTree, mtype, descriptor);
         //generate static wrapper for function
         builder.addStaticFunctionWrapper(funcTree, mtype);
@@ -194,13 +195,16 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         }
 
         if (!d.name().isEmpty() || !isRecord(parent)) {
-            //only add explicit struct layout if the struct is not to be flattened inside another struct
+            // only add explicit struct layout if the struct is not to be flattened inside another struct
+            // FIXME: anonymous type should have proper name derived, maybe from upstream
             switch (d.kind()) {
                 case STRUCT:
                 case UNION:
                     String clsName = NamingUtils.toSafeName(d.name());
+                    builder.addLineBreak();
                     builder.classBegin(true, clsName, "Struct<" + clsName + ">");
                     builder.addStructConstructor(clsName);
+                    builder.addLineBreak();
                     builder.addLayoutMethod(name, (GroupLayout) d.layout().get());
                     d.members().forEach(fieldTree -> {
                         builder.addLineBreak();
