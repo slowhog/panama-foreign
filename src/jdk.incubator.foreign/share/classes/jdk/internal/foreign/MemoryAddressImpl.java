@@ -40,12 +40,14 @@ import java.util.Objects;
 public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProxy {
 
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
+    private static final InternalForeign foreign = InternalForeign.getInstancePrivileged();
 
     private final MemorySegmentImpl segment;
     private final long offset;
 
-    public MemoryAddressImpl(MemorySegmentImpl segment) {
-        this(segment, 0);
+    public MemoryAddressImpl(long offset) {
+        this.segment = MemorySegmentImpl.NOTHING;
+        this.offset = offset;
     }
 
     public MemoryAddressImpl(MemorySegmentImpl segment, long offset) {
@@ -67,13 +69,25 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
     // MemoryAddress methods
 
     @Override
-    public long offset() {
+    public long segmentOffset() {
+        if (segment() == null) {
+            throw new UnsupportedOperationException("Address does not have a segment");
+        }
         return offset;
     }
 
     @Override
+    public long toRawLongValue() {
+        if (unsafeGetBase() != null) {
+            throw new UnsupportedOperationException("Not a native address");
+        }
+        return unsafeGetOffset();
+    }
+
+    @Override
     public MemorySegment segment() {
-        return segment;
+        return segment != MemorySegmentImpl.NOTHING ?
+                segment : null;
     }
 
     @Override
@@ -133,21 +147,11 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
         return "MemoryAddress{ region: " + segment + " offset=0x" + Long.toHexString(offset) + " }";
     }
 
-    // helper methods
-
-    public static long addressof(MemoryAddress address) {
-        MemoryAddressImpl addressImpl = (MemoryAddressImpl)address;
-        if (addressImpl.unsafeGetBase() != null) {
-            throw new IllegalStateException("Heap address!");
-        }
-        return addressImpl.unsafeGetOffset();
-    }
-
     public static MemoryAddress ofLongUnchecked(long value) {
         return ofLongUnchecked(value, Long.MAX_VALUE);
     }
 
     public static MemoryAddress ofLongUnchecked(long value, long byteSize) {
-        return new MemoryAddressImpl((MemorySegmentImpl)Utils.makeNativeSegmentUnchecked(value, byteSize), 0);
+        return foreign.withSize(MemoryAddress.ofLong(value), byteSize);
     }
 }

@@ -83,7 +83,7 @@ public class RuntimeHelper {
 
     private static  MemoryAddress uncheck(MemoryAddress addr, MemoryLayout layout) {
         try {
-            return FOREIGN.ofNativeUnchecked(addr, layout.byteSize()).baseAddress();
+            return FOREIGN.withSize(addr, layout.byteSize());
         } catch (Exception e) {
             return addr;
         }

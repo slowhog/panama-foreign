@@ -23,7 +23,6 @@
 
 import org.testng.annotations.Test;
 
-import java.lang.reflect.Method;
 import java.nio.file.Path;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
@@ -39,6 +38,7 @@ import static org.testng.Assert.assertTrue;
  * @bug 8240300
  * @summary jextract produces non compilable code with repeated declarations
  * @modules jdk.incubator.jextract
+ * @library /test/lib
  * @build JextractToolRunner
  * @run testng/othervm -Djdk.incubator.foreign.Foreign=permit RepeatedDeclsTest
  */
@@ -75,12 +75,12 @@ public class RepeatedDeclsTest extends JextractToolRunner {
             assertNotNull(findMethod(cls, "i$set", int.class));
 
             // make sure that enum constants are generated fine
-            checkIntField(cls, "R", 0);
-            checkIntField(cls, "G", 1);
-            checkIntField(cls, "B", 2);
-            checkIntField(cls, "C", 0);
-            checkIntField(cls, "M", 1);
-            checkIntField(cls, "Y", 2);
+            checkIntGetter(cls, "R", 0);
+            checkIntGetter(cls, "G", 1);
+            checkIntGetter(cls, "B", 2);
+            checkIntGetter(cls, "C", 0);
+            checkIntGetter(cls, "M", 1);
+            checkIntGetter(cls, "Y", 2);
 
             // check Point layout
             MemoryLayout pointLayout = findLayout(cls, "Point");

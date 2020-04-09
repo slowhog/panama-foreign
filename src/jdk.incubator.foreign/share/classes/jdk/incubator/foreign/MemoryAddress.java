@@ -30,13 +30,16 @@ import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.MemorySegmentImpl;
 
 /**
- * A memory address encodes an offset within a given {@link MemorySegment}. Memory addresses are typically obtained
- * using the {@link MemorySegment#baseAddress()} method; such addresses can then be adjusted as required,
- * using {@link MemoryAddress#addOffset(long)}.
+ * A memory address models a reference into a memory location. Memory addresses are typically obtained using the
+ * {@link MemorySegment#baseAddress()} method; such addresses are said to be <em>checked</em>, and can be expressed
+ * as <em>offsets</em> into some underlying memory segment (see {@link #segment()} and {@link #segmentOffset()}).
+ * Since checked memory addresses feature both spatial and temporal bounds, these addresses can <em>safely</em> be
+ * dereferenced using a memory access var handle (see {@link MemoryHandles}).
  * <p>
- * A memory address is typically used as the first argument in a memory access var handle call, to perform some operation
- * on the underlying memory backing a given memory segment. Since a memory address is always associated with a memory segment,
- * such access operations are always subject to spatial and temporal checks as enforced by the address' owning memory region.
+ * If an address does not have any associated segment, it is said to be <em>unchecked</em>. Unchecked memory
+ * addresses do not feature known spatial or temporal bounds; as such, attempting a memory dereference operation
+ * using an unchecked memory address will result in a runtime exception. Unchecked addresses can be obtained
+ * e.g. by calling the {@link #ofLong(long)} method.
  * <p>
  * All implementations of this interface must be <a href="{@docRoot}/java.base/java/lang/doc-files/ValueBased.html">value-based</a>;
  * use of identity-sensitive operations (including reference equality ({@code ==}), identity hash code, or synchronization) on
@@ -61,15 +64,23 @@ public interface MemoryAddress {
     MemoryAddress addOffset(long offset);
 
     /**
-     * The offset of this memory address into the underlying segment.
-     *
-     * @return the offset
+     * Returns the offset of this memory address into the underlying segment (if any).
+     * @return the offset of this memory address into the underlying segment (if any).
+     * @throws UnsupportedOperationException if no segment is associated with this memory address,
+     * e.g. if {@code segment() == null}.
      */
-    long offset();
+    long segmentOffset();
 
     /**
-     * The memory segment this address belongs to.
-     * @return The memory segment this address belongs to.
+     * Returns the raw long value associated to this memory address.
+     * @return The raw long value associated to this memory address.
+     * @throws UnsupportedOperationException if this memory address is associated with an heap segment.
+     */
+    long toRawLongValue();
+
+    /**
+     * Returns the memory segment (if any) this address belongs to.
+     * @return The memory segment this address belongs to, or {@code null} if no such segment exists.
      */
     MemorySegment segment();
 
@@ -110,7 +121,13 @@ public interface MemoryAddress {
      * through {@code src.addOffset(bytes - 1)} are copied into addresses {@code dst} through {@code dst.addOffset(bytes - 1)}.
      * If the source and address ranges overlap, then the copying is performed as if the bytes at addresses {@code src}
      * through {@code src.addOffset(bytes - 1)} were first copied into a temporary segment with size {@code bytes},
-     * and then the contents of the temporary segment were copied into the bytes at addresses {@code dst} through {@code dst.addOffset(bytes - 1)}.
+     * and then the contents of the temporary segment were copied into the bytes at addresses {@code dst} through
+     * {@code dst.addOffset(bytes - 1)}.
+     * <p>
+     * The result of a bulk copy is unspecified if, in the uncommon case, the source and target address ranges do not
+     * overlap, but refer to overlapping regions of the same backing storage using different addresses.  For example,
+     * this may occur if the same file is {@link MemorySegment#mapFromPath mapped} to two segments.
+     *
      * @param src the source address.
      * @param dst the target address.
      * @param bytes the number of bytes to be copied.
@@ -127,20 +144,20 @@ public interface MemoryAddress {
     }
 
     /**
-     * A native memory address instance modelling the {@code NULL} pointer. This address is backed by a memory segment
-     * which can be neither closed, nor dereferenced.
+     * The <em>unchecked</em> memory address instance modelling the {@code NULL} address. This address is <em>not</em> backed by
+     * a memory segment and hence it cannot be dereferenced.
      */
-    MemoryAddress NULL = MemorySegmentImpl.NOTHING.baseAddress();
+    MemoryAddress NULL = new MemoryAddressImpl( 0L);
 
     /**
-     * Obtain a new memory address instance from given long address. The returned address is backed by a memory segment
-     * which can be neither closed, nor dereferenced.
+     * Obtain a new <em>unchecked</em> memory address instance from given long address. The returned address is <em>not</em> backed by
+     * a memory segment and hence it cannot be dereferenced.
      * @param value the long address.
      * @return the new memory address instance.
      */
     static MemoryAddress ofLong(long value) {
         return value == 0 ?
                 NULL :
-                MemorySegmentImpl.NOTHING.baseAddress().addOffset(value);
+                new MemoryAddressImpl(value);
     }
 }
