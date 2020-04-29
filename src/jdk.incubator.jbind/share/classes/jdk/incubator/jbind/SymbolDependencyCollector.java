@@ -25,84 +25,82 @@
 
 package jdk.incubator.jbind;
 
-import java.util.List;
-import java.util.LinkedList;
+import java.util.Set;
+import java.lang.invoke.TypeDescriptor;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.Optional;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Type;
+import jdk.incubator.jextract.Type.Delegated.Kind;
 
-public class SymbolDependencyCollector implements Declaration.Visitor<List<Declaration>, List<Declaration>> {
-    private SymbolDependencyCollector() {}
-    final static SymbolDependencyCollector instance = new SymbolDependencyCollector();
+public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, Declaration> {
+    private final AnonymousRegistry registry;
+    private final Set<Declaration> dependencies;
 
-    private static class TypeDeclarationCollector implements Type.Visitor<List<Declaration>, List<Declaration>> {
-        private TypeDeclarationCollector() {}
-        final static TypeDeclarationCollector instance = new TypeDeclarationCollector();
-
-        @Override
-        public List<Declaration> visitPrimitive(Type.Primitive type, List<Declaration> base) {
-            return base;
+    private static boolean isRecord(Declaration declaration) {
+        if (declaration == null) {
+            return false;
+        } else if (!(declaration instanceof Declaration.Scoped)) {
+            return false;
+        } else {
+            Declaration.Scoped scope = (Declaration.Scoped)declaration;
+            return scope.kind() == Declaration.Scoped.Kind.CLASS ||
+                    scope.kind() == Declaration.Scoped.Kind.STRUCT ||
+                    scope.kind() == Declaration.Scoped.Kind.UNION;
         }
+    }
 
-        @Override
-        public List<Declaration> visitArray(Type.Array t, List<Declaration> base) {
-            return t.elementType().accept(this, base);
+    @Override
+    public Boolean visitScoped(Declaration.Scoped record, Declaration parent) {
+        if (dependencies.contains(record)) {
+            return false;
         }
-
-        @Override
-        public List<Declaration> visitFunction(Type.Function t, List<Declaration> base) {
-            base = t.returnType().accept(this, base);
-            for (Type argType: t.argumentTypes()) {
-                base = argType.accept(this, base);
+        String typeName = registry.getName(record, parent);
+        if (! isRecord(parent)) {
+            // Not adding record type for anonymous field
+            // Named field will the dependcy via Field declaration
+            if (record.name().isEmpty()) {
+                // inject implicit typedef
+                // Use parent position which leads to the typedef
+                dependencies.add(Declaration.typedef(parent.pos(), typeName, Type.declared(record)));
+            } else {
+                dependencies.add(record);
             }
-            return base;
         }
+        return true;
+    }
 
-        @Override
-        public List<Declaration> visitDeclared(Type.Declared t, List<Declaration> base) {
-            Declaration d = t.tree();
-            if (! base.contains(d)) {
-                base.add(0, d);
-                base.addAll(0, SymbolDependencyCollector.collect(d));
+    @Override
+    public Boolean visitVariable(Declaration.Variable decl, Declaration parent) {
+        if (dependencies.contains(decl)) {
+            return false;
+        }
+        if (decl.kind() == Declaration.Variable.Kind.TYPE) {
+            String name = registry.getName(decl, parent);
+            if (decl.name().isEmpty()) {
+                dependencies.add(Declaration.typedef(decl.pos(), name, decl.type()));
+            } else {
+                dependencies.add(decl);
             }
-            return base;
         }
-
-        @Override
-        public List<Declaration> visitDelegated(Type.Delegated t, List<Declaration> base) {
-            return t.type().accept(this, base);
-        }
-
-        public static List<Declaration> collect(Type type, List<Declaration> base) {
-            return type.accept(instance, base);
-        }
+        return true;
     }
 
     @Override
-    public List<Declaration> visitScoped(Declaration.Scoped scope, List<Declaration> base) {
-        for (Declaration d: scope.members()) {
-            base = d.accept(this, base);
-        }
-        return base;
+    public Boolean visitDeclaration(Declaration decl, Declaration parent) {
+        return ! dependencies.contains(decl);
     }
 
-    @Override
-    public List<Declaration> visitFunction(Declaration.Function fn, List<Declaration> base) {
-        return TypeDeclarationCollector.collect(fn.type(), base);
+    private SymbolDependencyCollector(AnonymousRegistry registry) {
+        super();
+        this.registry = registry;
+        this.dependencies = new LinkedHashSet<>();
     }
 
-    @Override
-    public List<Declaration> visitConstant(Declaration.Constant constant, List<Declaration> base) {
-        return TypeDeclarationCollector.collect(constant.type(), base);
-    }
-
-    @Override
-    public List<Declaration> visitVariable(Declaration.Variable variable, List<Declaration> base) {
-        return TypeDeclarationCollector.collect(variable.type(), base);
-    }
-
-    public static List<Declaration> collect(Declaration decl) {
-        List<Declaration> rv = new LinkedList<>();
-        rv.add(decl);
-        return decl.accept(instance, rv);
+    public static Set<Declaration> collect(Declaration decl, AnonymousRegistry registry) {
+        SymbolDependencyCollector instance = new SymbolDependencyCollector(registry);
+        TypeDependencyWalker.walkDeclaration(decl, instance);
+        return Collections.unmodifiableSet(instance.dependencies);
     }
 }

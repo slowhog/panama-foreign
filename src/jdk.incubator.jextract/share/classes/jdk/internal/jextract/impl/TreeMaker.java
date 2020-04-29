@@ -204,15 +204,9 @@ class TreeMaker {
                 .collect(Collectors.toList());
     }
 
-    private Declaration.Scoped createTypedef(Cursor c) {
-        Optional<Cursor> decl = c.children().findFirst();
-        if (decl.isPresent() && decl.get().isDefinition() && decl.get().spelling().isEmpty()) {
-            Declaration def = createTree(decl.get());
-            if (def instanceof Declaration.Scoped) {
-                return Declaration.typedef(toPos(c), c.spelling(), def);
-            }
-        }
-        return null;
+    private Declaration.Variable createTypedef(Cursor c) {
+        Type.Delegated typedef = (Type.Delegated) toType(c);
+        return Declaration.typedef(toPos(c), c.spelling(), typedef.type());
     }
 
     private Declaration.Variable createVar(Declaration.Variable.Kind kind, Cursor c, VarFactoryNoLayout varFactory) {

@@ -41,13 +41,15 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
     private final Set<String> constants = new HashSet<>();
     protected final JavaSourceBuilder builder = new JavaSourceBuilder();
     protected final TypeTranslator typeTranslator = new TypeTranslator();
+    private final AnonymousRegistry aliases;
 
-    static JavaFileObject[] generate(Declaration.Scoped decl, String clsName, String pkgName, List<String> libraryNames, List<String> libraryPaths) {
-        return new StaticWrapperSourceFactory(clsName, pkgName, libraryNames, libraryPaths).generate(decl);
+    static JavaFileObject[] generate(Declaration.Scoped decl, String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths) {
+        return new StaticWrapperSourceFactory(clsName, pkgName, aliases, libraryNames, libraryPaths).generate(decl);
     }
 
-    public StaticWrapperSourceFactory(String clsName, String pkgName, List<String> libraryNames, List<String> libraryPaths) {
+    public StaticWrapperSourceFactory(String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths) {
         super(clsName, pkgName, libraryNames, libraryPaths);
+        this.aliases = aliases;
     }
 
     public JavaFileObject[] generate(Declaration.Scoped decl) {
@@ -129,6 +131,15 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         String fieldName = tree.name();
         assert !fieldName.isEmpty();
         Type type = tree.type();
+
+        if (tree.kind() == Declaration.Variable.Kind.TYPE) {
+            if (type instanceof Type.Declared) {
+                return visitScoped(((Type.Declared) type).tree(), tree);
+            } else {
+                return null;
+            }
+        }
+
         if (tree.kind() == Declaration.Variable.Kind.BITFIELD) {
             System.err.println("Encounter bitfield: " + tree.toString());
             System.err.println("  Enclosing declaration: " + parent.toString());
@@ -180,27 +191,18 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
 
     @Override
     public Void visitScoped(Declaration.Scoped d, Declaration parent) {
-        System.err.println("For Declaration.Scoped " + d.name() +
-                (parent == null ? "" : (" in parent " + parent.name())));
-        if (d.kind() == Declaration.Scoped.Kind.TYPEDEF) {
-            return d.members().get(0).accept(this, d);
-        }
         if (d.layout().isEmpty()) {
             //skip decl-only
             return null;
         }
-        String name = d.name();
-        if (d.name().isEmpty() && parent != null) {
-            name = parent.name();
-        }
 
+        String name = aliases.getName(d, parent);
         if (!d.name().isEmpty() || !isRecord(parent)) {
             // only add explicit struct layout if the struct is not to be flattened inside another struct
-            // FIXME: anonymous type should have proper name derived, maybe from upstream
             switch (d.kind()) {
                 case STRUCT:
                 case UNION:
-                    String clsName = NamingUtils.toSafeName(d.name());
+                    String clsName = NamingUtils.toSafeName(name);
                     builder.addLineBreak();
                     builder.classBegin(true, clsName, "Struct<" + clsName + ">");
                     builder.addStructConstructor(clsName);

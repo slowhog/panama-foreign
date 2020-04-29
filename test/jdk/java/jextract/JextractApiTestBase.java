@@ -23,8 +23,11 @@
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
+
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.JextractTask;
 import jdk.incubator.jextract.Type;
@@ -46,13 +49,44 @@ public class JextractApiTestBase {
         return task.parse(parseOptions);
     }
 
+    public static void checkFields(List<Declaration> members, String... fields) {
+        assertEquals(members.size(), fields.length);
+        for (int i = 0; i < fields.length; i++) {
+            assertEquals(members.get(i).name(), fields[i]);
+        }
+    }
+
     public static Declaration.Scoped checkScoped(Declaration.Scoped toplevel, String name, Declaration.Scoped.Kind kind,  String... fields) {
         Declaration.Scoped scoped = findDecl(toplevel, name, Declaration.Scoped.class);
-        assertEquals(scoped.members().size(), fields.length);
         assertTrue(scoped.kind() == kind);
-        for (int i = 0; i < fields.length; i++) {
-            assertEquals(scoped.members().get(i).name(), fields[i]);
-        }
+        checkFields(scoped.members(), fields);
+        return scoped;
+    }
+
+    private static List<Declaration> getNamedFields(Declaration.Scoped scoped) {
+        List<Declaration> fields = new ArrayList<>();
+        scoped.members().forEach(d -> {
+            if (d instanceof Declaration.Variable) {
+                Declaration.Variable v = (Declaration.Variable) d;
+                if (v.kind() == Declaration.Variable.Kind.FIELD) {
+                    assert (!v.name().isEmpty());
+                    fields.add(v);
+                }
+            } else if (d instanceof Declaration.Scoped) {
+                Declaration.Scoped record = (Declaration.Scoped) d;
+                if (record.name().isEmpty()) {
+                    fields.addAll(getNamedFields(record));
+                } else {
+                    fields.add(record);
+                }
+            }
+        });
+        return fields;
+    }
+
+    public static Declaration.Scoped checkRecord(Declaration.Scoped scoped, String name, Declaration.Scoped.Kind kind,  String... fields) {
+        assertTrue(scoped.kind() == kind);
+        checkFields(getNamedFields(scoped), fields);
         return scoped;
     }
 

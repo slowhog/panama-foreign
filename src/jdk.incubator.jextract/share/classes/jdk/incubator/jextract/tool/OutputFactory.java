@@ -240,9 +240,6 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
 
     @Override
     public Void visitScoped(Declaration.Scoped d, Declaration parent) {
-        if (d.kind() == Declaration.Scoped.Kind.TYPEDEF) {
-            return d.members().get(0).accept(this, d);
-        }
         if (d.layout().isEmpty()) {
             //skip decl-only
             return null;
@@ -333,6 +330,17 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
 
         String fieldName = tree.name();
         String symbol = tree.name();
+        Type type = tree.type();
+
+        if (tree.kind() == Declaration.Variable.Kind.TYPE) {
+            if (type instanceof Type.Declared) {
+                return visitScoped(((Type.Declared) type).tree(), tree);
+            } else {
+                // skip for now
+                return null;
+            }
+        }
+
         assert !symbol.isEmpty();
         assert !fieldName.isEmpty();
 
@@ -343,7 +351,6 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         }
         fieldName = Utils.javaSafeIdentifier(fieldName);
 
-        Type type = tree.type();
         MemoryLayout layout = tree.layout().orElse(Type.layoutFor(type).orElse(null));
         if (layout == null) {
             //no layout - abort
@@ -391,8 +398,6 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
 
     protected static MemoryLayout parentLayout(Declaration.Scoped parent) {
         // case like `typedef struct { ... } Foo`
-        return (parent.kind() == Declaration.Scoped.Kind.TYPEDEF
-            ? (Declaration.Scoped) parent.members().get(0)
-            : parent).layout().orElseThrow();
+        return parent.layout().orElseThrow();
     }
 }

@@ -187,7 +187,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         return pos.depth() <= max_depth;
     }
 
-    List<JavaFileObject> generateLib(Predicate<Declaration> filter) {
+    List<JavaFileObject> generateLib(Predicate<Declaration> filter, AnonymousRegistry registry) {
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION, Stream.concat(
                 uniqTypes.decls.values().stream(), Stream.concat(
                 uniqVariables.decls.values().stream(),
@@ -196,14 +196,15 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 .toArray(Declaration[]::new));
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(
-                    root, ctx.getMainClsName(),
-                    ctx.targetPackageName(), ctx.getLibs(), ctx.getLibPaths()));
+                    root, ctx.getMainClsName(), ctx.targetPackageName(),
+                    registry, ctx.getLibs(), ctx.getLibPaths()));
     }
 
     public List<JavaFileObject> generate(Declaration.Scoped decl, int max_depth) {
+        AnonymousRegistry anonymousNames = new AnonymousRegistry();
         decl.members().stream()
                 .filter(d -> toBeIncluded(d, max_depth))
-                .flatMap(d -> SymbolDependencyCollector.collect(d).stream())
+                .flatMap(d -> SymbolDependencyCollector.collect(d, anonymousNames).stream())
                 .forEach(d -> d.accept(this, ctx));
 
         List<Declaration> candidates = new ArrayList<>();
@@ -216,11 +217,13 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
 
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(
-                    root, ctx.getMainClsName(),
-                    ctx.targetPackageName(), ctx.getLibs(), ctx.getLibPaths()));
+                    root, ctx.getMainClsName(), ctx.targetPackageName(),
+                    anonymousNames, ctx.getLibs(), ctx.getLibPaths()));
     }
 
     private List<JavaFileObject> generateAll(Declaration.Scoped decl, int max_depth) {
+        AnonymousRegistry anonymousNames = new AnonymousRegistry();
+        decl.members().forEach(m -> anonymousNames.getName(m, decl));
         decl.accept(this, ctx);
 
         List<JavaFileObject> files = new ArrayList<>();
@@ -229,25 +232,26 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 .filter(e -> headers.filter(e.getKey()))
                 .map(e -> generateHeader(e.getKey(), e.getValue()))
                 .forEach(files::addAll);
-        files.addAll(generateLib(d -> toBeIncluded(d, max_depth)));
+        files.addAll(generateLib(d -> toBeIncluded(d, max_depth), anonymousNames));
         return files;
     }
 
     @Override
     public Void visitScoped(Declaration.Scoped d, Configurations context) {
+        // Top level just process each member
         if (d.kind() == Declaration.Scoped.Kind.TOPLEVEL) {
             d.members().forEach(m -> m.accept(this, context));
-        } else {
-            switch (d.kind()) {
-                case UNION:
-                case STRUCT:
-                    uniqTypes.add(d);
-                    break;
-                default:
-            }
-            return visitDeclaration(d, context);
+            return null;
         }
-        return null;
+        // Non-toplevel
+        switch (d.kind()) {
+            case UNION:
+            case STRUCT:
+                uniqTypes.add(d);
+                break;
+            default:
+        }
+        return visitDeclaration(d, context);
     }
 
     @Override
