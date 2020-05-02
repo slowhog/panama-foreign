@@ -54,21 +54,20 @@ class PrettyPrinter implements Declaration.Visitor<Void, Void> {
 
     private void getAttributes(Declaration decl) {
         Set<String> attrs = decl.attributeNames();
-        incr();
-        if (! attrs.isEmpty()) {
-            indent();
-            for (String k: attrs) {
-                builder.append("Attr: ");
-                builder.append(k);
-                builder.append(" -> [");
-                builder.append(decl.getAttribute(k).get().stream()
-                    .map(Constable::toString)
-                    .collect(Collectors.joining(", ")));
-                builder.append("]\n");
-            }
+        if (attrs.isEmpty()) {
+            return;
         }
+        incr();
         indent();
-        builder.append("Position: " + decl.pos() + "\n");
+        for (String k: attrs) {
+            builder.append("Attr: ");
+            builder.append(k);
+            builder.append(" -> [");
+            builder.append(decl.getAttribute(k).get().stream()
+                .map(Constable::toString)
+                .collect(Collectors.joining(", ")));
+            builder.append("]\n");
+        }
         decr();
     }
 
@@ -178,8 +177,8 @@ class PrettyPrinter implements Declaration.Visitor<Void, Void> {
     }
 
     public static String position(Position pos) {
-        return String.format("%s:%d:%d@%d",
+        return String.format("%s:%d:%d",
                 pos.path() == null ? "N/A" : pos.path().toString(),
-                pos.line(), pos.col(), pos.depth());
+                pos.line(), pos.col());
     }
 }

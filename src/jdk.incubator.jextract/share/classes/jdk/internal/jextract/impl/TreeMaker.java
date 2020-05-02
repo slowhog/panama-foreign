@@ -27,6 +27,7 @@ package jdk.internal.jextract.impl;
 
 import java.lang.constant.Constable;
 import java.nio.ByteOrder;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashMap;
@@ -44,15 +45,14 @@ import jdk.incubator.jextract.Position;
 import jdk.incubator.jextract.Type;
 import jdk.internal.clang.Cursor;
 import jdk.internal.clang.CursorKind;
+import jdk.internal.clang.SourceLocation;
 
 class TreeMaker {
     private final Map<Cursor, Declaration> treeCache = new HashMap<>();
-    private final PositionTracker tracker;
-    private final TypeMaker typeMaker = new TypeMaker(this);
 
-    public TreeMaker(PositionTracker tracker) {
-        this.tracker = tracker;
-    }
+    public TreeMaker() {}
+
+    TypeMaker typeMaker = new TypeMaker(this);
 
     public void freeze() {
         typeMaker.resolveTypeReferences();
@@ -128,8 +128,55 @@ class TreeMaker {
         }
     }
 
-    Position toPos(Cursor c) {
-        return tracker.toPos(c);
+    Position toPos(Cursor cursor) {
+        SourceLocation loc = cursor.getSourceLocation();
+        if (loc == null) {
+            return Position.NO_POSITION;
+        }
+        SourceLocation.Location sloc = loc.getFileLocation();
+        if (sloc == null) {
+            return Position.NO_POSITION;
+        }
+        return new CursorPosition(cursor);
+    }
+
+    static class CursorPosition implements Position {
+        private final Cursor cursor;
+        private final Path path;
+        private final int line;
+        private final int column;
+
+        CursorPosition(Cursor cursor) {
+            this.cursor = cursor;
+            SourceLocation.Location loc = cursor.getSourceLocation().getFileLocation();
+            this.path = loc.path();
+            this.line = loc.line();
+            this.column = loc.column();
+        }
+
+        @Override
+        public Path path() {
+            return path;
+        }
+
+        @Override
+        public int line() {
+            return line;
+        }
+
+        @Override
+        public int col() {
+            return column;
+        }
+
+        public Cursor cursor() {
+            return cursor;
+        }
+
+        @Override
+        public String toString() {
+            return PrettyPrinter.position(this);
+        }
     }
 
     public Declaration.Function createFunction(Cursor c) {
@@ -199,8 +246,7 @@ class TreeMaker {
     private List<Declaration> filterNestedDeclarations(List<Declaration> declarations) {
         return declarations.stream()
                 .filter(Objects::nonNull)
-                .filter(d -> isEnum(d) || !d.name().isEmpty() ||
-                    ((CursorPosition) d.pos()).cursor().isAnonymousStruct())
+                .filter(d -> isEnum(d) || !d.name().isEmpty() || ((CursorPosition)d.pos()).cursor.isAnonymousStruct())
                 .collect(Collectors.toList());
     }
 

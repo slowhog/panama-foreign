@@ -21,7 +21,15 @@
  * questions.
  */
 
-#include "common_def.h"
+#ifdef _WIN64
+  #ifdef IMPL
+    #define EXPORT __declspec(dllexport)
+  #else
+    #define EXPORT __declspec(dllimport)
+  #endif // IMPL
+#else
+#define EXPORT
+#endif //_WIN64
 
 #ifdef _WIN32
 // Windows doesn't really support asm symbol, this is similar approach for C code to
@@ -33,6 +41,12 @@
 #define foo fooB
 #define func funcB
 #endif //ADD
+#define ALIAS(sym)
+
+#elif __APPLE__
+#define ALIAS(sym) __asm("_" #sym)
+#else
+#define ALIAS(sym) __asm__(#sym)
 #endif // _WIN32
 
 // We do 3 declarations to make sure we will pick up alias no matter the sequence of encounter

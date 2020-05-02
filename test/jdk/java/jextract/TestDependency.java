@@ -49,11 +49,6 @@ public class TestDependency extends JextractApiTestBase {
     final static String BUILTIN_INCLUDE = Paths.get(System.getProperty("java.home"), "conf", "jextract").toString();
     Declaration.Scoped platform;
 
-    private void assertOrigin(Position target, String filename, int depth) {
-        assertTrue(target.origin().path().endsWith(filename));
-        assertEquals(target.depth(), depth);
-    }
-
     private String getSysRoot() {
         try (ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             Process xcrun = new ProcessBuilder("xcrun", "--show-sdk-path").start();
