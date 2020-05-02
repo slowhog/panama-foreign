@@ -28,10 +28,9 @@
  *          jdk.incubator.foreign/jdk.internal.foreign
  *          jdk.incubator.foreign/jdk.internal.foreign.abi
  *          java.base/sun.security.action
- * @run testng/othervm -Djdk.incubator.foreign.Foreign=permit TestVarArgs
+ * @run testng/othervm -Dforeign.restricted=permit TestVarArgs
  */
 
-import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
@@ -66,12 +65,12 @@ public class TestVarArgs extends NativeTestHelper {
 
     static final VarHandle VH_IntArray = MemoryLayout.ofSequence(C_INT).varHandle(int.class, sequenceElement());
 
-    static final SystemABI abi = Foreign.getInstance().getSystemABI();
+    static final SystemABI abi = SystemABI.getSystemABI();
     static final MemoryAddress varargsAddr;
 
     static {
         try {
-            varargsAddr = LibraryLookup.ofLibrary(MethodHandles.lookup(), "VarArgs").lookup("varargs");
+            varargsAddr = LibraryLookup.ofLibrary("VarArgs").lookup("varargs");
         } catch (NoSuchMethodException e) {
             throw new BootstrapMethodError(e);
         }

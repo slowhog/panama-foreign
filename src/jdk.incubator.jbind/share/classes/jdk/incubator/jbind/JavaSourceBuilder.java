@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
@@ -48,7 +47,7 @@ import static jdk.incubator.foreign.SystemABI.NATIVE_TYPE;
  * method is called to get overall generated source string.
  */
 class JavaSourceBuilder {
-    private static final String ABI = Foreign.getInstance().getSystemABI().name();
+    private static final String ABI = SystemABI.getSystemABI().name();
     // buffer
     protected StringBuffer sb;
     // current line alignment (number of 4-spaces)

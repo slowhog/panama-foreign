@@ -30,10 +30,9 @@
  *          java.base/sun.security.action
  * @library .. /test/lib
  * @build JextractToolRunner
- * @run testng/othervm -Djdk.incubator.foreign.Foreign=permit -Duser.language=en TestClassGeneration
+ * @run testng/othervm -Dforeign.restricted=permit -Duser.language=en TestClassGeneration
  */
 
-import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
@@ -61,8 +60,6 @@ import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 
 public class TestClassGeneration extends JextractToolRunner {
-
-    private static final Foreign FOREIGN = Foreign.getInstance();
 
     private static final VarHandle VH_bytes = MemoryLayout.ofSequence(C_CHAR).varHandle(byte.class, sequenceElement());
 
@@ -154,9 +151,9 @@ public class TestClassGeneration extends JextractToolRunner {
     @Test(dataProvider = "stringConstants")
     public void testStringConstant(String name, String expectedValue) throws Throwable {
         Method getter = checkMethod(cls, name, MemoryAddress.class);
-        MemoryAddress ma = (MemoryAddress) getter.invoke(null);
+        MemoryAddress actual = (MemoryAddress) getter.invoke(null);
         byte[] expected = expectedValue.getBytes(StandardCharsets.UTF_8);
-        MemoryAddress actual = FOREIGN.withSize(ma, expected.length);
+        assertEquals(actual.segment().byteSize(), expected.length + 1);
         for (int i = 0; i < expected.length; i++) {
             assertEquals((byte) VH_bytes.get(actual, (long) i), expected[i]);
         }
@@ -182,7 +179,10 @@ public class TestClassGeneration extends JextractToolRunner {
         assertEquals(layout_getter.invoke(null), expectedLayout);
 
         Method addr_getter = checkMethod(cls, name + "$ADDR", MemoryAddress.class);
-        MemoryAddress addr = FOREIGN.withSize((MemoryAddress) addr_getter.invoke(null), expectedLayout.byteSize());
+        MemoryAddress addr = MemorySegment.ofNativeRestricted(
+                (MemoryAddress)addr_getter.invoke(null),
+                expectedLayout.byteSize(),
+                null, null, null).baseAddress();
 
         Method vh_getter = checkMethod(cls, name + "$VH", VarHandle.class);
         VarHandle vh = (VarHandle) vh_getter.invoke(null);
@@ -196,20 +196,20 @@ public class TestClassGeneration extends JextractToolRunner {
     @Test(dataProvider = "structMembers")
     public void testStructMember(String structName, MemoryLayout memberLayout, Class<?> expectedType, Object testValue) throws Throwable {
         String memberName = memberLayout.name().orElseThrow();
-        String combinedName = structName + "$" + memberName;
 
-        Method layout_getter = checkMethod(cls, structName + "$LAYOUT", MemoryLayout.class);
+        Class<?> structCls = loader.loadClass("com.acme.examples_h$C" + structName);
+        Method layout_getter = checkMethod(structCls, "$LAYOUT", MemoryLayout.class);
         MemoryLayout structLayout = (MemoryLayout) layout_getter.invoke(null);
         try (MemorySegment struct = MemorySegment.allocateNative(structLayout)) {
-            Method vh_getter = checkMethod(cls, combinedName + "$VH", VarHandle.class);
+            Method vh_getter = checkMethod(structCls, memberName + "$VH", VarHandle.class);
             VarHandle vh = (VarHandle) vh_getter.invoke(null);
             assertEquals(vh.varType(), expectedType);
 
-            Method getter = checkMethod(cls, combinedName + "$get", expectedType, MemorySegment.class);
-            Method setter = checkMethod(cls, combinedName + "$set", void.class, MemorySegment.class, expectedType);
-
-            setter.invoke(null, struct, testValue);
-            assertEquals(getter.invoke(null, struct), testValue);
+            Method getter = checkMethod(structCls, memberName + "$get", expectedType, MemoryAddress.class);
+            Method setter = checkMethod(structCls, memberName + "$set", void.class, MemoryAddress.class, expectedType);
+            MemoryAddress addr = struct.baseAddress();
+            setter.invoke(null, addr, testValue);
+            assertEquals(getter.invoke(null, addr), testValue);
         }
     }
 
@@ -218,7 +218,7 @@ public class TestClassGeneration extends JextractToolRunner {
         Class<?> fiClass = findNestedClass(cls, name);
         assertNotNull(fiClass);
         checkMethod(fiClass, "apply", type);
-        checkMethod(cls, name + "$make", MemoryAddress.class, fiClass);
+        checkMethod(fiClass, "allocate", MemoryAddress.class, fiClass);
     }
 
     @BeforeClass

@@ -25,8 +25,8 @@
 /*
  * @test
  * @modules java.base/jdk.internal.misc
- *          jdk.incubator.foreign
- * @run testng TestNative
+ *          jdk.incubator.foreign/jdk.internal.foreign
+ * @run testng/othervm -Dforeign.restricted=permit TestNative
  */
 
 import jdk.incubator.foreign.MemoryAddress;
@@ -54,7 +54,7 @@ import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.*;
 
 public class TestNative {
 
@@ -148,6 +148,9 @@ public class TestNative {
 
     public static native long getCapacity(Buffer buffer);
 
+    public static native long allocate(int size);
+    public static native long free(long address);
+
     @Test(dataProvider="nativeAccessOps")
     public void testNativeAccess(Consumer<MemoryAddress> checker, Consumer<MemoryAddress> initializer, SequenceLayout seq) {
         try (MemorySegment segment = MemorySegment.allocateNative(seq)) {
@@ -167,6 +170,29 @@ public class TestNative {
             assertEquals(buf.capacity(), expected);
             assertEquals(getCapacity(buf), expected);
         }
+    }
+
+    @Test
+    public void testMallocSegment() {
+        MemoryAddress addr = MemoryAddress.ofLong(allocate(12));
+        assertNull(addr.segment());
+        MemorySegment mallocSegment = MemorySegment.ofNativeRestricted(addr, 12, null,
+                () -> free(addr.toRawLongValue()), null);
+        assertEquals(mallocSegment.byteSize(), 12);
+        mallocSegment.close(); //free here
+        assertTrue(!mallocSegment.isAlive());
+    }
+
+    @Test(expectedExceptions = IllegalArgumentException.class)
+    public void testBadResize() {
+        try (MemorySegment segment = MemorySegment.allocateNative(4)) {
+            MemorySegment.ofNativeRestricted(segment.baseAddress(), 0, null, null, null);
+        }
+    }
+
+    @Test(expectedExceptions = NullPointerException.class)
+    public void testNullUnsafeSegment() {
+        MemorySegment.ofNativeRestricted(null, 10, null, null, null);
     }
 
     static {

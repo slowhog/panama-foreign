@@ -94,12 +94,12 @@ public class JextractToolRunner {
         }
 
         protected JextractResult checkSuccess() {
-            assertEquals(exitCode, 0, "Sucess excepted, failed: " + exitCode);
+            assertEquals(exitCode, 0, "Sucess expected, failed: " + exitCode);
             return this;
         }
 
         protected JextractResult checkFailure() {
-            assertNotEquals(exitCode, 0, "Failure excepted, succeeded!");
+            assertNotEquals(exitCode, 0, "Failure expected, succeeded!");
             return this;
         }
 
@@ -242,6 +242,10 @@ public class JextractToolRunner {
             assertTrue(false, "should not reach here");
         }
         return null;
+    }
+
+    protected MemoryLayout findLayout(Class<?> cls) {
+        return findLayout(cls, "");
     }
 
     protected static void checkFieldABIType(MemoryLayout layout, String fieldName, Type expected) {

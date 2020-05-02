@@ -84,7 +84,7 @@ public class TestDependency extends JextractApiTestBase {
 
     @Test
     public void testGetTimeOfDay() {
-        if (isWondows) {
+        if (isWindows) {
             return;
         }
 
@@ -101,7 +101,7 @@ public class TestDependency extends JextractApiTestBase {
 
     @Test
     public void testSetTimeOfDay() {
-        if (isWondows) {
+        if (isWindows) {
             return;
         }
 

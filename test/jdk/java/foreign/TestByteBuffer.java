@@ -29,6 +29,7 @@
  */
 
 
+import jdk.incubator.foreign.MappedMemorySegment;
 import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemoryAddress;
@@ -37,6 +38,7 @@ import jdk.incubator.foreign.MemoryLayout.PathElement;
 import jdk.incubator.foreign.SequenceLayout;
 
 import java.io.File;
+import java.io.IOException;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
@@ -51,23 +53,26 @@ import java.nio.CharBuffer;
 import java.nio.DoubleBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.nio.InvalidMarkException;
 import java.nio.LongBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.ShortBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import jdk.internal.foreign.HeapMemorySegmentImpl;
+import jdk.internal.foreign.MappedMemorySegmentImpl;
 import jdk.internal.foreign.MemoryAddressImpl;
+import jdk.internal.foreign.NativeMemorySegmentImpl;
 import org.testng.SkipException;
 import org.testng.annotations.*;
 import sun.nio.ch.DirectBuffer;
@@ -75,6 +80,20 @@ import sun.nio.ch.DirectBuffer;
 import static org.testng.Assert.*;
 
 public class TestByteBuffer {
+
+    static Path tempPath;
+
+    static {
+        try {
+            File file = File.createTempFile("buffer", "txt");
+            file.deleteOnExit();
+            tempPath = file.toPath();
+            Files.write(file.toPath(), new byte[256], StandardOpenOption.WRITE);
+
+        } catch (IOException ex) {
+            throw new ExceptionInInitializerError(ex);
+        }
+    }
 
     static SequenceLayout tuples = MemoryLayout.ofSequence(500,
             MemoryLayout.ofStruct(
@@ -222,9 +241,10 @@ public class TestByteBuffer {
         f.deleteOnExit();
 
         //write to channel
-        try (MemorySegment segment = MemorySegment.mapFromPath(f.toPath(), tuples.byteSize(), FileChannel.MapMode.READ_WRITE)) {
+        try (MappedMemorySegment segment = MemorySegment.mapFromPath(f.toPath(), tuples.byteSize(), FileChannel.MapMode.READ_WRITE)) {
             MemoryAddress base = segment.baseAddress();
             initTuples(base);
+            segment.force();
         }
 
         //read from channel
@@ -424,6 +444,42 @@ public class TestByteBuffer {
         }
     }
 
+    @Test(dataProvider="bufferSources")
+    public void testBufferToSegment(ByteBuffer bb, Predicate<MemorySegment> segmentChecker) {
+        MemorySegment segment = MemorySegment.ofByteBuffer(bb);
+        assertEquals(segment.hasAccessModes(MemorySegment.WRITE), !bb.isReadOnly());
+        assertTrue(segmentChecker.test(segment));
+        assertTrue(segmentChecker.test(segment.asSlice(0, segment.byteSize())));
+        assertTrue(segmentChecker.test(segment.withAccessModes(MemorySegment.READ)));
+        assertEquals(bb.capacity(), segment.byteSize());
+        //another round trip
+        segment = MemorySegment.ofByteBuffer(segment.asByteBuffer());
+        assertEquals(segment.hasAccessModes(MemorySegment.WRITE), !bb.isReadOnly());
+        assertTrue(segmentChecker.test(segment));
+        assertTrue(segmentChecker.test(segment.asSlice(0, segment.byteSize())));
+        assertTrue(segmentChecker.test(segment.withAccessModes(MemorySegment.READ)));
+        assertEquals(bb.capacity(), segment.byteSize());
+    }
+
+    @Test
+    public void testRoundTripAccess() {
+        try(MemorySegment ms = MemorySegment.allocateNative(4)) {
+            MemorySegment msNoAccess = ms.withAccessModes(MemorySegment.READ); // READ is required to make BB
+            MemorySegment msRoundTrip = MemorySegment.ofByteBuffer(msNoAccess.asByteBuffer());
+            assertEquals(msNoAccess.accessModes(), msRoundTrip.accessModes());
+        }
+    }
+
+    @Test(expectedExceptions = IllegalStateException.class)
+    public void testDeadAccessOnClosedBufferSegment() {
+        MemorySegment s1 = MemorySegment.allocateNative(MemoryLayouts.JAVA_INT);
+        MemorySegment s2 = MemorySegment.ofByteBuffer(s1.asByteBuffer());
+
+        s1.close(); // memory freed
+
+        intHandle.set(s2.baseAddress(), 0L, 10); // Dead access!
+    }
+
     @DataProvider(name = "bufferOps")
     public static Object[][] bufferOps() throws Throwable {
         return new Object[][]{
@@ -565,6 +621,29 @@ public class TestByteBuffer {
             }
         } else {
             return null;
+        }
+    }
+
+    @DataProvider(name = "bufferSources")
+    public static Object[][] bufferSources() {
+        Predicate<MemorySegment> heapTest = segment -> segment instanceof HeapMemorySegmentImpl;
+        Predicate<MemorySegment> nativeTest = segment -> segment instanceof NativeMemorySegmentImpl;
+        Predicate<MemorySegment> mappedTest = segment -> segment instanceof MappedMemorySegmentImpl;
+        try (FileChannel channel = FileChannel.open(tempPath, StandardOpenOption.READ, StandardOpenOption.WRITE)) {
+            return new Object[][]{
+                    { ByteBuffer.wrap(new byte[256]), heapTest },
+                    { ByteBuffer.allocate(256), heapTest },
+                    { ByteBuffer.allocateDirect(256), nativeTest },
+                    { channel.map(FileChannel.MapMode.READ_WRITE, 0L, 256), mappedTest },
+
+                    { ByteBuffer.wrap(new byte[256]).asReadOnlyBuffer(), heapTest },
+                    { ByteBuffer.allocate(256).asReadOnlyBuffer(), heapTest },
+                    { ByteBuffer.allocateDirect(256).asReadOnlyBuffer(), nativeTest },
+                    { channel.map(FileChannel.MapMode.READ_WRITE, 0L, 256).asReadOnlyBuffer(),
+                            nativeTest /* this seems to be an existing bug in the BB implementation */ }
+            };
+        } catch (IOException ex) {
+            throw new ExceptionInInitializerError(ex);
         }
     }
 }

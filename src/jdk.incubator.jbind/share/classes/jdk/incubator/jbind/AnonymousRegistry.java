@@ -54,11 +54,8 @@ public class AnonymousRegistry {
     }
 
     private void registerTypeVar(Declaration d, String name) {
-        if (d instanceof Declaration.Variable) {
-            Declaration.Variable tmp = (Declaration.Variable) d;
-            if (tmp.kind() != Declaration.Variable.Kind.TYPE) {
-                return;
-            }
+        if (d instanceof Declaration.Typedef) {
+            Declaration.Typedef tmp = (Declaration.Typedef) d;
             Type type = tmp.type();
             // We only care direct typedef to anonymous record type
             if (type instanceof Type.Declared) {
@@ -101,10 +98,9 @@ public class AnonymousRegistry {
                     case ENUM -> "enum";
                     default -> throw new IllegalArgumentException("Unexpect anomymous scope kind " + s.kind());
                 });
-            } else if (decl instanceof Declaration.Variable) {
-                Declaration.Variable v = (Declaration.Variable) decl;
-                assert (v.kind() == Declaration.Variable.Kind.TYPE);
-                assert (v.type() instanceof Type.Function);
+            } else if (decl instanceof Declaration.Typedef) {
+                Declaration.Typedef fn = (Declaration.Typedef) decl;
+                assert (fn.type() instanceof Type.Function);
                 sb.append("fn");
             } else {
                 throw new IllegalArgumentException("Unexpected anonymous declaration " + decl);
@@ -128,9 +124,13 @@ public class AnonymousRegistry {
         public String visitVariable(Declaration.Variable parent, Declaration children) {
             return switch (parent.kind()) {
                 case GLOBAL -> getName(parent).orElseThrow();
-                case TYPE -> getName(parent).orElseThrow();
                 default -> visitDeclaration(parent, children);
             };
+        }
+
+        @Override
+        public String visitTypedef(Declaration.Typedef parent, Declaration children) {
+            return getName(parent).orElseThrow();
         }
 
         @Override

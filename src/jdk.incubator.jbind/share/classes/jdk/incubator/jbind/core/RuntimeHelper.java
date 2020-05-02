@@ -34,15 +34,14 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Optional;
 import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
 
 public class RuntimeHelper {
-    private final static Foreign FOREIGN = Foreign.getInstance();
-    private final static SystemABI ABI = FOREIGN.getSystemABI();
+    private final static SystemABI ABI = SystemABI.getSystemABI();
     private final static ClassLoader LOADER = RuntimeHelper.class.getClassLoader();
 
     private final static MethodHandles.Lookup MH_LOOKUP = MethodHandles.lookup();
@@ -55,8 +54,8 @@ public class RuntimeHelper {
             return Arrays.stream(libNames).map(libName -> {
                 Optional<Path> absPath = findLibraryPath(paths, libName);
                 return absPath.isPresent() ?
-                        LibraryLookup.ofPath(MH_LOOKUP, absPath.get().toString()) :
-                        LibraryLookup.ofLibrary(MH_LOOKUP, libName);
+                        LibraryLookup.ofPath(absPath.get().toString()) :
+                        LibraryLookup.ofLibrary(libName);
             }).toArray(LibraryLookup[]::new);
         }
     }
@@ -81,9 +80,9 @@ public class RuntimeHelper {
         }
     }
 
-    private static  MemoryAddress uncheck(MemoryAddress addr, MemoryLayout layout) {
+    private static MemoryAddress uncheck(MemoryAddress addr, MemoryLayout layout) {
         try {
-            return FOREIGN.withSize(addr, layout.byteSize());
+            return MemorySegment.ofNativeRestricted(addr, layout.byteSize(), null, null, null).baseAddress();
         } catch (Exception e) {
             return addr;
         }

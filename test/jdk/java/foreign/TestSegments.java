@@ -232,8 +232,8 @@ public class TestSegments {
 
         final static List<String> CONFINED_NAMES = List.of(
                 "close",
-                "spliterator",
-                "toByteArray"
+                "toByteArray",
+                "withOwnerThread"
         );
 
         public SegmentMember(Method method, Object[] params) {
@@ -292,7 +292,7 @@ public class TestSegments {
             @Override
             void run(MemorySegment segment) {
                 Spliterator<MemorySegment> spliterator =
-                        segment.spliterator(MemoryLayout.ofSequence(segment.byteSize(), MemoryLayouts.JAVA_BYTE));
+                        MemorySegment.spliterator(segment, MemoryLayout.ofSequence(segment.byteSize(), MemoryLayouts.JAVA_BYTE));
                 AtomicReference<RuntimeException> exception = new AtomicReference<>();
                 Runnable action = () -> {
                     try {
@@ -330,6 +330,12 @@ public class TestSegments {
             @Override
             void run(MemorySegment segment) {
                 INT_HANDLE.set(segment.baseAddress(), 42);
+            }
+        },
+        HANDOFF(MemorySegment.HANDOFF) {
+            @Override
+            void run(MemorySegment segment) {
+                segment.withOwnerThread(new Thread());
             }
         };
 

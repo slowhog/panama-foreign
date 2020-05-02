@@ -57,9 +57,10 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
             return false;
         }
         String typeName = registry.getName(record, parent);
+
+        // Not adding record type for anonymous field
+        // Named field will the dependcy via Field declaration
         if (! isRecord(parent)) {
-            // Not adding record type for anonymous field
-            // Named field will the dependcy via Field declaration
             if (record.name().isEmpty()) {
                 // inject implicit typedef
                 // Use parent position which leads to the typedef
@@ -72,17 +73,16 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
     }
 
     @Override
-    public Boolean visitVariable(Declaration.Variable decl, Declaration parent) {
+    public Boolean visitTypedef(Declaration.Typedef decl, Declaration parent) {
         if (dependencies.contains(decl)) {
             return false;
         }
-        if (decl.kind() == Declaration.Variable.Kind.TYPE) {
+        if (decl.name().isEmpty()) {
+            // Anonymous typedef must be injected, give it the new name
             String name = registry.getName(decl, parent);
-            if (decl.name().isEmpty()) {
-                dependencies.add(Declaration.typedef(decl.pos(), name, decl.type()));
-            } else {
-                dependencies.add(decl);
-            }
+            dependencies.add(Declaration.typedef(decl.pos(), name, decl.type()));
+        } else {
+            dependencies.add(decl);
         }
         return true;
     }

@@ -204,9 +204,17 @@ class TreeMaker {
                 .collect(Collectors.toList());
     }
 
-    private Declaration.Variable createTypedef(Cursor c) {
+    private Declaration.Typedef createTypedef(Cursor c) {
         Type.Delegated typedef = (Type.Delegated) toType(c);
-        return Declaration.typedef(toPos(c), c.spelling(), typedef.type());
+        Type canonicalType = typedef.type();
+        if (canonicalType instanceof Type.Declared) {
+            Declaration.Scoped s = ((Type.Declared) canonicalType).tree();
+            if (s.name().equals(c.spelling())) {
+                // typedef record with the same name, no need to present twice
+                return null;
+            }
+        }
+        return Declaration.typedef(toPos(c), c.spelling(), canonicalType);
     }
 
     private Declaration.Variable createVar(Declaration.Variable.Kind kind, Cursor c, VarFactoryNoLayout varFactory) {

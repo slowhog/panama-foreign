@@ -75,7 +75,6 @@ public class LoopOverNonConstant {
         for (int i = 0; i < ELEM_SIZE; i++) {
             VH_int.set(segment.baseAddress(), (long) i, i);
         }
-
         byteBuffer = ByteBuffer.allocateDirect(ALLOC_SIZE).order(ByteOrder.nativeOrder());
         for (int i = 0; i < ELEM_SIZE; i++) {
             byteBuffer.putInt(i * CARRIER_SIZE , i);

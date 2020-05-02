@@ -127,23 +127,26 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
     }
 
     @Override
+    public Void visitTypedef(Declaration.Typedef tree, Declaration parent) {
+        Type type = tree.type();
+        if (type instanceof Type.Declared) {
+            return visitScoped(((Type.Declared) type).tree(), tree);
+        } else {
+            return null;
+        }
+    }
+
+    @Override
     public Void visitVariable(Declaration.Variable tree, Declaration parent) {
         String fieldName = tree.name();
         assert !fieldName.isEmpty();
-        Type type = tree.type();
-
-        if (tree.kind() == Declaration.Variable.Kind.TYPE) {
-            if (type instanceof Type.Declared) {
-                return visitScoped(((Type.Declared) type).tree(), tree);
-            } else {
-                return null;
-            }
-        }
 
         if (tree.kind() == Declaration.Variable.Kind.BITFIELD) {
             System.err.println("Encounter bitfield: " + tree.toString());
             System.err.println("  Enclosing declaration: " + parent.toString());
         }
+
+        Type type = tree.type();
         MemoryLayout layout = tree.layout().orElse(Type.layoutFor(type).orElse(null));
         if (layout == null) {
             //no layout - abort

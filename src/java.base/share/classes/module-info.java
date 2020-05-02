@@ -174,19 +174,14 @@ module java.base {
         jdk.jartool,
         jdk.jfr,
         jdk.jlink,
-        jdk.scripting.nashorn,
         jdk.incubator.jextract;
     exports jdk.internal.org.objectweb.asm.tree to
         jdk.jfr,
         jdk.jlink;
     exports jdk.internal.org.objectweb.asm.util to
-        jdk.jfr,
-        jdk.scripting.nashorn;
+        jdk.jfr;
     exports jdk.internal.org.objectweb.asm.commons to
-        jdk.jfr,
-        jdk.scripting.nashorn;
-    exports jdk.internal.org.objectweb.asm.signature to
-        jdk.scripting.nashorn;
+        jdk.jfr;
     exports jdk.internal.org.xml.sax to
         jdk.jfr;
     exports jdk.internal.org.xml.sax.helpers to
@@ -206,8 +201,6 @@ module java.base {
         jdk.jfr,
         jdk.jshell,
         jdk.nio.mapmode,
-        jdk.scripting.nashorn,
-        jdk.scripting.nashorn.shell,
         jdk.unsupported,
         jdk.internal.vm.ci,
         jdk.incubator.foreign;
@@ -225,14 +218,14 @@ module java.base {
     exports jdk.internal.platform to
         jdk.management;
     exports jdk.internal.ref to
-        java.desktop;
+        java.desktop,
+        jdk.incubator.foreign;
     exports jdk.internal.reflect to
         java.logging,
         java.sql,
         java.sql.rowset,
         jdk.dynalink,
         jdk.internal.vm.ci,
-        jdk.scripting.nashorn,
         jdk.unsupported;
     exports jdk.internal.vm to
         jdk.internal.jvmstat,

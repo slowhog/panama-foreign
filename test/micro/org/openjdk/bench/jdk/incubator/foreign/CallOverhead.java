@@ -22,7 +22,6 @@
  */
 package org.openjdk.bench.jdk.incubator.foreign;
 
-import jdk.incubator.foreign.Foreign;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.SystemABI;
@@ -50,7 +49,7 @@ import static jdk.incubator.foreign.MemoryLayouts.C_INT;
 @Fork(3)
 public class CallOverhead {
 
-    static final SystemABI abi = Foreign.getInstance().getSystemABI();
+    static final SystemABI abi = SystemABI.getSystemABI();
     static final MethodHandle func;
     static final MethodHandle identity;
 
@@ -58,7 +57,7 @@ public class CallOverhead {
         System.loadLibrary("CallOverheadJNI");
 
         try {
-            LibraryLookup ll = LibraryLookup.ofLibrary(MethodHandles.lookup(), "CallOverhead");
+            LibraryLookup ll = LibraryLookup.ofLibrary("CallOverhead");
             func = abi.downcallHandle(ll.lookup("func"),
                     MethodType.methodType(void.class),
                     FunctionDescriptor.ofVoid());

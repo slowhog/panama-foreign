@@ -34,7 +34,7 @@ import static org.testng.Assert.assertTrue;
  * @modules jdk.incubator.jextract
  * @library /test/lib
  * @build JextractToolRunner
- * @run testng/othervm -Djdk.incubator.foreign.Foreign=permit UniondeclTest
+ * @run testng/othervm -Dforeign.restricted=permit UniondeclTest
  */
 public class UniondeclTest extends JextractToolRunner {
     @Test
@@ -46,8 +46,9 @@ public class UniondeclTest extends JextractToolRunner {
             Class<?> cls = loader.loadClass("uniondecl_h");
             // check a method for "void func(IntOrFloat*)"
             assertNotNull(findMethod(cls, "func", MemoryAddress.class));
-            // check Point layout
-            GroupLayout intOrFloatLayout = (GroupLayout)findLayout(cls, "IntOrFloat");
+            // check IntOrFloat layout
+            Class<?> intOrFloatCls = loader.loadClass("uniondecl_h$CIntOrFloat");
+            GroupLayout intOrFloatLayout = (GroupLayout)findLayout(intOrFloatCls);
             assertNotNull(intOrFloatLayout);
             assertTrue(intOrFloatLayout.isUnion());
             checkFieldABIType(intOrFloatLayout, "i",  Type.INT);

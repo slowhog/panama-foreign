@@ -99,9 +99,9 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
     }
 
     @Override
-    public void addMemberTree(Content memberSummaryTree, Content memberTree) {
-        writer.addMemberTree(HtmlStyle.constructorSummary,
-                SectionName.CONSTRUCTOR_SUMMARY, memberSummaryTree, memberTree);
+    public void addSummary(Content summariesList, Content content) {
+        writer.addSummary(HtmlStyle.constructorSummary,
+                SectionName.CONSTRUCTOR_SUMMARY, summariesList, content);
     }
 
     @Override
@@ -196,7 +196,7 @@ public class ConstructorWriterImpl extends AbstractExecutableMemberWriter
             rowScopeColumn = 0;
         }
 
-        return new Table(HtmlStyle.memberSummary)
+        return new Table(HtmlStyle.memberSummary, HtmlStyle.summaryTable)
                 .setCaption(contents.constructors)
                 .setHeader(getSummaryTableHeader(typeElement))
                 .setRowScopeColumn(rowScopeColumn)

@@ -85,8 +85,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
         checkRecord(s, name, Declaration.Scoped.Kind.STRUCT, fields);
     }
 
-    private Declaration.Scoped assertDeclaredTypedef(Declaration.Variable decl) {
-        assertEquals(decl.kind(), Declaration.Variable.Kind.TYPE);
+    private Declaration.Scoped assertDeclaredTypedef(Declaration.Typedef decl) {
         Type type = decl.type();
         assertTrue(type instanceof Type.Declared);
         return ((Type.Declared) type).tree();
@@ -95,13 +94,12 @@ public class TestAnonymousDecl extends JextractApiTestBase {
     private void validatePointT(Set<Declaration> deps) {
         Declaration.Scoped point = checkStruct(root, "point", "x", "y");
         assertEquals(findDecl(deps, "point", Declaration.Scoped.class), point);
-        Declaration.Variable point_t = findDecl(deps, "point_t", Declaration.Variable.class);
-        assertEquals(point_t.kind(), Declaration.Variable.Kind.TYPE);
+        Declaration.Typedef point_t = findDecl(deps, "point_t", Declaration.Typedef.class);
         assertTypeEquals(point_t.type(), Type.declared(point));
     }
 
     private void validateCircleT(Set<Declaration> deps) {
-        Declaration.Variable circle_t = findDecl(deps, "circle_t", Declaration.Variable.class);
+        Declaration.Typedef circle_t = findDecl(deps, "circle_t", Declaration.Typedef.class);
         Declaration.Scoped s = assertDeclaredTypedef(circle_t);
         checkRecord(s, "", Declaration.Scoped.Kind.STRUCT, "center", "radius");
         Declaration.Variable center = findDecl(s, "center", Declaration.Variable.class);
@@ -110,7 +108,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
     }
 
     private void validateShapeT(Set<Declaration> deps) {
-        Declaration.Variable shape_t = findDecl(deps, "shape_t", Declaration.Variable.class);
+        Declaration.Typedef shape_t = findDecl(deps, "shape_t", Declaration.Typedef.class);
         Declaration.Scoped struct = assertDeclaredTypedef(shape_t);
         checkRecord(struct, "", Declaration.Scoped.Kind.STRUCT, "kind", "line", "circle", "polygon");
         // TODO: More specific
@@ -126,8 +124,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
         System.out.println("Dependency of canvas_size:");
         deps.forEach(d -> System.out.println(brief(registry, d)));
         assertEquals(deps.size(), 1);
-        Declaration.Variable v = findDecl(deps, "canvas_size", Declaration.Variable.class);
-        assertEquals(v.kind(), Declaration.Variable.Kind.TYPE);
+        Declaration.Typedef v = findDecl(deps, "canvas_size", Declaration.Typedef.class);
         assertEquals(v.pos(), canvas.pos());
         checkStructType(v.type(), "", "width", "height");
     }
@@ -145,7 +142,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
 
     @Test
     public void testDependencyTypedef() {
-        Declaration.Variable shape_t = findDecl(root, "shape_t", Declaration.Variable.class);
+        Declaration.Typedef shape_t = findDecl(root, "shape_t", Declaration.Typedef.class);
         Declaration.Scoped shape = assertDeclaredTypedef(shape_t);
         assertEquals(shape.kind(), Declaration.Scoped.Kind.STRUCT);
         final AnonymousRegistry regShape = new AnonymousRegistry();

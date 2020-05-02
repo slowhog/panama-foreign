@@ -119,6 +119,15 @@ class PrettyPrinter implements Declaration.Visitor<Void, Void> {
         return null;
     }
 
+    @Override
+    public Void visitTypedef(Declaration.Typedef d, Void aVoid) {
+        indent();
+        builder.append("Typedef: ").append(d.name()).append(" = ")
+               .append(d.type().accept(typeVisitor, null)).append("\n");
+        getAttributes(d);
+        return null;
+    }
+
     private static Type.Visitor<String, Void> typeVisitor = new Type.Visitor<>() {
         @Override
         public String visitPrimitive(Type.Primitive t, Void aVoid) {

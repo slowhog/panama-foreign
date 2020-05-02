@@ -63,7 +63,7 @@ public class TypeDependencyWalker {
         public Void visitDelegated(Type.Delegated type, Declaration reference) {
             if (type.kind() == Type.Delegated.Kind.TYPEDEF) {
                 // inject typedef declaration
-                Declaration.Variable typedef = Declaration.typedef(
+                Declaration.Typedef typedef = Declaration.typedef(
                         reference.pos(), type.name().orElseThrow(), type.type());
                 return typedef.accept(declWalker, reference);
             } else {
@@ -80,8 +80,8 @@ public class TypeDependencyWalker {
         @Override
         public Void visitFunction(Type.Function type, Declaration reference) {
             // This method add function type as a implicit typedef
-            Declaration.Variable fnTypeDef = Declaration.typedef(reference.pos(), "", type);
-            if (accepted.visitVariable(fnTypeDef, reference)) {
+            Declaration.Typedef fnTypeDef = Declaration.typedef(reference.pos(), "", type);
+            if (accepted.visitTypedef(fnTypeDef, reference)) {
                 type.returnType().accept(typeWalker, reference);
                 for (Type argType: type.argumentTypes()) {
                     argType.accept(typeWalker, reference);
@@ -136,6 +136,14 @@ public class TypeDependencyWalker {
         public Void visitVariable(Declaration.Variable variable, Declaration parent) {
             if (accepted.visitVariable(variable, parent)) {
                 variable.type().accept(typeWalker, variable);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitTypedef(Declaration.Typedef typedef, Declaration parent) {
+            if (accepted.visitTypedef(typedef, parent)) {
+                typedef.type().accept(typeWalker, typedef);
             }
             return null;
         }

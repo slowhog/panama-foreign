@@ -31,7 +31,7 @@ import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.SystemABI;
-import jdk.internal.foreign.InternalForeign;
+import jdk.internal.foreign.abi.SharedUtils;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -44,7 +44,7 @@ import java.util.Optional;
 
 public class RuntimeHelper {
 
-    private final static SystemABI ABI = InternalForeign.getInstancePrivileged().getSystemABI();
+    private final static SystemABI ABI = SharedUtils.getSystemABI();
 
     private final static ClassLoader LOADER = RuntimeHelper.class.getClassLoader();
 
@@ -58,8 +58,8 @@ public class RuntimeHelper {
             return Arrays.stream(libNames).map(libName -> {
                 Optional<Path> absPath = findLibraryPath(paths, libName);
                 return absPath.isPresent() ?
-                        LibraryLookup.ofPath(MH_LOOKUP, absPath.get().toString()) :
-                        LibraryLookup.ofLibrary(MH_LOOKUP, libName);
+                        LibraryLookup.ofPath(absPath.get().toString()) :
+                        LibraryLookup.ofLibrary(libName);
             }).toArray(LibraryLookup[]::new);
         }
     }

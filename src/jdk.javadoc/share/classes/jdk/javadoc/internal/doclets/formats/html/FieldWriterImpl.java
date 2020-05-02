@@ -72,9 +72,9 @@ public class FieldWriterImpl extends AbstractMemberWriter
     }
 
     @Override
-    public void addMemberTree(Content memberSummaryTree, Content memberTree) {
-        writer.addMemberTree(HtmlStyle.fieldSummary,
-                SectionName.FIELD_SUMMARY, memberSummaryTree, memberTree);
+    public void addSummary(Content summariesList, Content content) {
+        writer.addSummary(HtmlStyle.fieldSummary,
+                SectionName.FIELD_SUMMARY, summariesList, content);
     }
 
     @Override
@@ -147,7 +147,7 @@ public class FieldWriterImpl extends AbstractMemberWriter
         List<HtmlStyle> bodyRowStyles = Arrays.asList(HtmlStyle.colFirst, HtmlStyle.colSecond,
                 HtmlStyle.colLast);
 
-        return new Table(HtmlStyle.memberSummary)
+        return new Table(HtmlStyle.memberSummary, HtmlStyle.summaryTable)
                 .setCaption(contents.fields)
                 .setHeader(getSummaryTableHeader(typeElement))
                 .setRowScopeColumn(1)

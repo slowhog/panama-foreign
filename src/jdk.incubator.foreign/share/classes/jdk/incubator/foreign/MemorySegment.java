@@ -28,11 +28,16 @@ package jdk.incubator.foreign;
 
 import java.nio.ByteBuffer;
 
+import jdk.internal.foreign.AbstractMemorySegmentImpl;
+import jdk.internal.foreign.HeapMemorySegmentImpl;
+import jdk.internal.foreign.MappedMemorySegmentImpl;
+import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.Utils;
 
 import java.io.IOException;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.Spliterator;
 import java.util.function.Consumer;
 
@@ -69,7 +74,8 @@ import java.util.function.Consumer;
  * by native memory.
  * <p>
  * Finally, it is also possible to obtain a memory segment backed by a memory-mapped file using the factory method
- * {@link MemorySegment#mapFromPath(Path, long, FileChannel.MapMode)}. Such memory segments are called <em>mapped memory segments</em>.
+ * {@link MemorySegment#mapFromPath(Path, long, FileChannel.MapMode)}. Such memory segments are called <em>mapped memory segments</em>
+ * (see {@link MappedMemorySegment}).
  *
  * <h2>Closing a memory segment</h2>
  *
@@ -93,6 +99,10 @@ import java.util.function.Consumer;
  * to directly manipulate the memory segment (e.g. close the memory segment) or access the underlying memory associated with
  * the segment using a memory access var handle. Any attempt to perform such operations from a thread other than the
  * owner thread will result in a runtime failure.
+ * <p>
+ * Memory segments support <em>serial thread confinement</em>; that is, ownership of a memory segment can change (see
+ * {@link #withOwnerThread(Thread)}). This allows, for instance, for two threads {@code A} and {@code B} to share
+ * a segment in a controlled, cooperative and race-free fashion.
  * <p>
  * In some cases, it might be useful for multiple threads to process the contents of the same memory segment concurrently
  * (e.g. in the case of parallel processing); while memory segments provide strong confinement guarantees, it is possible
@@ -143,7 +153,7 @@ MemorySegment roSegment = segment.withAccessModes(segment.accessModes() & ~WRITE
  *
  * @apiNote In the future, if the Java language permits, {@link MemorySegment}
  * may become a {@code sealed} interface, which would prohibit subclassing except by
- * explicitly permitted types.
+ * {@link MappedMemorySegment} and other explicitly permitted subtypes.
  *
  * @implSpec
  * Implementations of this interface are immutable and thread-safe.
@@ -159,7 +169,7 @@ public interface MemorySegment extends AutoCloseable {
     MemoryAddress baseAddress();
 
     /**
-     * Returns a spliterator for this memory segment. The returned spliterator reports {@link Spliterator#SIZED},
+     * Returns a spliterator for the given memory segment. The returned spliterator reports {@link Spliterator#SIZED},
      * {@link Spliterator#SUBSIZED}, {@link Spliterator#IMMUTABLE}, {@link Spliterator#NONNULL} and {@link Spliterator#ORDERED}
      * characteristics.
      * <p>
@@ -174,18 +184,43 @@ public interface MemorySegment extends AutoCloseable {
      * fail with an exception, it is possible to close a segment when a spliterator has been obtained but no thread
      * is actively working on it using {@link Spliterator#tryAdvance(Consumer)}; in such cases, any subsequent call
      * to {@link Spliterator#tryAdvance(Consumer)} will fail with an exception.
+     * @param segment the segment to be used for splitting.
      * @param layout the layout to be used for splitting.
+     * @param <S> the memory segment type
      * @return the element spliterator for this segment
-     * @throws IllegalStateException if this segment is not <em>alive</em>, or if access occurs from a thread other than the
+     * @throws IllegalStateException if the segment is not <em>alive</em>, or if access occurs from a thread other than the
      * thread owning this segment
      */
-    Spliterator<MemorySegment> spliterator(SequenceLayout layout);
+    static <S extends MemorySegment> Spliterator<S> spliterator(S segment, SequenceLayout layout) {
+        return AbstractMemorySegmentImpl.spliterator(segment, layout);
+    }
 
     /**
      * The thread owning this segment.
      * @return the thread owning this segment.
      */
     Thread ownerThread();
+
+    /**
+     * Obtains a new memory segment backed by the same underlying memory region as this segment,
+     * but with different owner thread. As a side-effect, this segment will be marked as <em>not alive</em>,
+     * and subsequent operations on this segment will result in runtime errors.
+     * <p>
+     * Write accesses to the segment's content <a href="../../../java/util/concurrent/package-summary.html#MemoryVisibility"><i>happens-before</i></a>
+     * hand-over from the current owner thread to the new owner thread, which in turn <i>happens before</i> read accesses to the segment's contents on
+     * the new owner thread.
+     *
+     * @param newOwner the new owner thread.
+     * @return a new memory segment backed by the same underlying memory region as this segment,
+     *      owned by {@code newOwner}.
+     * @throws IllegalStateException if this segment is not <em>alive</em>, or if access occurs from a thread other than the
+     * thread owning this segment, or if the segment cannot be closed because it is being operated upon by a different
+     * thread (see {@link #spliterator(SequenceLayout)}).
+     * @throws NullPointerException if {@code newOwner == null}
+     * @throws IllegalArgumentException if the segment is already a confined segment owner by {@code newOnwer}.
+     * @throws UnsupportedOperationException if this segment does not support the {@link #HANDOFF} access mode.
+     */
+    MemorySegment withOwnerThread(Thread newOwner);
 
     /**
      * The size (in bytes) of this memory segment.
@@ -243,7 +278,7 @@ public interface MemorySegment extends AutoCloseable {
      * associated with the memory segment.
      * @throws IllegalStateException if this segment is not <em>alive</em>, or if access occurs from a thread other than the
      * thread owning this segment, or if the segment cannot be closed because it is being operated upon by a different
-     * thread (see {@link #spliterator(SequenceLayout)}).
+     * thread (see {@link #spliterator(MemorySegment, SequenceLayout)}).
      * @throws UnsupportedOperationException if this segment does not support the {@link #CLOSE} access mode.
      */
     void close();
@@ -291,7 +326,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new buffer memory segment.
      */
     static MemorySegment ofByteBuffer(ByteBuffer bb) {
-        return Utils.makeBufferSegment(bb);
+        return AbstractMemorySegmentImpl.ofBuffer(bb);
     }
 
     /**
@@ -304,7 +339,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(byte[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -317,7 +352,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(char[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -330,7 +365,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(short[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -343,7 +378,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(int[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -356,7 +391,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(float[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -369,7 +404,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(long[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -382,7 +417,7 @@ public interface MemorySegment extends AutoCloseable {
      * @return a new array memory segment.
      */
     static MemorySegment ofArray(double[] arr) {
-        return Utils.makeArraySegment(arr);
+        return HeapMemorySegmentImpl.makeArraySegment(arr);
     }
 
     /**
@@ -433,14 +468,15 @@ allocateNative(bytesSize, 1);
      *
      * @param path the path to the file to memory map.
      * @param bytesSize the size (in bytes) of the mapped memory backing the memory segment.
-     * @param mapMode a file mapping mode, see {@link FileChannel#map(FileChannel.MapMode, long, long)}.
+     * @param mapMode a file mapping mode, see {@link FileChannel#map(FileChannel.MapMode, long, long)}; the chosen mapping mode
+     *                might affect the behavior of the returned memory mapped segment (see {@link MappedMemorySegment#force()}).
      * @return a new mapped memory segment.
      * @throws IllegalArgumentException if {@code bytesSize < 0}.
      * @throws UnsupportedOperationException if an unsupported map mode is specified.
      * @throws IOException if the specified path does not point to an existing file, or if some other I/O error occurs.
      */
-    static MemorySegment mapFromPath(Path path, long bytesSize, FileChannel.MapMode mapMode) throws IOException {
-        return Utils.makeMappedSegment(path, bytesSize, mapMode);
+    static MappedMemorySegment mapFromPath(Path path, long bytesSize, FileChannel.MapMode mapMode) throws IOException {
+        return MappedMemorySegmentImpl.makeMappedSegment(path, bytesSize, mapMode);
     }
 
     /**
@@ -467,7 +503,42 @@ allocateNative(bytesSize, 1);
             throw new IllegalArgumentException("Invalid alignment constraint : " + alignmentBytes);
         }
 
-        return Utils.makeNativeSegment(bytesSize, alignmentBytes);
+        return NativeMemorySegmentImpl.makeNativeSegment(bytesSize, alignmentBytes);
+    }
+
+    /**
+     * Returns a new native memory segment with given base address and size; the returned segment has its own temporal
+     * bounds, and can therefore be closed; closing such a segment can optionally result in calling an user-provided cleanup
+     * action. This method can be very useful when interacting with custom native memory sources (e.g. custom allocators,
+     * GPU memory, etc.), where an address to some underlying memory region is typically obtained from native code
+     * (often as a plain {@code long} value).
+     * <p>
+     * This method is <em>restricted</em>. Restricted method are unsafe, and, if used incorrectly, their use might crash
+     * the JVM crash or, worse, silently result in memory corruption. Thus, clients should refrain from depending on
+     * restricted methods, and use safe and supported functionalities, where possible.
+     *
+     * @param addr the desired base address
+     * @param bytesSize the desired size.
+     * @param owner the desired owner thread. If {@code owner == null}, the returned segment is <em>not</em> confined.
+     * @param cleanup a cleanup action to be executed when the {@link MemorySegment#close()} method is called on the
+     *                returned segment. If {@code cleanup == null}, no cleanup action is executed.
+     * @param attachment an object that must be kept alive by the returned segment; this can be useful when
+     *                   the returned segment depends on memory which could be released if a certain object
+     *                   is determined to be unreacheable. In most cases this will be set to {@code null}.
+     * @return a new native memory segment with given base address, size, owner, cleanup action and object attachment.
+     * @throws IllegalArgumentException if {@code bytesSize <= 0}.
+     * @throws UnsupportedOperationException if {@code addr} is associated with an heap segment.
+     * @throws IllegalAccessError if the runtime property {@code foreign.restricted} is not set to either
+     * {@code permit}, {@code warn} or {@code debug} (the default value is set to {@code deny}).
+     * @throws NullPointerException if {@code addr == null}.
+     */
+    static MemorySegment ofNativeRestricted(MemoryAddress addr, long bytesSize, Thread owner, Runnable cleanup, Object attachment) {
+        Objects.requireNonNull(addr);
+        if (bytesSize <= 0) {
+            throw new IllegalArgumentException("Invalid size : " + bytesSize);
+        }
+        Utils.checkRestrictedAccess("MemorySegment.ofNativeRestricted");
+        return NativeMemorySegmentImpl.makeNativeSegmentUnchecked(addr, bytesSize, owner, cleanup, attachment);
     }
 
     // access mode masks
@@ -495,9 +566,17 @@ allocateNative(bytesSize, 1);
 
     /**
      * Acquire access mode; this segment support sharing with threads other than the owner thread, via spliterator
-     * (see {@link #spliterator(SequenceLayout)}).
+     * (see {@link #spliterator(MemorySegment, SequenceLayout)}).
      * @see MemorySegment#accessModes()
      * @see MemorySegment#withAccessModes(int)
      */
     int ACQUIRE = CLOSE << 1;
+
+    /**
+     * Handoff access mode; this segment support serial thread-confinement via thread ownership changes
+     * (see {@link #withOwnerThread(Thread)}).
+     * @see MemorySegment#accessModes()
+     * @see MemorySegment#withAccessModes(int)
+     */
+    int HANDOFF = ACQUIRE << 1;
 }

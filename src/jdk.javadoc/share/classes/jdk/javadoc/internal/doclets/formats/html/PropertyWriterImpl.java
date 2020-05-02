@@ -64,9 +64,9 @@ public class PropertyWriterImpl extends AbstractMemberWriter
     }
 
     @Override
-    public void addMemberTree(Content memberSummaryTree, Content memberTree) {
-        writer.addMemberTree(HtmlStyle.propertySummary,
-                SectionName.PROPERTY_SUMMARY, memberSummaryTree, memberTree);
+    public void addSummary(Content summariesList, Content content) {
+        writer.addSummary(HtmlStyle.propertySummary,
+                SectionName.PROPERTY_SUMMARY, summariesList, content);
     }
 
     @Override
@@ -156,7 +156,7 @@ public class PropertyWriterImpl extends AbstractMemberWriter
 
     @Override
     protected Table createSummaryTable() {
-        return new Table(HtmlStyle.memberSummary)
+        return new Table(HtmlStyle.memberSummary, HtmlStyle.summaryTable)
                 .setCaption(contents.properties)
                 .setHeader(getSummaryTableHeader(typeElement))
                 .setColumnStyles(HtmlStyle.colFirst, HtmlStyle.colSecond, HtmlStyle.colLast)
