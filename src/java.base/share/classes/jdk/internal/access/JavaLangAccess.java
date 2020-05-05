@@ -26,7 +26,9 @@
 package jdk.internal.access;
 
 import java.lang.annotation.Annotation;
+import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.lang.module.ModuleDescriptor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.Method;
@@ -35,14 +37,13 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.security.AccessControlContext;
 import java.security.ProtectionDomain;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
-import jdk.internal.access.foreign.NativeLibraryProxy;
+import jdk.internal.loader.NativeLibrary;
 import jdk.internal.module.ServicesCatalog;
 import jdk.internal.reflect.ConstantPool;
 import sun.reflect.annotation.AnnotationType;
@@ -149,6 +150,14 @@ public interface JavaLangAccess {
      * Defines a class with the given name to a class loader.
      */
     Class<?> defineClass(ClassLoader cl, String name, byte[] b, ProtectionDomain pd, String source);
+
+    /**
+     * Defines a class with the given name to a class loader with
+     * the given flags and class data.
+     *
+     * @see java.lang.invoke.MethodHandles.Lookup#defineClass
+     */
+    Class<?> defineClass(ClassLoader cl, Class<?> lookup, String name, byte[] b, ProtectionDomain pd, boolean initialize, int flags, Object classData);
 
     /**
      * Returns a class loaded by the bootstrap class loader.
@@ -316,42 +325,19 @@ public interface JavaLangAccess {
     void setCause(Throwable t, Throwable cause);
 
     /**
-     * Privileged System.loadLibrary
-     *
-     * @param caller on behalf of which the library is being loaded
-     * @param library name of the library to load
+     * Get protection domain of the given Class
      */
-    void loadLibrary(Class<?> caller, String library);
-
-    //Panama
+    ProtectionDomain protectionDomain(Class<?> c);
 
     /**
-     * Panama: load a native library.
-     * @param lookup the lookup object.
-     * @param libname the name of the library.
-     * @return the found library
-     * @throws     UnsatisfiedLinkError if either the libname argument
-     *             contains a file path, the native library is not statically
-     *             linked with the VM,  or the library cannot be mapped to a
-     *             native library image by the host system.
+     * Get a method handle of string concat helper method
      */
-    NativeLibraryProxy loadLibrary(MethodHandles.Lookup lookup, String libname);
+    MethodHandle stringConcatHelper(String name, MethodType methodType);
 
-    /**
-     * Panama: load a native library.
-     * @param lookup the lookup object.
-     * @param libname the absolute path of the library.
-     * @return the loaded library
-     * @throws     UnsatisfiedLinkError if either the libname argument is not an
-     *             absolute path name, the native library is not statically
-     *             linked with the VM, or the library cannot be mapped to
-     *             a native library image by the host system.
+    /*
+     * Get the class data associated with the given class.
+     * @param c the class
+     * @see java.lang.invoke.MethodHandles.Lookup#defineHiddenClass(byte[], boolean, MethodHandles.Lookup.ClassOption...)
      */
-    NativeLibraryProxy load(MethodHandles.Lookup lookup, String libname);
-
-    /**
-     * Panama: lookup default library
-     * @return defauult library.
-     */
-    NativeLibraryProxy defaultLibrary();
+    Object classData(Class<?> c);
 }

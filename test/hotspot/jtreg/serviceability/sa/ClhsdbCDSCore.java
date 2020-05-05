@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -31,7 +31,7 @@
  * @requires vm.flavor == "server"
  * @library /test/lib
  * @modules java.base/jdk.internal.misc
- * @run main/othervm/timeout=2400 -Xmx1g ClhsdbCDSCore
+ * @run driver/timeout=2400 ClhsdbCDSCore
  */
 
 import java.io.File;
@@ -163,7 +163,7 @@ public class ClhsdbCDSCore {
                 throw new SkippedException("Could not determine the UseSharedSpaces value");
             }
 
-            if (!useSharedSpacesOutput.contains("true")) {
+            if (useSharedSpacesOutput.contains("UseSharedSpaces = false")) {
                 // CDS archive is not mapped. Skip the rest of the test.
                 cleanup();
                 throw new SkippedException("The CDS archive is not mapped");

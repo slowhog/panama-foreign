@@ -157,6 +157,9 @@ public class Check {
                 enforceMandatoryWarnings, "sunapi", null);
 
         deferredLintHandler = DeferredLintHandler.instance(context);
+
+        allowRecords = (!preview.isPreview(Feature.RECORDS) || preview.isEnabled()) &&
+                Feature.RECORDS.allowedInSource(source);
     }
 
     /** Character for synthetic names
@@ -187,6 +190,10 @@ public class Check {
     /** A handler for deferred lint warnings.
      */
     private DeferredLintHandler deferredLintHandler;
+
+    /** Are records allowed
+     */
+    private final boolean allowRecords;
 
 /* *************************************************************************
  * Errors and Warnings
@@ -2138,8 +2145,10 @@ public class Check {
                     .tsym.members().findFirst(names.equals);
             MethodSymbol hashCodeAtObject = (MethodSymbol)syms.objectType
                     .tsym.members().findFirst(names.hashCode);
-            boolean overridesEquals = types.implementation(equalsAtObject,
-                someClass, false, equalsHasCodeFilter).owner == someClass;
+            MethodSymbol equalsImpl = types.implementation(equalsAtObject,
+                    someClass, false, equalsHasCodeFilter);
+            boolean overridesEquals = equalsImpl != null &&
+                                      equalsImpl.owner == someClass;
             boolean overridesHashCode = types.implementation(hashCodeAtObject,
                 someClass, false, equalsHasCodeFilter) != hashCodeAtObject;
 
@@ -3164,7 +3173,9 @@ public class Check {
             targets.add(names.ANNOTATION_TYPE);
             targets.add(names.CONSTRUCTOR);
             targets.add(names.FIELD);
-            targets.add(names.RECORD_COMPONENT);
+            if (allowRecords) {
+                targets.add(names.RECORD_COMPONENT);
+            }
             targets.add(names.LOCAL_VARIABLE);
             targets.add(names.METHOD);
             targets.add(names.PACKAGE);

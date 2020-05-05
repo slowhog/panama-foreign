@@ -25,6 +25,8 @@
  */
 package jdk.incubator.foreign;
 
+import jdk.internal.foreign.Utils;
+import jdk.internal.foreign.abi.SharedUtils;
 import jdk.internal.foreign.abi.UpcallStubs;
 import jdk.internal.foreign.abi.aarch64.AArch64ABI;
 import jdk.internal.foreign.abi.x64.sysv.SysVx64ABI;
@@ -36,6 +38,8 @@ import java.util.Optional;
 
 /**
  * This class models a system application binary interface (ABI).
+ *
+ * Instances of this class can be obtained by calling {@link Foreign#getSystemABI()}
  */
 public interface SystemABI {
     /**
@@ -54,8 +58,12 @@ public interface SystemABI {
     String ABI_AARCH64 = "AArch64";
 
     /**
-     * Obtain a method handle which can be used to call a given native function,
-     * given default calling covention.
+     * memory layout attribute key for abi native type
+     */
+    String NATIVE_TYPE = "abi/native-type";
+
+    /**
+     * Obtain a method handle which can be used to call a given native function.
      *
      * @param symbol downcall symbol.
      * @param type the method type.
@@ -65,7 +73,7 @@ public interface SystemABI {
     MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function);
 
     /**
-     * Obtain the pointer to a native stub (using default calling convention) which
+     * Obtain the pointer to a native stub which
      * can be used to upcall into a given method handle.
      *
      * @param target the target method handle.
@@ -92,26 +100,7 @@ public interface SystemABI {
      */
     String name();
 
-    /**
-     * Obtain an instance of the system ABI.
-     * @return system ABI.
-     */
-    static SystemABI getInstance() {
-        String arch = System.getProperty("os.arch");
-        String os = System.getProperty("os.name");
-        if (arch.equals("amd64") || arch.equals("x86_64")) {
-            if (os.startsWith("Windows")) {
-                return Windowsx64ABI.getInstance();
-            } else {
-                return SysVx64ABI.getInstance();
-            }
-        } else if (arch.equals("aarch64")) {
-            return AArch64ABI.getInstance();
-        }
-        throw new UnsupportedOperationException("Unsupported os or arch: " + os + ", " + arch);
-    }
-
-    public enum Type {
+    enum Type {
         /**
          * The {@code _Bool} native type.
          */
@@ -196,10 +185,41 @@ public interface SystemABI {
          * The {@code T*} native type.
          */
         POINTER;
+
+        /**
+         * Retrieve the ABI type attached to the given layout,
+         * or throw an {@code IllegalArgumentException} if there is none
+         *
+         * @param ml the layout to retrieve the ABI type of
+         * @return the retrieved ABI type
+         * @throws IllegalArgumentException if the given layout does not have an ABI type attribute
+         */
+        public static Type fromLayout(MemoryLayout ml) throws IllegalArgumentException {
+            return ml.attribute(NATIVE_TYPE)
+                     .map(SystemABI.Type.class::cast)
+                     .orElseThrow(() -> new IllegalArgumentException("No ABI attribute present"));
+        }
     }
 
     /**
      * Returns memory layout for the given native type if supported by the platform ABI.
+     * @param type the native type for which the layout is to be retrieved.
+     * @return the layout (if any) associated with {@code type}
      */
-    public Optional<MemoryLayout> layoutFor(Type type);
+    Optional<MemoryLayout> layoutFor(Type type);
+
+    /**
+     * Obtain an instance of the system ABI.
+     * <p>
+     * This method is <em>restricted</em>. Restricted method are unsafe, and, if used incorrectly, their use might crash
+     * the JVM crash or, worse, silently result in memory corruption. Thus, clients should refrain from depending on
+     * restricted methods, and use safe and supported functionalities, where possible.
+     * @return system ABI.
+     * @throws IllegalAccessError if the runtime property {@code foreign.restricted} is not set to either
+     * {@code permit}, {@code warn} or {@code debug} (the default value is set to {@code deny}).
+     */
+    static SystemABI getSystemABI() {
+        Utils.checkRestrictedAccess("SystemABI.getSystemABI");
+        return SharedUtils.getSystemABI();
+    }
 }

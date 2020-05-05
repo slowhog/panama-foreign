@@ -26,42 +26,53 @@
 package jdk.internal.foreign;
 
 import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.internal.access.JavaLangAccess;
-import jdk.internal.access.SharedSecrets;
 
-import java.lang.invoke.MethodHandles.Lookup;
+import java.io.File;
 import jdk.incubator.foreign.LibraryLookup;
-import jdk.internal.access.foreign.NativeLibraryProxy;
+import jdk.internal.loader.NativeLibraries;
+import jdk.internal.loader.NativeLibrary;
+import jdk.internal.ref.CleanerFactory;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.IdentityHashMap;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 
 public final class LibrariesHelper {
     private LibrariesHelper() {}
 
-    private static final JavaLangAccess jlAccess = SharedSecrets.getJavaLangAccess();
+    private final static NativeLibraries nativeLibraries =
+            NativeLibraries.rawNativeLibraries(LibrariesHelper.class, true);
+
+    private final static Map<NativeLibrary, AtomicInteger> loadedLibraries = new IdentityHashMap<>();
 
     /**
      * Load the specified shared library.
      *
-     * @param lookup Lookup object of the caller.
      * @param name Name of the shared library to load.
      */
-    public static LibraryLookup loadLibrary(Lookup lookup, String name) {
-        return new LibraryLookupImpl(jlAccess.loadLibrary(lookup, name));
+    public static LibraryLookup loadLibrary(String name) {
+        return lookup(() -> nativeLibraries.loadLibrary(LibrariesHelper.class, name),
+                "Library not found: " + name);
     }
 
     /**
      * Load the specified shared library.
      *
-     * @param lookup Lookup object of the caller.
      * @param path Path of the shared library to load.
      */
-    public static LibraryLookup load(Lookup lookup, String path) {
-        return new LibraryLookupImpl(jlAccess.load(lookup, path));
+    public static LibraryLookup load(String path) {
+        File file = new File(path);
+        if (!file.isAbsolute()) {
+            throw new UnsatisfiedLinkError(
+                    "Expecting an absolute path of the library: " + path);
+        }
+        return lookup(() -> nativeLibraries.loadLibrary(LibrariesHelper.class, file),
+                "Library not found: " + path);
     }
 
     // return the absolute path of the library of given name by searching
@@ -73,20 +84,49 @@ public final class LibrariesHelper {
     }
 
     public static LibraryLookup getDefaultLibrary() {
-        return new LibraryLookupImpl(jlAccess.defaultLibrary());
+        return LibraryLookupImpl.DEFAULT_LOOKUP;
+    }
+
+    synchronized static LibraryLookupImpl lookup(Supplier<NativeLibrary> librarySupplier, String notFoundMsg) {
+        NativeLibrary library = librarySupplier.get();
+        if (library == null) {
+            throw new IllegalArgumentException(notFoundMsg);
+        }
+        AtomicInteger refCount = loadedLibraries.computeIfAbsent(library, lib -> new AtomicInteger());
+        refCount.incrementAndGet();
+        LibraryLookupImpl lookup = new LibraryLookupImpl(library);
+        CleanerFactory.cleaner().register(lookup, () -> tryUnload(library));
+        return lookup;
+    }
+
+    synchronized static void tryUnload(NativeLibrary library) {
+        AtomicInteger refCount = loadedLibraries.get(library);
+        if (refCount.decrementAndGet() == 0) {
+            loadedLibraries.remove(library);
+            nativeLibraries.unload(library);
+        }
     }
 
     static class LibraryLookupImpl implements LibraryLookup {
-        NativeLibraryProxy proxy;
+        final NativeLibrary library;
 
-        LibraryLookupImpl(NativeLibraryProxy proxy) {
-            this.proxy = proxy;
+        LibraryLookupImpl(NativeLibrary library) {
+            this.library = library;
         }
 
         @Override
         public MemoryAddress lookup(String name) throws NoSuchMethodException {
-            long addr = proxy.lookup(name);
-            return MemoryAddress.ofLong(addr);
+            long addr = library.lookup(name);
+            return NativeMemorySegmentImpl.makeNativeSegmentUnchecked(MemoryAddress.ofLong(addr),
+                    0, null, null, this)
+                    .baseAddress();
         }
+
+        static LibraryLookup DEFAULT_LOOKUP = new LibraryLookupImpl(NativeLibraries.defaultLibrary);
+    }
+
+    /* used for testing */
+    public static int numLoadedLibraries() {
+        return loadedLibraries.size();
     }
 }

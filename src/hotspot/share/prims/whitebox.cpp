@@ -35,6 +35,7 @@
 #include "compiler/compilationPolicy.hpp"
 #include "compiler/methodMatcher.hpp"
 #include "compiler/directivesParser.hpp"
+#include "gc/shared/concurrentGCBreakpoints.hpp"
 #include "gc/shared/gcConfig.hpp"
 #include "gc/shared/genArguments.hpp"
 #include "gc/shared/genCollectedHeap.hpp"
@@ -93,7 +94,6 @@
 #endif // INCLUDE_G1GC
 #if INCLUDE_PARALLELGC
 #include "gc/parallel/parallelScavengeHeap.inline.hpp"
-#include "gc/parallel/adjoiningGenerations.hpp"
 #endif // INCLUDE_PARALLELGC
 #if INCLUDE_NMT
 #include "services/mallocSiteTable.hpp"
@@ -106,6 +106,7 @@
 
 #ifdef LINUX
 #include "osContainer_linux.hpp"
+#include "cgroupSubsystem_linux.hpp"
 #endif
 
 #define SIZE_T_MAX_VALUE ((size_t) -1)
@@ -394,15 +395,27 @@ WB_ENTRY(jlong, WB_GetHeapAlignment(JNIEnv* env, jobject o))
   return (jlong)HeapAlignment;
 WB_END
 
-WB_ENTRY(jboolean, WB_SupportsConcurrentGCPhaseControl(JNIEnv* env, jobject o))
-  return Universe::heap()->supports_concurrent_phase_control();
+WB_ENTRY(jboolean, WB_SupportsConcurrentGCBreakpoints(JNIEnv* env, jobject o))
+  return Universe::heap()->supports_concurrent_gc_breakpoints();
 WB_END
 
-WB_ENTRY(jboolean, WB_RequestConcurrentGCPhase(JNIEnv* env, jobject o, jstring name))
-  Handle h_name(THREAD, JNIHandles::resolve(name));
+WB_ENTRY(void, WB_ConcurrentGCAcquireControl(JNIEnv* env, jobject o))
+  ConcurrentGCBreakpoints::acquire_control();
+WB_END
+
+WB_ENTRY(void, WB_ConcurrentGCReleaseControl(JNIEnv* env, jobject o))
+  ConcurrentGCBreakpoints::release_control();
+WB_END
+
+WB_ENTRY(void, WB_ConcurrentGCRunToIdle(JNIEnv* env, jobject o))
+  ConcurrentGCBreakpoints::run_to_idle();
+WB_END
+
+WB_ENTRY(jboolean, WB_ConcurrentGCRunTo(JNIEnv* env, jobject o, jobject at))
+  Handle h_name(THREAD, JNIHandles::resolve(at));
   ResourceMark rm;
   const char* c_name = java_lang_String::as_utf8_string(h_name());
-  return Universe::heap()->request_concurrent_phase(c_name);
+  return ConcurrentGCBreakpoints::run_to(c_name);
 WB_END
 
 #if INCLUDE_G1GC
@@ -593,7 +606,7 @@ WB_END
 
 WB_ENTRY(jlong, WB_PSVirtualSpaceAlignment(JNIEnv* env, jobject o))
   if (UseParallelGC) {
-    return ParallelScavengeHeap::heap()->gens()->virtual_spaces()->alignment();
+    return GenAlignment;
   }
   THROW_MSG_0(vmSymbols::java_lang_UnsupportedOperationException(), "WB_PSVirtualSpaceAlignment: Parallel GC is not enabled");
 WB_END
@@ -999,6 +1012,18 @@ WB_ENTRY(jboolean, WB_TestSetForceInlineMethod(JNIEnv* env, jobject o, jobject m
   mh->set_force_inline(value == JNI_TRUE);
   return result;
 WB_END
+
+#ifdef LINUX
+bool WhiteBox::validate_cgroup(const char* proc_cgroups,
+                               const char* proc_self_cgroup,
+                               const char* proc_self_mountinfo,
+                               u1* cg_flags) {
+  CgroupInfo cg_infos[4];
+  return CgroupSubsystemFactory::determine_type(cg_infos, proc_cgroups,
+                                                    proc_self_cgroup,
+                                                    proc_self_mountinfo, cg_flags);
+}
+#endif
 
 bool WhiteBox::compile_method(Method* method, int comp_level, int bci, Thread* THREAD) {
   // Screen for unavailable/bad comp level or null method
@@ -1487,6 +1512,7 @@ struct CodeBlobStub {
 };
 
 static jobjectArray codeBlob2objectArray(JavaThread* thread, JNIEnv* env, CodeBlobStub* cb) {
+  ResourceMark rm;
   jclass clazz = env->FindClass(vmSymbols::java_lang_Object()->as_C_string());
   CHECK_JNI_EXCEPTION_(env, NULL);
   jobjectArray result = env->NewObjectArray(4, clazz, NULL);
@@ -1689,52 +1715,19 @@ WB_END
 
 WB_ENTRY(void, WB_DefineModule(JNIEnv* env, jobject o, jobject module, jboolean is_open,
                                 jstring version, jstring location, jobjectArray packages))
-  ResourceMark rm(THREAD);
-
-  objArrayOop packages_oop = objArrayOop(JNIHandles::resolve(packages));
-  objArrayHandle packages_h(THREAD, packages_oop);
-  int num_packages = (packages_h == NULL ? 0 : packages_h->length());
-
-  char** pkgs = NULL;
-  if (num_packages > 0) {
-    pkgs = NEW_RESOURCE_ARRAY_IN_THREAD(THREAD, char*, num_packages);
-    for (int x = 0; x < num_packages; x++) {
-      oop pkg_str = packages_h->obj_at(x);
-      if (pkg_str == NULL || !pkg_str->is_a(SystemDictionary::String_klass())) {
-        THROW_MSG(vmSymbols::java_lang_IllegalArgumentException(),
-                  err_msg("Bad package name"));
-      }
-      pkgs[x] = java_lang_String::as_utf8_string(pkg_str);
-    }
-  }
-  Modules::define_module(module, is_open, version, location, (const char* const*)pkgs, num_packages, CHECK);
+  Modules::define_module(module, is_open, version, location, packages, CHECK);
 WB_END
 
 WB_ENTRY(void, WB_AddModuleExports(JNIEnv* env, jobject o, jobject from_module, jstring package, jobject to_module))
-  ResourceMark rm(THREAD);
-  char* package_name = NULL;
-  if (package != NULL) {
-      package_name = java_lang_String::as_utf8_string(JNIHandles::resolve_non_null(package));
-  }
-  Modules::add_module_exports_qualified(from_module, package_name, to_module, CHECK);
+  Modules::add_module_exports_qualified(from_module, package, to_module, CHECK);
 WB_END
 
 WB_ENTRY(void, WB_AddModuleExportsToAllUnnamed(JNIEnv* env, jobject o, jclass module, jstring package))
-  ResourceMark rm(THREAD);
-  char* package_name = NULL;
-  if (package != NULL) {
-      package_name = java_lang_String::as_utf8_string(JNIHandles::resolve_non_null(package));
-  }
-  Modules::add_module_exports_to_all_unnamed(module, package_name, CHECK);
+  Modules::add_module_exports_to_all_unnamed(module, package, CHECK);
 WB_END
 
 WB_ENTRY(void, WB_AddModuleExportsToAll(JNIEnv* env, jobject o, jclass module, jstring package))
-  ResourceMark rm(THREAD);
-  char* package_name = NULL;
-  if (package != NULL) {
-      package_name = java_lang_String::as_utf8_string(JNIHandles::resolve_non_null(package));
-  }
-  Modules::add_module_exports(module, package_name, NULL, CHECK);
+  Modules::add_module_exports(module, package, NULL, CHECK);
 WB_END
 
 WB_ENTRY(void, WB_AddReadsModule(JNIEnv* env, jobject o, jobject from_module, jobject source_module))
@@ -1977,12 +1970,6 @@ WB_END
 
 WB_ENTRY(jboolean, WB_IsCDSIncludedInVmBuild(JNIEnv* env))
 #if INCLUDE_CDS
-# ifdef _LP64
-    if (!UseCompressedOops || !UseCompressedClassPointers) {
-      // On 64-bit VMs, CDS is supported only with compressed oops/pointers
-      return false;
-    }
-# endif // _LP64
   return true;
 #else
   return false;
@@ -2174,6 +2161,31 @@ WB_END
 WB_ENTRY(jboolean, WB_IsContainerized(JNIEnv* env, jobject o))
   LINUX_ONLY(return OSContainer::is_containerized();)
   return false;
+WB_END
+
+WB_ENTRY(jint, WB_ValidateCgroup(JNIEnv* env,
+                                    jobject o,
+                                    jstring proc_cgroups,
+                                    jstring proc_self_cgroup,
+                                    jstring proc_self_mountinfo))
+  jint ret = 0;
+#ifdef LINUX
+  ThreadToNativeFromVM ttnfv(thread);
+  const char* p_cgroups = env->GetStringUTFChars(proc_cgroups, NULL);
+  CHECK_JNI_EXCEPTION_(env, 0);
+  const char* p_s_cgroup = env->GetStringUTFChars(proc_self_cgroup, NULL);
+  CHECK_JNI_EXCEPTION_(env, 0);
+  const char* p_s_mountinfo = env->GetStringUTFChars(proc_self_mountinfo, NULL);
+  CHECK_JNI_EXCEPTION_(env, 0);
+  u1 cg_type_flags = 0;
+  // This sets cg_type_flags
+  WhiteBox::validate_cgroup(p_cgroups, p_s_cgroup, p_s_mountinfo, &cg_type_flags);
+  ret = (jint)cg_type_flags;
+  env->ReleaseStringUTFChars(proc_cgroups, p_cgroups);
+  env->ReleaseStringUTFChars(proc_self_cgroup, p_s_cgroup);
+  env->ReleaseStringUTFChars(proc_self_mountinfo, p_s_mountinfo);
+#endif
+  return ret;
 WB_END
 
 WB_ENTRY(void, WB_PrintOsInfo(JNIEnv* env, jobject o))
@@ -2440,12 +2452,18 @@ static JNINativeMethod methods[] = {
   {CC"isGCSupported",             CC"(I)Z",           (void*)&WB_IsGCSupported},
   {CC"isGCSelected",              CC"(I)Z",           (void*)&WB_IsGCSelected},
   {CC"isGCSelectedErgonomically", CC"()Z",            (void*)&WB_IsGCSelectedErgonomically},
-  {CC"supportsConcurrentGCPhaseControl", CC"()Z",     (void*)&WB_SupportsConcurrentGCPhaseControl},
-  {CC"requestConcurrentGCPhase0", CC"(Ljava/lang/String;)Z",
-                                                      (void*)&WB_RequestConcurrentGCPhase},
+  {CC"supportsConcurrentGCBreakpoints", CC"()Z",      (void*)&WB_SupportsConcurrentGCBreakpoints},
+  {CC"concurrentGCAcquireControl0", CC"()V",          (void*)&WB_ConcurrentGCAcquireControl},
+  {CC"concurrentGCReleaseControl0", CC"()V",          (void*)&WB_ConcurrentGCReleaseControl},
+  {CC"concurrentGCRunToIdle0",    CC"()V",            (void*)&WB_ConcurrentGCRunToIdle},
+  {CC"concurrentGCRunTo0",        CC"(Ljava/lang/String;)Z",
+                                                      (void*)&WB_ConcurrentGCRunTo},
   {CC"checkLibSpecifiesNoexecstack", CC"(Ljava/lang/String;)Z",
                                                       (void*)&WB_CheckLibSpecifiesNoexecstack},
   {CC"isContainerized",           CC"()Z",            (void*)&WB_IsContainerized },
+  {CC"validateCgroup",
+      CC"(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)I",
+                                                      (void*)&WB_ValidateCgroup },
   {CC"printOsInfo",               CC"()V",            (void*)&WB_PrintOsInfo },
   {CC"disableElfSectionCache",    CC"()V",            (void*)&WB_DisableElfSectionCache },
   {CC"resolvedMethodItemsCount",  CC"()J",            (void*)&WB_ResolvedMethodItemsCount },

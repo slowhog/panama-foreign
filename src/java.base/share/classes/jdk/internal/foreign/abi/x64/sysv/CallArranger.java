@@ -32,6 +32,7 @@ import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
+import jdk.incubator.foreign.SystemABI;
 import jdk.incubator.foreign.ValueLayout;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.CallingSequenceBuilder;
@@ -126,7 +127,7 @@ public class CallArranger {
         return new Bindings(csb.build(), returnInMemory, argCalc.storageCalculator.nVectorReg);
     }
 
-    public static MethodHandle arrangeDowncall(long addr, MethodType mt, FunctionDescriptor cDesc) {
+    public static MethodHandle arrangeDowncall(MemoryAddress addr, MethodType mt, FunctionDescriptor cDesc) {
         Bindings bindings = getBindings(mt, cDesc, false);
 
         MethodHandle handle = new ProgrammableInvoker(CSysV, addr, bindings.callingSequence).getBoundMethodHandle();
@@ -357,7 +358,6 @@ public class CallArranger {
             super(forArguments);
         }
 
-        @SuppressWarnings("fallthrough")
         @Override
         List<Binding> getBindings(Class<?> carrier, MemoryLayout layout) {
             TypeClass argumentClass = classifyLayout(layout);
@@ -429,16 +429,10 @@ public class CallArranger {
 
     private static List<ArgumentClassImpl> classifyValueType(ValueLayout type) {
         ArrayList<ArgumentClassImpl> classes = new ArrayList<>();
-        var optAbiType = type.abiType();
-        //padding not allowed here
-        ArgumentClassImpl clazz = optAbiType.map(SysVx64ABI::argumentClassFor).
-            orElseThrow(()->new IllegalStateException("Unexpected value layout: could not determine ABI class"));
+        ArgumentClassImpl clazz = SysVx64ABI.argumentClassFor(SystemABI.Type.fromLayout(type));
         if (clazz == null) {
             //padding not allowed here
             throw new IllegalStateException("Unexpected value layout: could not determine ABI class");
-        }
-        if (clazz == ArgumentClassImpl.POINTER) {
-            clazz = ArgumentClassImpl.POINTER;
         }
         classes.add(clazz);
         if (clazz == ArgumentClassImpl.INTEGER) {
@@ -469,7 +463,7 @@ public class CallArranger {
         }
 
         long offset = 0;
-        final long count = type.elementCount().getAsLong();
+        final long count = type.elementCount().orElseThrow();
         for (long idx = 0; idx < count; idx++) {
             MemoryLayout t = type.elementLayout();
             offset = SharedUtils.align(t, false, offset);
@@ -523,9 +517,11 @@ public class CallArranger {
     // TODO: handle zero length arrays
     // TODO: Handle nested structs (and primitives)
     private static List<ArgumentClassImpl> classifyStructType(GroupLayout type) {
-        var optAbiType = type.abiType();
-        var clazz = optAbiType.map(SysVx64ABI::argumentClassFor).orElse(null);
-        if (clazz == ArgumentClassImpl.COMPLEX_X87) {
+        if (type.attribute(SystemABI.NATIVE_TYPE)
+                .map(SystemABI.Type.class::cast)
+                .map(SysVx64ABI::argumentClassFor)
+                .filter(ArgumentClassImpl.COMPLEX_X87::equals)
+                .isPresent()) {
             return COMPLEX_X87_CLASSES;
         }
 
@@ -544,13 +540,13 @@ public class CallArranger {
         final int count = type.memberLayouts().size();
         for (int idx = 0; idx < count; idx++) {
             MemoryLayout t = type.memberLayouts().get(idx);
-            if (Utils.isPadding(t)) {
+            if (t.isPadding()) {
                 continue;
             }
             // ignore zero-length array for now
             // TODO: handle zero length arrays here
             if (t instanceof SequenceLayout) {
-                if (((SequenceLayout) t).elementCount().getAsLong() == 0) {
+                if (((SequenceLayout) t).elementCount().orElseThrow() == 0) {
                     continue;
                 }
             }

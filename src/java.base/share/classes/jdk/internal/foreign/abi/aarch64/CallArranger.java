@@ -30,6 +30,7 @@ import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
+import jdk.incubator.foreign.SystemABI;
 import jdk.incubator.foreign.ValueLayout;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.CallingSequenceBuilder;
@@ -123,7 +124,7 @@ public class CallArranger {
         return new Bindings(csb.build(), returnInMemory);
     }
 
-    public static MethodHandle arrangeDowncall(long addr, MethodType mt, FunctionDescriptor cDesc) {
+    public static MethodHandle arrangeDowncall(MemoryAddress addr, MethodType mt, FunctionDescriptor cDesc) {
         Bindings bindings = getBindings(mt, cDesc, false);
 
         MethodHandle handle = new ProgrammableInvoker(C, addr, bindings.callingSequence).getBoundMethodHandle();
@@ -162,10 +163,7 @@ public class CallArranger {
     }
 
     private static TypeClass classifyValueType(ValueLayout type) {
-        var optAbiType = type.abiType();
-        //padding not allowed here
-        ArgumentClassImpl clazz = optAbiType.map(AArch64ABI::argumentClassFor).
-            orElseThrow(()->new IllegalStateException("Unexpected value layout: could not determine ABI class"));
+        ArgumentClassImpl clazz = AArch64ABI.argumentClassFor(SystemABI.Type.fromLayout(type));
         if (clazz == null) {
             //padding not allowed here
             throw new IllegalStateException("Unexpected value layout: could not determine ABI class");
@@ -200,16 +198,16 @@ public class CallArranger {
         if (!(baseType instanceof ValueLayout))
             return false;
 
-        var optAbiType = baseType.abiType();
-        ArgumentClassImpl baseArgClass = optAbiType.map(AArch64ABI::argumentClassFor).orElse(null);
+        ArgumentClassImpl baseArgClass = AArch64ABI.argumentClassFor(SystemABI.Type.fromLayout(baseType));
         if (baseArgClass != ArgumentClassImpl.VECTOR)
            return false;
 
         for (MemoryLayout elem : groupLayout.memberLayouts()) {
-            optAbiType = elem.abiType();
-            ArgumentClassImpl argClass = optAbiType.map(AArch64ABI::argumentClassFor).orElse(null);
-            if (!(elem instanceof ValueLayout) ||
-                    elem.bitSize() != baseType.bitSize() ||
+            if (!(elem instanceof ValueLayout))
+                return false;
+
+            ArgumentClassImpl argClass = AArch64ABI.argumentClassFor(SystemABI.Type.fromLayout(elem));
+            if (elem.bitSize() != baseType.bitSize() ||
                     elem.bitAlignment() != baseType.bitAlignment() ||
                     baseArgClass != argClass) {
                 return false;
@@ -243,7 +241,7 @@ public class CallArranger {
     static class StorageCalculator {
         private final boolean forArguments;
 
-        private int nRegs[] = new int[] { 0, 0 };
+        private final int[] nRegs = new int[] { 0, 0 };
         private long stackOffset = 0;
 
         public StorageCalculator(boolean forArguments) {
@@ -461,7 +459,6 @@ public class CallArranger {
                 .build();
         }
 
-        @SuppressWarnings("fallthrough")
         @Override
         List<Binding> getBindings(Class<?> carrier, MemoryLayout layout) {
             TypeClass argumentClass = classifyType(layout);

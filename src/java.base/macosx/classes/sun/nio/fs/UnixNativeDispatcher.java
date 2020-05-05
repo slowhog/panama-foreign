@@ -741,7 +741,9 @@ class UnixNativeDispatcher {
             MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : FFIUtils.CTypeAccess.readPointer(result);
             if (FFIUtils.isNull(ptr)) {
                 int errno = errno();
-                if (errno == 0 || errno == ENOENT || errno == ESRCH) {
+                if (errno == 0 || errno == ENOENT || errno == ESRCH &&
+                    errno != EBADF && errno != EPERM)
+                {
                     return -1;
                 } else {
                     throw new UnixException(errno);
@@ -776,7 +778,9 @@ class UnixNativeDispatcher {
                 MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : FFIUtils.CTypeAccess.readPointer(result);
                 if (FFIUtils.isNull(ptr)) {
                     int errno = errno();
-                    if (errno == 0 || errno == ENOENT || errno == ESRCH) {
+                    if (errno == 0 || errno == ENOENT || errno == ESRCH &&
+                        errno != EBADF && errno != EPERM)
+                    {
                         return -1;
                     } else if (errno == ERANGE) {
                         bufLen += 1024;

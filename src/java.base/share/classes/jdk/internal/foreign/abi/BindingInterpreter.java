@@ -74,7 +74,7 @@ public class BindingInterpreter {
                 case ALLOC_BUFFER ->
                     throw new UnsupportedOperationException();
                 case CONVERT_ADDRESS ->
-                    stack.push(MemoryAddressImpl.addressof((MemoryAddress) stack.pop()));
+                    stack.push(((MemoryAddress) stack.pop()).toRawLongValue());
                 case BASE_ADDRESS ->
                     stack.push(((MemorySegment) stack.pop()).baseAddress());
                 case DUP ->
@@ -104,7 +104,7 @@ public class BindingInterpreter {
                 case COPY_BUFFER -> {
                     Binding.Copy binding = (Binding.Copy) b;
                     MemoryAddress operand = (MemoryAddress) stack.pop();
-                    operand = Utils.resizeNativeAddress(operand, binding.size());
+                    operand = MemoryAddressImpl.ofLongUnchecked(operand.toRawLongValue(), binding.size());
                     MemorySegment copy = MemorySegment.allocateNative(binding.size(), binding.alignment());
                     MemoryAddress.copy(operand, copy.baseAddress(), binding.size());
                     stack.push(copy); // leaked

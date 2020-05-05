@@ -28,23 +28,15 @@ package jdk.internal.foreign.abi.aarch64;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemoryHandles;
-import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.abi.*;
 
-import jdk.incubator.foreign.GroupLayout;
-import jdk.incubator.foreign.MemoryLayout;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
-import java.lang.invoke.VarHandle;
-import java.util.function.Function;
-import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-import static sun.security.action.GetPropertyAction.privilegedGetProperty;
 import static jdk.incubator.foreign.MemoryLayouts.AArch64ABI.*;
 
 /**
@@ -63,7 +55,7 @@ public class AArch64ABI implements SystemABI {
 
     @Override
     public MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
-        return CallArranger.arrangeDowncall(MemoryAddressImpl.addressof(symbol), type, function);
+        return CallArranger.arrangeDowncall(symbol, type, function);
     }
 
     @Override
@@ -93,6 +85,7 @@ public class AArch64ABI implements SystemABI {
             case UNSIGNED_LONG_LONG -> Optional.of(C_ULONGLONG);
             case FLOAT -> Optional.of(C_FLOAT);
             case DOUBLE -> Optional.of(C_DOUBLE);
+            case LONG_DOUBLE -> Optional.of(C_LONGDOUBLE);
             case POINTER -> Optional.of(C_POINTER);
             default -> Optional.empty();
         };

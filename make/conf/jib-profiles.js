@@ -248,7 +248,7 @@ var getJibProfilesCommon = function (input, data) {
     common.main_profile_base = {
         dependencies: ["boot_jdk", "gnumake", "jtreg", "jib", "autoconf", "jmh", "jcov"],
         default_make_targets: ["product-bundles", "test-bundles", "static-libs-bundles"],
-        configure_args: concat(["--enable-jtreg-failure-handler"],
+        configure_args: concat("--enable-jtreg-failure-handler",
             "--with-exclude-translations=de,es,fr,it,ko,pt_BR,sv,ca,tr,cs,sk,ja_JP_A,ja_JP_HA,ja_JP_HI,ja_JP_I,zh_TW,zh_HK",
             "--disable-manpages",
             "--disable-jvm-feature-shenandoahgc",
@@ -381,8 +381,8 @@ var getJibProfilesCommon = function (input, data) {
         };
     };
 
-    common.boot_jdk_version = "13";
-    common.boot_jdk_build_number = "33";
+    common.boot_jdk_version = "14";
+    common.boot_jdk_build_number = "36";
     common.boot_jdk_home = input.get("boot_jdk", "install_path") + "/jdk-"
         + common.boot_jdk_version
         + (input.build_os == "macosx" ? ".jdk/Contents/Home" : "");
@@ -464,10 +464,12 @@ var getJibProfilesProfiles = function (input, common, data) {
             target_os: "linux",
             target_cpu: "aarch64",
             build_cpu: "x64",
-            dependencies: ["devkit", "build_devkit", "cups"],
+            dependencies: ["devkit", "build_devkit", "pandoc"],
             configure_args: [
-                "--openjdk-target=aarch64-linux-gnu", "--with-freetype=bundled",
-                "--disable-warnings-as-errors"
+                "--openjdk-target=aarch64-linux-gnu",
+		"--disable-jvm-feature-jvmci",
+		"--disable-jvm-feature-graal",
+		"--disable-jvm-feature-aot",
             ],
         },
 
@@ -475,7 +477,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             target_os: "linux",
             target_cpu: "arm",
             build_cpu: "x64",
-            dependencies: ["devkit", "build_devkit", "cups"],
+            dependencies: ["devkit", "build_devkit"],
             configure_args: [
                 "--openjdk-target=arm-linux-gnueabihf", "--with-freetype=bundled",
                 "--with-abi-profile=arm-vfp-hflt", "--disable-warnings-as-errors"
@@ -486,7 +488,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             target_os: "linux",
             target_cpu: "ppc64le",
             build_cpu: "x64",
-            dependencies: ["devkit", "build_devkit", "cups"],
+            dependencies: ["devkit", "build_devkit"],
             configure_args: [
                 "--openjdk-target=ppc64le-linux-gnu", "--with-freetype=bundled",
                 "--disable-warnings-as-errors"
@@ -497,7 +499,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             target_os: "linux",
             target_cpu: "s390x",
             build_cpu: "x64",
-            dependencies: ["devkit", "build_devkit", "cups"],
+            dependencies: ["devkit", "build_devkit"],
             configure_args: [
                 "--openjdk-target=s390x-linux-gnu", "--with-freetype=bundled",
                 "--disable-warnings-as-errors"
@@ -539,7 +541,7 @@ var getJibProfilesProfiles = function (input, common, data) {
         });
 
     // Generate -gcov profiles
-    [ "linux-x64", "macosx-x64" ].forEach(function (name) {
+    [ "linux-aarch64", "linux-x64", "macosx-x64" ].forEach(function (name) {
         var gcovName = name + "-gcov";
         profiles[gcovName] = clone(profiles[name]);
         profiles[gcovName].default_make_targets = ["product-bundles", "test-bundles"];
@@ -616,7 +618,13 @@ var getJibProfilesProfiles = function (input, common, data) {
             // The prebuilt bootcycle variant modifies the boot jdk argument
             var bootcyclePrebuiltBase = {
                 dependencies: [ name + ".jdk" ],
-                configure_args: "--with-boot-jdk=" + input.get(name + ".jdk", "home_path"),
+                configure_args: [
+                    "--with-boot-jdk=" + input.get(name + ".jdk", "home_path"),
+                    // Full docs do not currently work with bootcycle build
+                    // since Nashorn was removed. This negates the
+                    // --enable-full-docs from the main profile.
+                    "--enable-full-docs=auto",
+                ]
             }
             profiles[bootcyclePrebuiltName] = concatObjects(profiles[name],
                 bootcyclePrebuiltBase);
@@ -626,7 +634,7 @@ var getJibProfilesProfiles = function (input, common, data) {
         });
 
     // JCov profiles build JCov-instrumented JDK image based on images provided through dependencies.
-    [ "linux-x64", "macosx-x64", "solaris-sparcv9", "windows-x64"]
+    [ "linux-aarch64", "linux-x64", "macosx-x64", "solaris-sparcv9", "windows-x64"]
         .forEach(function (name) {
             var jcovName = name + "-jcov";
             profiles[jcovName] = clone(common.main_profile_base);
@@ -777,13 +785,17 @@ var getJibProfilesProfiles = function (input, common, data) {
                     = concat(profiles[cmpBaselineName].default_make_targets, "docs");
             }
             profiles[cmpBaselineName].make_args = [ "COMPARE_BUILD=CONF=" ];
+            profiles[cmpBaselineName].configure_args = concat(
+                profiles[cmpBaselineName].configure_args,
+                "--with-hotspot-build-time=n/a", 
+                "--disable-precompiled-headers");
             // Do not inherit artifact definitions from base profile
             delete profiles[cmpBaselineName].artifacts;
         });
     });
 
     // Artifacts of JCov profiles
-    [ "linux-x64", "macosx-x64", "solaris-sparcv9", "windows-x64"]
+    [ "linux-aarch64", "linux-x64", "macosx-x64", "solaris-sparcv9", "windows-x64"]
         .forEach(function (name) {
             var o = artifactData[name]
             var jdk_subdir = (o.jdk_subdir != null ? o.jdk_subdir : "jdk-" + data.version);
@@ -803,7 +815,7 @@ var getJibProfilesProfiles = function (input, common, data) {
         });
 
     // Artifacts of gcov (native-code-coverage) profiles
-    [ "linux-x64", "macosx-x64" ].forEach(function (name) {
+    [ "linux-aarch64", "linux-x64", "macosx-x64" ].forEach(function (name) {
         var o = artifactData[name]
         var pf = o.platform
         var jdk_subdir = (o.jdk_subdir != null ? o.jdk_subdir : "jdk-" + data.version);
@@ -882,6 +894,7 @@ var getJibProfilesProfiles = function (input, common, data) {
             make_args: testOnlyMake,
             environment: {
                 "BOOT_JDK": common.boot_jdk_home,
+                "JT_HOME": input.get("jtreg", "home_path"),
                 "JDK_IMAGE_DIR": input.get(testedProfileJdk, "home_path"),
                 "TEST_IMAGE_DIR": input.get(testedProfileTest, "home_path")
             },
@@ -969,12 +982,12 @@ var getJibProfilesProfiles = function (input, common, data) {
 var getJibProfilesDependencies = function (input, common) {
 
     var devkit_platform_revisions = {
-        linux_x64: "gcc8.3.0-OL6.4+1.0",
+        linux_x64: "gcc9.2.0-OL6.4+1.0",
         macosx_x64: "Xcode10.1-MacOSX10.14+1.0",
         solaris_x64: "SS12u4-Solaris11u1+1.0",
         solaris_sparcv9: "SS12u6-Solaris11u3+1.0",
         windows_x64: "VS2017-15.9.16+1.0",
-        linux_aarch64: "gcc8.3.0-OL7.6+1.0",
+        linux_aarch64: "gcc9.2.0-OL7.6+1.0",
         linux_arm: "gcc8.2.0-Fedora27+1.0",
         linux_ppc64le: "gcc8.2.0-Fedora27+1.0",
         linux_s390x: "gcc8.2.0-Fedora27+1.0"
@@ -1005,16 +1018,16 @@ var getJibProfilesDependencies = function (input, common) {
         : input.get("gnumake", "install_path") + "/bin");
 
     if (input.build_cpu == 'aarch64') {
-	boot_jdk = {
+        boot_jdk = {
             organization: common.organization,
             ext: "tar.gz",
             module: "jdk-linux_aarch64",
-            revision: "13+1.0",
+            revision: "14+1.0",
             configure_args: "--with-boot-jdk=" + common.boot_jdk_home,
             environment_path: common.boot_jdk_home + "/bin"
-	}
+        }
     } else {
-	boot_jdk = {
+        boot_jdk = {
             server: "jpg",
             product: "jdk",
             version: common.boot_jdk_version,
@@ -1023,7 +1036,12 @@ var getJibProfilesDependencies = function (input, common) {
                 + boot_jdk_platform + "_bin" + boot_jdk_ext,
             configure_args: "--with-boot-jdk=" + common.boot_jdk_home,
             environment_path: common.boot_jdk_home + "/bin"
-	}
+        }
+    }
+    if (input.build_cpu == 'sparcv9') {
+        boot_jdk.file = "bundles/openjdk/GPL/" + boot_jdk_platform
+            + "/openjdk-" + common.boot_jdk_version + "_"
+            + boot_jdk_platform + "_bin" + boot_jdk_ext;
     }
 
     var dependencies = {
@@ -1060,7 +1078,8 @@ var getJibProfilesDependencies = function (input, common) {
             checksum_file: "MD5_VALUES",
             file: "bundles/jtreg_bin-5.0.zip",
             environment_name: "JT_HOME",
-            environment_path: input.get("jtreg", "install_path") + "/jtreg/bin"
+            environment_path: input.get("jtreg", "home_path") + "/bin",
+            configure_args: "--with-jtreg=" + input.get("jtreg", "home_path"),
         },
 
         jmh: {
@@ -1125,7 +1144,7 @@ var getJibProfilesDependencies = function (input, common) {
         pandoc: {
             organization: common.organization,
             ext: "tar.gz",
-            revision: "2.3.1+1.0",
+            revision: (input.build_cpu == 'aarch64' ? "2.5+1.0" : "2.3.1+1.0"),
             module: "pandoc-" + input.build_platform,
             configure_args: "PANDOC=" + input.get("pandoc", "install_path") + "/pandoc/pandoc",
             environment_path: input.get("pandoc", "install_path") + "/pandoc"

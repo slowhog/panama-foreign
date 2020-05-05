@@ -25,24 +25,17 @@
 package jdk.internal.foreign.abi.x64.sysv;
 
 import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemoryHandles;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
 import jdk.internal.foreign.MemoryAddressImpl;
-import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.*;
 import jdk.internal.foreign.abi.x64.ArgumentClassImpl;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
-import java.lang.invoke.VarHandle;
 import java.util.*;
 
-import static sun.security.action.GetPropertyAction.privilegedGetProperty;
 import static jdk.incubator.foreign.MemoryLayouts.SysV.*;
 
 /**
@@ -55,7 +48,6 @@ public class SysVx64ABI implements SystemABI {
     public static final int MAX_VECTOR_RETURN_REGISTERS = 2;
     public static final int MAX_X87_RETURN_REGISTERS = 2;
 
-    private static final String fastPath = privilegedGetProperty("jdk.internal.foreign.NativeInvoker.FASTPATH");
     private static SysVx64ABI instance;
 
     public static SysVx64ABI getInstance() {
@@ -67,7 +59,7 @@ public class SysVx64ABI implements SystemABI {
 
     @Override
     public MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
-        return CallArranger.arrangeDowncall(MemoryAddressImpl.addressof(symbol), type, function);
+        return CallArranger.arrangeDowncall(symbol, type, function);
     }
 
     @Override

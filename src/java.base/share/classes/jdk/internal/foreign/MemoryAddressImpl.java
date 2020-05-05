@@ -31,7 +31,6 @@ import jdk.internal.misc.Unsafe;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemorySegment;
 
-import java.lang.ref.Reference;
 import java.util.Objects;
 
 /**
@@ -42,14 +41,15 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
 
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
 
-    private final MemorySegmentImpl segment;
+    private final AbstractMemorySegmentImpl segment;
     private final long offset;
 
-    public MemoryAddressImpl(MemorySegmentImpl segment) {
-        this(segment, 0);
+    public MemoryAddressImpl(long offset) {
+        this.segment = AbstractMemorySegmentImpl.NOTHING;
+        this.offset = offset;
     }
 
-    public MemoryAddressImpl(MemorySegmentImpl segment, long offset) {
+    public MemoryAddressImpl(AbstractMemorySegmentImpl segment, long offset) {
         this.segment = Objects.requireNonNull(segment);
         this.offset = offset;
     }
@@ -68,13 +68,25 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
     // MemoryAddress methods
 
     @Override
-    public long offset() {
+    public long segmentOffset() {
+        if (segment() == null) {
+            throw new UnsupportedOperationException("Address does not have a segment");
+        }
         return offset;
     }
 
     @Override
+    public long toRawLongValue() {
+        if (unsafeGetBase() != null) {
+            throw new UnsupportedOperationException("Not a native address");
+        }
+        return unsafeGetOffset();
+    }
+
+    @Override
     public MemorySegment segment() {
-        return segment;
+        return segment != AbstractMemorySegmentImpl.NOTHING ?
+                segment : null;
     }
 
     @Override
@@ -84,11 +96,11 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
 
     @Override
     public MemoryAddress rebase(MemorySegment segment) {
-        MemorySegmentImpl segmentImpl = (MemorySegmentImpl)segment;
-        if (segmentImpl.base != this.segment.base) {
+        AbstractMemorySegmentImpl segmentImpl = (AbstractMemorySegmentImpl)segment;
+        if (segmentImpl.base() != this.segment.base()) {
             throw new IllegalArgumentException("Invalid rebase target: " + segment);
         }
-        return new MemoryAddressImpl((MemorySegmentImpl)segment,
+        return new MemoryAddressImpl((AbstractMemorySegmentImpl)segment,
                 unsafeGetOffset() - ((MemoryAddressImpl)segment.baseAddress()).unsafeGetOffset());
     }
 
@@ -99,7 +111,7 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
     }
 
     public long unsafeGetOffset() {
-        return segment.min + offset;
+        return segment.min() + offset;
     }
 
     public Object unsafeGetBase() {
@@ -110,7 +122,6 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
     public boolean isSmall() {
         return segment.isSmall();
     }
-
     // Object methods
 
     @Override
@@ -134,21 +145,12 @@ public final class MemoryAddressImpl implements MemoryAddress, MemoryAddressProx
         return "MemoryAddress{ region: " + segment + " offset=0x" + Long.toHexString(offset) + " }";
     }
 
-    // helper methods
-
-    public static long addressof(MemoryAddress address) {
-        MemoryAddressImpl addressImpl = (MemoryAddressImpl)address;
-        if (addressImpl.unsafeGetBase() != null) {
-            throw new IllegalStateException("Heap address!");
-        }
-        return addressImpl.unsafeGetOffset();
-    }
-
     public static MemoryAddress ofLongUnchecked(long value) {
         return ofLongUnchecked(value, Long.MAX_VALUE);
     }
 
     public static MemoryAddress ofLongUnchecked(long value, long byteSize) {
-        return new MemoryAddressImpl((MemorySegmentImpl)Utils.makeNativeSegmentUnchecked(value, byteSize), 0);
+        return NativeMemorySegmentImpl.makeNativeSegmentUnchecked(
+                MemoryAddress.ofLong(value), byteSize, null, null, null).baseAddress();
     }
 }

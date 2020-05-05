@@ -37,7 +37,6 @@ import java.lang.invoke.MethodType;
 import java.util.Objects;
 import java.util.Optional;
 
-import static sun.security.action.GetPropertyAction.privilegedGetProperty;
 import static jdk.incubator.foreign.MemoryLayouts.WinABI.*;
 
 /**
@@ -52,7 +51,7 @@ public class Windowsx64ABI implements SystemABI {
     public static final int MAX_REGISTER_ARGUMENTS = 4;
     public static final int MAX_REGISTER_RETURNS = 1;
 
-    public static final String VARARGS_ANNOTATION_NAME = "abi/windows/varargs";
+    public static final String VARARGS_ATTRIBUTE_NAME = "abi/windows/varargs";
 
     private static Windowsx64ABI instance;
 
@@ -65,7 +64,7 @@ public class Windowsx64ABI implements SystemABI {
 
     @Override
     public MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
-        return CallArranger.arrangeDowncall(MemoryAddressImpl.addressof(symbol), type, function);
+        return CallArranger.arrangeDowncall(symbol, type, function);
     }
 
     @Override
@@ -95,6 +94,7 @@ public class Windowsx64ABI implements SystemABI {
             case UNSIGNED_LONG_LONG -> Optional.of(C_ULONGLONG);
             case FLOAT -> Optional.of(C_FLOAT);
             case DOUBLE -> Optional.of(C_DOUBLE);
+            case LONG_DOUBLE -> Optional.of(C_LONGDOUBLE);
             case POINTER -> Optional.of(C_POINTER);
             default -> Optional.empty();
         };

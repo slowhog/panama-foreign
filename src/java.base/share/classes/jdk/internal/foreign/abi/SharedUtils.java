@@ -27,12 +27,17 @@ package jdk.internal.foreign.abi;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.SystemABI;
+import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.Utils;
 
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.SequenceLayout;
 import jdk.incubator.foreign.ValueLayout;
+import jdk.internal.foreign.abi.aarch64.AArch64ABI;
+import jdk.internal.foreign.abi.x64.sysv.SysVx64ABI;
+import jdk.internal.foreign.abi.x64.windows.Windowsx64ABI;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
@@ -77,10 +82,6 @@ public class SharedUtils {
         return ((addr - 1) | (alignment - 1)) + 1;
     }
 
-    public static long alignDown(long addr, long alignment) {
-        return addr & ~(alignment - 1);
-    }
-
     /**
      * The alignment requirement for a given type
      * @param isVar indicate if the type is a standalone variable. This change how
@@ -94,7 +95,7 @@ public class SharedUtils {
             return alignmentOfArray((SequenceLayout) t, isVar);
         } else if (t instanceof GroupLayout) {
             return alignmentOfContainer((GroupLayout) t);
-        } else if (Utils.isPadding(t)) {
+        } else if (t.isPadding()) {
             return 1;
         } else {
             throw new IllegalArgumentException("Invalid type: " + t);
@@ -106,7 +107,7 @@ public class SharedUtils {
     }
 
     private static long alignmentOfArray(SequenceLayout ar, boolean isVar) {
-        if (ar.elementCount().getAsLong() == 0) {
+        if (ar.elementCount().orElseThrow() == 0) {
             // VLA or incomplete
             return 16;
         } else if ((ar.byteSize()) >= 16 && isVar) {
@@ -174,7 +175,9 @@ public class SharedUtils {
     }
 
     private static MemoryAddress bufferCopy(MemoryAddress dest, MemorySegment buffer) {
-        MemoryAddress.copy(buffer.baseAddress(), Utils.resizeNativeAddress(dest, buffer.byteSize()), buffer.byteSize());
+        MemoryAddress.copy(buffer.baseAddress(),
+                MemoryAddressImpl.ofLongUnchecked(dest.toRawLongValue(), buffer.byteSize()),
+                buffer.byteSize());
         return dest;
     }
 
@@ -197,5 +200,20 @@ public class SharedUtils {
         }
 
         throw new IllegalArgumentException("Size too large: " + size);
+    }
+
+    public static SystemABI getSystemABI() {
+        String arch = System.getProperty("os.arch");
+        String os = System.getProperty("os.name");
+        if (arch.equals("amd64") || arch.equals("x86_64")) {
+            if (os.startsWith("Windows")) {
+                return Windowsx64ABI.getInstance();
+            } else {
+                return SysVx64ABI.getInstance();
+            }
+        } else if (arch.equals("aarch64")) {
+            return AArch64ABI.getInstance();
+        }
+        throw new UnsupportedOperationException("Unsupported os or arch: " + os + ", " + arch);
     }
 }
