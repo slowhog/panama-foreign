@@ -21,64 +21,34 @@
  * questions.
  */
 
-struct Point;
-struct Point;
 
-int i;
-int i;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.NativeAllocationScope;
 
-void func(int);
-void func(int abc);
-void func(int xyz);
-void func2(int);
-void func2(int abc);
-void func2(int xyz);
+import org.testng.annotations.Test;
+import test.jextract.test8244412.Clong;
+import static org.testng.Assert.assertEquals;
+import static org.testng.Assert.assertTrue;
+import static test.jextract.test8244412.test8244412_h.*;
 
-typedef int INT;
-void func(INT);
-void func(INT abc);
-void func(INT xyz);
-void func2(INT);
-void func2(INT abc);
-void func2(INT xyz);
-
-typedef int* INTPTR;
-void func3(INTPTR x);
-void func3(int* x);
-void func4(INTPTR x);
-void func4(int* x);
-
-typedef int Integer;
-void func(Integer x);
-void func5(int x);
-void func5(Integer x);
-void func5(INT x);
-
-struct Point;
-struct Point {
-   int i;
-   int j;
-};
-
-typedef struct Point POINT;
-typedef struct Point Point_t;
-
-double distance(struct Point p);
-double distance(POINT p);
-
-typedef struct Point3D {
-    int i;
-    int j;
-    int k;
-} Point3D_t;
-struct Point3D;
-
-enum RGBColor;
-enum RGBColor {
-   R, G, B
-};
-
-enum CMYColor {
-  C, M, Y
-};
-enum CMYColor;
+/*
+ * @test
+ * @library ..
+ * @modules jdk.incubator.jextract
+ * @bug 8244412
+ * @summary jextract should generate static utils class for primitive typedefs
+ * @run driver JtregJextract -t test.jextract.test8244412 -- test8244412.h
+ * @run testng/othervm -Dforeign.restricted=permit LibTest8244412Test
+ */
+public class LibTest8244412Test {
+    @Test
+    public void test() {
+        try (var scope = NativeAllocationScope.unboundedScope()) {
+            var addr = Cmysize_t.allocate(0L, scope);
+            assertEquals(Cmysize_t.get(addr), 0L);
+            Cmysize_t.set(addr, 13455566L);
+            assertEquals(Cmysize_t.get(addr), 13455566L);
+            assertTrue(Cmysize_t.sizeof() == Clong.sizeof());
+        }
+    }
+}

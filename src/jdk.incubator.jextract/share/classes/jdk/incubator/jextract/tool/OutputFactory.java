@@ -70,6 +70,20 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
     private final String pkgName;
     private StructBuilder structBuilder;
     private List<String> structSources = new ArrayList<>();
+    private Set<String> nestedClassNames = new HashSet<>();
+    private int nestedClassNameCount = 0;
+    /*
+     * We may have case-insensitive name collision! A C program may have
+     * defined structs/unions/typedefs with the names FooS, fooS, FoOs, fOOs.
+     * Because we map structs/unions/typedefs to nested classes of header classes,
+     * such a case-insensitive name collision is problematic. This is because in
+     * a case-insensitive file system javac will overwrite classes for
+     * Header$CFooS, Header$CfooS, Header$CFoOs and so on! We solve this by
+     * generating unique case-insensitive names for nested classes.
+     */
+    private String uniqueNestedClassName(String name) {
+        return nestedClassNames.add(name.toLowerCase())? name : (name + "$" + nestedClassNameCount++);
+    }
 
     // have we seen this Variable earlier?
     protected boolean variableSeen(Declaration.Variable tree) {
@@ -223,7 +237,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             return null;
         }
         String name = d.name();
-        if (name.isEmpty() && parent != null) {
+        if (parent instanceof Declaration.Typedef) {
             name = parent.name();
         }
 
@@ -234,10 +248,11 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                 case STRUCT:
                 case UNION: {
                     structClass = true;
-                    this.structBuilder = new StructBuilder("C" + name, pkgName, constantHelper);
+                    String structClassName = uniqueNestedClassName("C" + name);
+                    this.structBuilder = new StructBuilder(structClassName, pkgName, constantHelper);
                     structBuilder.incrAlign();
                     structBuilder.classBegin();
-                    structBuilder.addLayoutGetter("C" + name, d.layout().get());
+                    structBuilder.addLayoutGetter(structClassName, d.layout().get());
                     break;
                 }
             }
@@ -309,11 +324,11 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         Type type = tree.type();
         if (type instanceof Type.Declared) {
             Declaration.Scoped s = ((Type.Declared) type).tree();
-            // only generate unnamed for now
-            // skip typedef with different name
-            if (s.name().isEmpty()) {
+            if (!s.name().equals(tree.name())) {
                 return visitScoped(s, tree);
             }
+        } else if (type instanceof Type.Primitive) {
+             builder.emitPrimitiveTypedef((Type.Primitive)type, uniqueNestedClassName("C" + tree.name()));
         }
         return null;
     }
