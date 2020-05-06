@@ -65,9 +65,14 @@ public class AnonymousRegistry {
         }
     }
 
+    private String mustHaveName(Declaration d) {
+        return getName(d).orElseThrow(() -> new IllegalStateException(
+            "Expected a name for declaration " + d));
+    }
+
     public String getName(Declaration d, Declaration parent) {
         if (parent == null) {
-            return getName(d).orElseThrow();
+            return mustHaveName(d);
         }
         String givenName = getName(d, () -> {
             String name = nameRegistry.get(d);
@@ -96,6 +101,7 @@ public class AnonymousRegistry {
                     case STRUCT -> "struct";
                     case UNION -> "union";
                     case ENUM -> "enum";
+                    case BITFIELDS -> "bits";
                     default -> throw new IllegalArgumentException("Unexpect anomymous scope kind " + s.kind());
                 });
             } else if (decl instanceof Declaration.Typedef) {
@@ -123,19 +129,19 @@ public class AnonymousRegistry {
         @Override
         public String visitVariable(Declaration.Variable parent, Declaration children) {
             return switch (parent.kind()) {
-                case GLOBAL -> getName(parent).orElseThrow();
+                case GLOBAL -> mustHaveName(parent);
                 default -> visitDeclaration(parent, children);
             };
         }
 
         @Override
         public String visitTypedef(Declaration.Typedef parent, Declaration children) {
-            return getName(parent).orElseThrow();
+            return mustHaveName(parent);
         }
 
         @Override
         public String visitDeclaration(Declaration parent, Declaration children) {
-            return getName(parent).orElseThrow() + getSuffix(children);
+            return mustHaveName(parent) + getSuffix(children);
         }
     };
 }

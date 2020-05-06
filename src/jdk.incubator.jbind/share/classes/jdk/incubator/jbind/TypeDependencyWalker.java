@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.HashSet;
 import java.util.Optional;
 import jdk.incubator.jextract.Declaration;
+import jdk.incubator.jextract.Position;
 import jdk.incubator.jextract.Type;
 
 public class TypeDependencyWalker {
@@ -48,7 +49,7 @@ public class TypeDependencyWalker {
 
     public static void walkDeclaration(Declaration decl, Declaration.Visitor<Boolean, Declaration> handler) {
         TypeDependencyWalker walker = new TypeDependencyWalker(handler);
-        decl.accept(walker.declWalker, null);
+        decl.accept(walker.declWalker, Declaration.toplevel(Position.NO_POSITION, decl));
     }
 
     private final Type.Visitor<Void, Declaration> typeWalker = new Type.Visitor<Void, Declaration>() {
