@@ -96,7 +96,7 @@ class JavaSourceBuilder {
     }
 
     protected void addImportSection() {
-        sb.append("import com.oracle.jbind.core.*;\n");
+        sb.append("import jdk.incubator.jbind.core.*;\n");
         sb.append("import java.lang.invoke.MethodHandle;\n");
         sb.append("import java.lang.invoke.VarHandle;\n");
         sb.append("import jdk.incubator.foreign.*;\n");
