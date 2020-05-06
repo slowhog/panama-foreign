@@ -119,7 +119,7 @@ public class TypeDependencyWalker {
                 Type.Function fnType = fn.type();
                 fnType.returnType().accept(typeWalker, fn);
                 for (Declaration.Variable arg: fn.parameters()) {
-                    arg.accept(declWalker, arg);
+                    arg.accept(declWalker, fn);
                 }
             }
             return null;

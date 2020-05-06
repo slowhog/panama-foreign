@@ -85,6 +85,10 @@ comparator compareBy(quantifyShape calculator);
 
 long area(shape_t *shape);
 
+// Function prototype with anonymous argument
+int abs(int);
+void atexit(void(*)(void));
+
 extern comparator compareByArea; // = compareBy(area);
 
 #endif // __ANONYMOUS_DECLARATION__

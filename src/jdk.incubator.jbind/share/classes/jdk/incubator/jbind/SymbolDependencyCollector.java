@@ -78,7 +78,7 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
             return false;
         }
         if (decl.name().isEmpty()) {
-            // Anonymous typedef must be injected, give it the new name
+            // Anonymous typedef must be injected by us, give it the new name
             String name = registry.getName(decl, parent);
             dependencies.add(Declaration.typedef(decl.pos(), name, decl.type()));
         } else {
@@ -89,7 +89,10 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
 
     @Override
     public Boolean visitDeclaration(Declaration decl, Declaration parent) {
-        return ! dependencies.contains(decl);
+        if (dependencies.contains(decl)) return false;
+        // Ensure we gave any anonymous declaration a name
+        registry.getName(decl, parent);
+        return true;
     }
 
     private SymbolDependencyCollector(AnonymousRegistry registry) {

@@ -67,7 +67,7 @@ public class AnonymousRegistry {
 
     private String mustHaveName(Declaration d) {
         return getName(d).orElseThrow(() -> new IllegalStateException(
-            "Expected a name for declaration " + d));
+            "Expected a name for declaration " + d.pos().toString()));
     }
 
     public String getName(Declaration d, Declaration parent) {
@@ -108,6 +108,12 @@ public class AnonymousRegistry {
                 Declaration.Typedef fn = (Declaration.Typedef) decl;
                 assert (fn.type() instanceof Type.Function);
                 sb.append("fn");
+            } else if (decl instanceof Declaration.Variable) {
+                Declaration.Variable v = (Declaration.Variable) decl;
+                sb.append(switch (v.kind()) {
+                    case PARAMETER -> "arg";
+                    default -> throw new IllegalArgumentException("Unexpect anomymous variable kind " + v.kind());
+                });
             } else {
                 throw new IllegalArgumentException("Unexpected anonymous declaration " + decl);
             }
