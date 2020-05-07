@@ -179,6 +179,13 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         if (headers.isIncluded(pos.path())) {
             return true;
         }
+        if (decl instanceof Declaration.Scoped) {
+            Declaration.Scoped s = (Declaration.Scoped) decl;
+            return (s.kind() == Declaration.Scoped.Kind.ENUM);
+        }
+        if (decl instanceof Declaration.Constant) {
+            return true;
+        }
         return false;
     }
 
@@ -203,17 +210,22 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 .forEach(d -> d.accept(this, ctx));
 
         List<Declaration> candidates = new ArrayList<>();
-        candidates.addAll(uniqConstants.members());
         candidates.addAll(uniqTypes.members());
         candidates.addAll(uniqVariables.members());
         candidates.addAll(uniqFunctions.members());
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION,
                 candidates.toArray(Declaration[]::new));
 
-        return Arrays.asList(
-                StaticWrapperSourceFactory.generate(
-                    root, ctx.getMainClsName(), ctx.targetPackageName(),
-                    anonymousNames, ctx.getLibs(), ctx.getLibPaths()));
+        List<JavaFileObject> files = new ArrayList<>();
+        fileMembers.entrySet().stream()
+                .filter(e -> headers.filter(e.getKey()))
+                .map(e -> generateHeader(e.getKey(), e.getValue()))
+                .forEach(files::addAll);
+        files.addAll(Arrays.asList(
+            StaticWrapperSourceFactory.generate(
+                root, ctx.getMainClsName(), ctx.targetPackageName(),
+                anonymousNames, ctx.getLibs(), ctx.getLibPaths())));
+        return files;
     }
 
     private List<JavaFileObject> generateAll(Declaration.Scoped decl) {
