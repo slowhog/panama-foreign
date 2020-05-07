@@ -61,21 +61,11 @@ public class HandleSourceFactory extends  AbstractCodeFactory implements Declara
         //generate all decls
         decl.members().forEach(this::generateDecl);
 
-        //generate functional interfaces
-        generateFunctionalInterfaces(decl);
-
         builder.classEnd();
         String src = builder.build();
         return new JavaFileObject[] {
                 fileFromString(pkgName, clsName, src),
         };
-    }
-
-    protected void generateFunctionalInterfaces(Declaration.Scoped decl) {
-        //generate functional interfaces
-        Set<FunctionDescriptor> functionalInterfaces = new HashSet<>();
-        new FunctionalInterfaceScanner(functionalInterfaces).scan(decl);
-        functionalInterfaces.forEach(builder::addUpcallFactory);
     }
 
     private void generateDecl(Declaration tree) {
@@ -121,6 +111,16 @@ public class HandleSourceFactory extends  AbstractCodeFactory implements Declara
             d.members().forEach(fieldTree -> fieldTree.accept(this, d.name().isEmpty() ? parent : d));
         }
         return null;
+    }
+
+    @Override
+    public Void visitTypedef(Declaration.Typedef tree, Declaration parent) {
+        Type type = tree.type();
+        if (type instanceof Type.Declared) {
+            return visitScoped(((Type.Declared) type).tree(), tree);
+        } else {
+            return null;
+        }
     }
 
     private boolean isRecord(Declaration declaration) {
