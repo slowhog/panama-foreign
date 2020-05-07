@@ -27,8 +27,10 @@ package jdk.incubator.jbind;
 
 import java.util.Set;
 import java.lang.invoke.TypeDescriptor;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Optional;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Type;
@@ -101,9 +103,17 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
         this.dependencies = new LinkedHashSet<>();
     }
 
-    public static Set<Declaration> collect(Declaration decl, AnonymousRegistry registry) {
+    public static List<Declaration> collect(Declaration decl, AnonymousRegistry registry) {
         SymbolDependencyCollector instance = new SymbolDependencyCollector(registry);
         TypeDependencyWalker.walkDeclaration(decl, instance);
-        return Collections.unmodifiableSet(instance.dependencies);
+        List<Declaration> decls = new ArrayList<>(instance.dependencies.size() + 1);
+        decls.addAll(instance.dependencies);
+        decls.add(decl);
+        return decls;
+    }
+
+    public static List<Declaration> collect(Declaration decl) {
+        AnonymousRegistry registry = new AnonymousRegistry();
+        return collect(decl, registry);
     }
 }

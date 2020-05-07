@@ -179,7 +179,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         if (headers.isIncluded(pos.path())) {
             return true;
         }
-        return true;
+        return false;
     }
 
     List<JavaFileObject> generateLib(Predicate<Declaration> filter, AnonymousRegistry registry) {

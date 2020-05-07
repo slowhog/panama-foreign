@@ -24,7 +24,7 @@
 /*
  * @test
  * @build JextractApiTestBase
- * @modules jdk.incubator.jextract/jdk.internal.jextract.impl
+ * @modules jdk.incubator.jbind/jdk.incubator.jbind jdk.incubator.jextract/jdk.internal.jextract.impl
  * @run testng/othervm -ea TestDependency
  */
 
@@ -37,7 +37,7 @@ import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Position;
 import jdk.incubator.jextract.Type;
-import jdk.internal.jextract.impl.SymbolDependencyCollector;
+import jdk.incubator.jbind.SymbolDependencyCollector;
 
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;

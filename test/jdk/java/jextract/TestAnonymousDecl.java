@@ -28,7 +28,7 @@
  * @run testng/othervm -ea TestAnonymousDecl
  */
 
-import java.util.Set;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Consumer;
 import jdk.incubator.jbind.AnonymousRegistry;
@@ -71,7 +71,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
     }
 
     @SuppressWarnings("unchecked")
-    public static <D extends Declaration> D findDecl(Set<Declaration> set, String name, Class<D> declType) {
+    public static <D extends Declaration> D findDecl(List<Declaration> set, String name, Class<D> declType) {
         Optional<Declaration> d = set.stream().filter(byNameAndType(name, declType)).findAny();
         if (d.isEmpty()) {
             fail("No declaration with name " + name + " found");
@@ -91,14 +91,14 @@ public class TestAnonymousDecl extends JextractApiTestBase {
         return ((Type.Declared) type).tree();
     }
 
-    private void validatePointT(Set<Declaration> deps) {
+    private void validatePointT(List<Declaration> deps) {
         Declaration.Scoped point = checkStruct(root, "point", "x", "y");
         assertEquals(findDecl(deps, "point", Declaration.Scoped.class), point);
         Declaration.Typedef point_t = findDecl(deps, "point_t", Declaration.Typedef.class);
         assertTypeEquals(point_t.type(), Type.declared(point));
     }
 
-    private void validateCircleT(Set<Declaration> deps) {
+    private void validateCircleT(List<Declaration> deps) {
         Declaration.Typedef circle_t = findDecl(deps, "circle_t", Declaration.Typedef.class);
         Declaration.Scoped s = assertDeclaredTypedef(circle_t);
         checkRecord(s, "", Declaration.Scoped.Kind.STRUCT, "center", "radius");
@@ -107,7 +107,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
         checkStructType(center.type(), "", "x", "y");
     }
 
-    private void validateShapeT(Set<Declaration> deps) {
+    private void validateShapeT(List<Declaration> deps) {
         Declaration.Typedef shape_t = findDecl(deps, "shape_t", Declaration.Typedef.class);
         Declaration.Scoped struct = assertDeclaredTypedef(shape_t);
         checkRecord(struct, "", Declaration.Scoped.Kind.STRUCT, "kind", "line", "circle", "polygon");
@@ -120,10 +120,10 @@ public class TestAnonymousDecl extends JextractApiTestBase {
     public void testDependencyVar() {
         AnonymousRegistry registry = new AnonymousRegistry();
         Declaration.Variable canvas = findDecl(root, "canvas_size", Declaration.Variable.class);
-        Set<Declaration> deps = SymbolDependencyCollector.collect(canvas, registry);
+        List<Declaration> deps = SymbolDependencyCollector.collect(canvas, registry);
         System.out.println("Dependency of canvas_size:");
         deps.forEach(d -> System.out.println(brief(registry, d)));
-        assertEquals(deps.size(), 1);
+        assertEquals(deps.size(), 2);
         Declaration.Typedef v = findDecl(deps, "canvas_size", Declaration.Typedef.class);
         assertEquals(v.pos(), canvas.pos());
         checkStructType(v.type(), "", "width", "height");
@@ -133,7 +133,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
     public void testDependencyFn() {
         AnonymousRegistry registry = new AnonymousRegistry();
         Declaration.Function makeCircle = findDecl(root, "makeCircle", Declaration.Function.class);
-        Set<Declaration> deps = SymbolDependencyCollector.collect(makeCircle, registry);
+        List<Declaration> deps = SymbolDependencyCollector.collect(makeCircle, registry);
         System.out.println("Dependency of makeCircle:");
         deps.forEach(d -> System.out.println(brief(registry, d)));
         validateShapeT(deps);
@@ -146,7 +146,7 @@ public class TestAnonymousDecl extends JextractApiTestBase {
         Declaration.Scoped shape = assertDeclaredTypedef(shape_t);
         assertEquals(shape.kind(), Declaration.Scoped.Kind.STRUCT);
         final AnonymousRegistry regShape = new AnonymousRegistry();
-        Set<Declaration> deps = SymbolDependencyCollector.collect(shape_t, regShape);
+        List<Declaration> deps = SymbolDependencyCollector.collect(shape_t, regShape);
         System.out.println("Dependency of shape:");
         deps.forEach(d -> System.out.println(brief(regShape, d)));
         validateShapeT(deps);
