@@ -31,6 +31,7 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
+import jdk.internal.foreign.abi.SharedUtils;
 
 import static jdk.incubator.foreign.MemoryLayouts.C_DOUBLE;
 import static jdk.incubator.foreign.MemoryLayouts.C_LONG;
@@ -93,7 +94,7 @@ public class VarargsInvoker {
         FunctionDescriptor f = (function.returnLayout().isEmpty()) ?
                 FunctionDescriptor.ofVoid(argLayouts) :
                 FunctionDescriptor.of(function.returnLayout().get(), argLayouts);
-        MethodHandle mh = SystemABI.getSystemABI().downcallHandle(symbol, mt, f);
+        MethodHandle mh = SharedUtils.getSystemABI().downcallHandle(symbol, mt, f);
         // flatten argument list so that it can be passed to an asSpreader MH
         Object[] allArgs = new Object[nNamedArgs + unnamedArgs.length];
         System.arraycopy(args, 0, allArgs, 0, nNamedArgs);

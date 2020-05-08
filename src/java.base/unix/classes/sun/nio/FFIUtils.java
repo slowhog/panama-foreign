@@ -35,9 +35,9 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.unsafe.ForeignUnsafe;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.panama.LibC;
 import jdk.internal.vm.annotation.ForceInline;
 import sun.nio.ch.IOStatus;
@@ -128,7 +128,7 @@ public class FFIUtils {
             return MemoryAddress.ofLong((long) VH_POINTER.get(addr));
         }
         public static void writePointer(MemoryAddress addr, MemoryAddress value) {
-            VH_POINTER.set(addr, ForeignUnsafe.getUnsafeOffset(value));
+            VH_POINTER.set(addr, value.toRawLongValue());
         }
 
         public static byte readByte(MemoryAddress addr) {
@@ -152,8 +152,8 @@ public class FFIUtils {
 
     @ForceInline
     public static MemoryAddress resizePointer(MemoryAddress addr, long size) {
-        if (addr.segment().byteSize() == 0) {
-            return ForeignUnsafe.ofNativeUnchecked(addr, size).baseAddress();
+        if (addr.segment() == null) {
+            return MemoryAddressImpl.ofLongUnchecked(addr.toRawLongValue(), size);
         } else {
             return addr;
         }
@@ -166,11 +166,11 @@ public class FFIUtils {
 
     public static int errno() {
         return (int) MemoryHandles.varHandle(int.class, ByteOrder.nativeOrder())
-                .get(ForeignUnsafe.ofNativeUnchecked(LibC.__error(), C_INT.byteSize()).baseAddress());
+                .get(resizePointer(LibC.__error(), C_INT.byteSize()));
     }
     public static void setErrno(int value) {
         MemoryHandles.varHandle(int.class, ByteOrder.nativeOrder())
-                .set(ForeignUnsafe.ofNativeUnchecked(LibC.__error(), C_INT.byteSize()).baseAddress(), value);
+                .set(resizePointer(LibC.__error(), C_INT.byteSize()), value);
     }
 
     public static byte[] toByteArray(MemoryAddress cstr) {

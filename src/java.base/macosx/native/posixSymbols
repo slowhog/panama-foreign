@@ -1,3 +1,4 @@
+--exclude-headers .*stdbool.h$
 --include-symbols __error
 --include-symbols access
 --include-symbols chmod
@@ -14,6 +15,7 @@
 --include-symbols fdopendir
 --include-symbols feof
 --include-symbols ferror
+--include-symbols flock
 --include-symbols fopen
 --include-symbols fpathconf
 --include-symbols free
@@ -27,11 +29,12 @@
 --include-symbols getcwd
 --include-symbols getfsstat
 --include-symbols getgrgid_r
---include-symbols getgrnam_r,
+--include-symbols getgrnam_r
 --include-symbols getline
---include-symbols getpwnam_r,
+--include-symbols getpwnam_r
 --include-symbols getpwuid_r
 --include-symbols kevent
+--include-symbols kqueue
 --include-symbols lchown
 --include-symbols link
 --include-symbols lseek
@@ -40,6 +43,7 @@
 --include-symbols mkdir
 --include-symbols mknod
 --include-symbols open
+--include-symbols openat
 --include-symbols opendir
 --include-symbols pathconf
 --include-symbols poll

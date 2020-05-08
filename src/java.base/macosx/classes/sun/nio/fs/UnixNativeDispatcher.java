@@ -30,7 +30,6 @@ import java.util.function.Supplier;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.unsafe.ForeignUnsafe;
 import jdk.internal.panama.LibC;
 import jdk.internal.panama.unistd_h;
 import sun.nio.FFIUtils;
@@ -48,10 +47,12 @@ import static jdk.internal.panama.LibC.timespec;
 import static jdk.internal.panama.LibC.timeval;
 import static jdk.internal.panama.i386.limits_h.INT_MAX;
 import static jdk.internal.panama.stdio_h.EOF;
+import static jdk.internal.panama.sys.errno_h.EBADF;
 import static jdk.internal.panama.sys.errno_h.EINTR;
 import static jdk.internal.panama.sys.errno_h.ENAMETOOLONG;
 import static jdk.internal.panama.sys.errno_h.ENOENT;
 import static jdk.internal.panama.sys.errno_h.EOVERFLOW;
+import static jdk.internal.panama.sys.errno_h.EPERM;
 import static jdk.internal.panama.sys.errno_h.ERANGE;
 import static jdk.internal.panama.sys.errno_h.ESRCH;
 import static jdk.internal.panama.sys.unistd_h.F_OK;
@@ -180,7 +181,7 @@ class UnixNativeDispatcher {
                     checkErrno(EINTR);
                 }
             } while (FFIUtils.isNull(file));
-            return ForeignUnsafe.getUnsafeOffset(file);
+            return file.toRawLongValue();
         }
     }
 
@@ -563,7 +564,7 @@ class UnixNativeDispatcher {
         try (Scope s = localScope()) {
             MemoryAddress dir = LibC.opendir(copyToNativeBytes(path, s));
             throwUnixExceptionIf(FFIUtils.isNull(dir));
-            return ForeignUnsafe.getUnsafeOffset(dir);
+            return dir.toRawLongValue();
         }
     }
 
@@ -573,7 +574,7 @@ class UnixNativeDispatcher {
     static long fdopendir(int dfd) throws UnixException {
         MemoryAddress dir = LibC.fdopendir(dfd);
         throwUnixExceptionIf(FFIUtils.isNull(dir));
-        return ForeignUnsafe.getUnsafeOffset(dir);
+        return dir.toRawLongValue();
     }
 
 
