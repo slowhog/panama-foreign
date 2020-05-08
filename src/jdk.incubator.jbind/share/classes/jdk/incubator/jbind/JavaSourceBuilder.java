@@ -257,10 +257,17 @@ class JavaSourceBuilder {
 
     protected void addVarHandle(String name, Class<?> type, Declaration parent, int dimensions) {
         String ty = type.getName();
+        boolean isAddr = ty.contains("MemoryAddress");
+        if (isAddr) {
+            ty = "long";
+        }
         indent();
         sb.append(PUB_MODS + "VarHandle " + getVarHandleName(name, parent) + " = \n");
         incrAlign();
         indent();
+        if (isAddr) {
+            sb.append("MemoryHandles.asAddressVarHandle(");
+        }
         sb.append(getLayoutName(parent == null ? name : parent.name()));
         sb.append(".varHandle(" + ty + ".class");
         if (parent != null) {
@@ -270,6 +277,9 @@ class JavaSourceBuilder {
             sb.append(", PathElement.sequenceElement()");
         }
         sb.append(")");
+        if (isAddr) {
+            sb.append(")");
+        }
         sb.append(";\n");
         decrAlign();
     }
