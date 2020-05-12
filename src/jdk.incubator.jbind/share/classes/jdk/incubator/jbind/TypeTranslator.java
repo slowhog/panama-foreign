@@ -27,19 +27,21 @@ package jdk.incubator.jbind;
 
 import java.lang.invoke.MethodType;
 import java.util.Map;
+
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
+import jdk.incubator.foreign.ValueLayout;
 import jdk.incubator.jextract.Type;
 
 public class TypeTranslator implements Type.Visitor<Class<?>, Void> {
     @Override
     public Class<?> visitPrimitive(Type.Primitive t, Void aVoid) {
-        if (t.layout().isEmpty()) {
+        if (t.kind().layout().isEmpty()) {
             return void.class;
         } else {
-            return layoutToClass(isFloatingPoint(t), t.layout().orElseThrow(UnsupportedOperationException::new));
+            return layoutToClass(isFloatingPoint(t), t.kind().layout().orElseThrow(UnsupportedOperationException::new));
         }
     }
 
@@ -56,27 +58,44 @@ public class TypeTranslator implements Type.Visitor<Class<?>, Void> {
         }
     }
 
-    static String typeToLayoutName(SystemABI.Type type) {
+    static String typeToLayoutName(ValueLayout vl) {
+        if (vl == SystemABI.C_BOOL) {
+            return "C_BOOL";
+        } else if (vl == SystemABI.C_CHAR) {
+            return "C_CHAR";
+        } else if (vl == SystemABI.C_SHORT) {
+            return "C_SHORT";
+        } else if (vl == SystemABI.C_INT) {
+            return "C_INT";
+        } else if (vl == SystemABI.C_LONG) {
+            return "C_LONG";
+        } else if (vl == SystemABI.C_LONGLONG) {
+            return "C_LONGLONG";
+        } else if (vl == SystemABI.C_FLOAT) {
+            return "C_FLOAT";
+        } else if (vl == SystemABI.C_DOUBLE) {
+            return "C_DOUBLE";
+        } else if (vl == SystemABI.C_LONGDOUBLE) {
+            return "C_LONGDOUBLE";
+        } else if (vl == SystemABI.C_POINTER) {
+            return "C_POINTER";
+        } else {
+            throw new RuntimeException("should not reach here, problematic layout: " + vl);
+        }
+    }
+
+    static String typeToLayoutName(Type.Primitive.Kind type) {
         return switch (type) {
-            case BOOL -> "C_BOOL";
-            case SIGNED_CHAR -> "C_SCHAR";
-            case UNSIGNED_CHAR -> "C_UCHAR";
-            case CHAR -> "C_CHAR";
-            case SHORT -> "C_SHORT";
-            case UNSIGNED_SHORT -> "C_USHORT";
-            case INT -> "C_INT";
-            case UNSIGNED_INT -> "C_UINT";
-            case LONG -> "C_LONG";
-            case UNSIGNED_LONG -> "C_ULONG";
-            case LONG_LONG -> "C_LONGLONG";
-            case UNSIGNED_LONG_LONG -> "C_ULONGLONG";
-            case FLOAT -> "C_FLOAT";
-            case DOUBLE -> "C_DOUBLE";
-            case LONG_DOUBLE -> "C_LONGDOUBLE";
-            case POINTER -> "C_POINTER";
-            default -> {
-                throw new RuntimeException("should not reach here: " + type);
-            }
+            case Bool -> "C_BOOL";
+            case Char -> "C_CHAR";
+            case Short -> "C_SHORT";
+            case Int -> "C_INT";
+            case Long -> "C_LONG";
+            case LongLong -> "C_LONGLONG";
+            case Float -> "C_FLOAT";
+            case Double -> "C_DOUBLE";
+            case LongDouble -> "C_LONGDOUBLE";
+            default -> throw new RuntimeException("should not reach here: " + type);
         };
     }
 

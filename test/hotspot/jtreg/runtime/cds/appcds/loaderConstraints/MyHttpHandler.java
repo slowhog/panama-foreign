@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2019, Arm Limited. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,20 +20,10 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.internal.foreign.abi.aarch64;
 
-enum ArgumentClassImpl {
-    POINTER, INTEGER, VECTOR, MEMORY;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 
-    public boolean isIntegral() {
-        return this == INTEGER || this == POINTER;
-    }
-
-    public boolean isPointer() {
-        return this == POINTER;
-    }
-
-    public boolean isIndirect() {
-        return this == MEMORY;
-    }
+public class MyHttpHandler implements HttpHandler {
+    public void handle(HttpExchange exchange) {}
 }

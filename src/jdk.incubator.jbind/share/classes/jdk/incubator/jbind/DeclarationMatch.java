@@ -138,7 +138,7 @@ public class DeclarationMatch implements Declaration.Visitor<Boolean, Declaratio
         public Boolean visitPrimitive(Type.Primitive t, Type other) {
             if (other instanceof Type.Primitive) {
                 Type.Primitive b = (Type.Primitive) other;
-                return t.layout().equals(b.layout());
+                return t.kind().equals(b.kind());
             }
             return false;
         }

@@ -32,9 +32,9 @@ import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
 
-import static jdk.incubator.foreign.MemoryLayouts.C_DOUBLE;
-import static jdk.incubator.foreign.MemoryLayouts.C_LONG;
-import static jdk.incubator.foreign.MemoryLayouts.C_POINTER;
+import static jdk.incubator.foreign.SystemABI.C_DOUBLE;
+import static jdk.incubator.foreign.SystemABI.C_LONG;
+import static jdk.incubator.foreign.SystemABI.C_POINTER;
 
 public class VarargsInvoker {
 

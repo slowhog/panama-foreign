@@ -38,7 +38,7 @@ import java.util.stream.IntStream;
 
 import org.testng.annotations.*;
 
-import static jdk.incubator.foreign.MemoryLayouts.*;
+import static jdk.incubator.foreign.SystemABI.*;
 import static org.testng.Assert.*;
 
 public class CallGeneratorHelper extends NativeTestHelper {
@@ -333,12 +333,7 @@ public class CallGeneratorHelper extends NativeTestHelper {
         if (arg instanceof MemoryAddress) {
             cleanup(((MemoryAddress)arg).segment());
         } else if (arg instanceof MemorySegment) {
-            try {
-                ((MemorySegment) arg).close();
-            } catch (UnsupportedOperationException e) {
-                assertTrue(e.getMessage().contains("Required access mode"));
-                // fine, NOTHING segment for upcall stubs
-            }
+            ((MemorySegment) arg).close();
         }
     }
 

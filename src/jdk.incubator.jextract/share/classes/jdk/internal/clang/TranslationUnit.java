@@ -29,6 +29,7 @@ package jdk.internal.clang;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.SystemABI;
 import jdk.internal.clang.libclang.Index_h;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.jextract.impl.LayoutUtils;
@@ -77,9 +78,9 @@ public class TranslationUnit implements AutoCloseable {
         }
     }
 
-    static long FILENAME_OFFSET = Index_h.CXUnsavedFile$LAYOUT.offset(MemoryLayout.PathElement.groupElement("Filename")) / 8;
-    static long CONTENTS_OFFSET = Index_h.CXUnsavedFile$LAYOUT.offset(MemoryLayout.PathElement.groupElement("Contents")) / 8;
-    static long LENGTH_OFFSET = Index_h.CXUnsavedFile$LAYOUT.offset(MemoryLayout.PathElement.groupElement("Length")) / 8;
+    static long FILENAME_OFFSET = Index_h.CXUnsavedFile$LAYOUT.bitOffset(MemoryLayout.PathElement.groupElement("Filename")) / 8;
+    static long CONTENTS_OFFSET = Index_h.CXUnsavedFile$LAYOUT.bitOffset(MemoryLayout.PathElement.groupElement("Contents")) / 8;
+    static long LENGTH_OFFSET = Index_h.CXUnsavedFile$LAYOUT.bitOffset(MemoryLayout.PathElement.groupElement("Length")) / 8;
 
     public void reparse(Index.UnsavedFile... inMemoryFiles) {
         try (AllocationScope scope = new AllocationScope()) {
@@ -119,8 +120,8 @@ public class TranslationUnit implements AutoCloseable {
     }
 
     public Tokens tokenize(SourceRange range) {
-        MemorySegment p = MemorySegment.allocateNative(LayoutUtils.C_POINTER);
-        MemorySegment pCnt = MemorySegment.allocateNative(LayoutUtils.C_INT);
+        MemorySegment p = MemorySegment.allocateNative(SystemABI.C_POINTER);
+        MemorySegment pCnt = MemorySegment.allocateNative(SystemABI.C_INT);
         Index_h.clang_tokenize(tu, range.range, p.baseAddress(), pCnt.baseAddress());
         Tokens rv = new Tokens(Utils.getPointer(p.baseAddress()), Utils.getInt(pCnt.baseAddress()));
         return rv;

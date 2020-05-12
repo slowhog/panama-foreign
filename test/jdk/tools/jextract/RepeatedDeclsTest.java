@@ -21,6 +21,8 @@
  * questions.
  */
 
+import jdk.incubator.foreign.SystemABI;
+import jdk.incubator.jextract.Type;
 import org.testng.annotations.Test;
 
 import java.nio.file.Path;
@@ -28,7 +30,6 @@ import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.SystemABI.Type;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 import static org.testng.Assert.assertTrue;
@@ -44,7 +45,7 @@ import static org.testng.Assert.assertTrue;
  */
 public class RepeatedDeclsTest extends JextractToolRunner {
     @Test
-    public void repeatedDecls() {
+    public void repeatedDecls() throws Throwable {
         Path repeatedDeclsOutput = getOutputFilePath("repeatedDeclsgen");
         Path repeatedDeclsH = getInputFilePath("repeatedDecls.h");
         run("-d", repeatedDeclsOutput.toString(), repeatedDeclsH.toString()).checkSuccess();
@@ -83,13 +84,21 @@ public class RepeatedDeclsTest extends JextractToolRunner {
             checkIntGetter(cls, "Y", 2);
 
             // check Point layout
-            checkPoint(loader.loadClass("repeatedDecls_h$CPoint"));
-            checkPoint(loader.loadClass("repeatedDecls_h$CPoint_t"));
-            checkPoint(loader.loadClass("repeatedDecls_h$CPOINT$0"));
+            Class<?> pointCls = loader.loadClass("repeatedDecls_h$CPoint");
+            checkPoint(pointCls);
+            Class<?> point_tCls = loader.loadClass("repeatedDecls_h$CPoint_t");
+            checkPoint(point_tCls);
+            assertTrue(pointCls.isAssignableFrom(point_tCls));
+            Class<?> point$0Cls = loader.loadClass("repeatedDecls_h$CPOINT$0");
+            checkPoint(point$0Cls);
+            assertTrue(pointCls.isAssignableFrom(point$0Cls));
 
             // check Point3D layout
-            checkPoint3D(loader.loadClass("repeatedDecls_h$CPoint3D"));
-            checkPoint3D(loader.loadClass("repeatedDecls_h$CPoint3D_t"));
+            Class<?> point3DCls = loader.loadClass("repeatedDecls_h$CPoint3D");
+            checkPoint3D(point3DCls);
+            Class<?> point3D_tCls = loader.loadClass("repeatedDecls_h$CPoint3D_t");
+            checkPoint3D(point3D_tCls);
+            assertTrue(point3DCls.isAssignableFrom(point3D_tCls));
         } finally {
             deleteDir(repeatedDeclsOutput);
         }
@@ -99,16 +108,16 @@ public class RepeatedDeclsTest extends JextractToolRunner {
         MemoryLayout pointLayout = findLayout(pointCls);
         assertNotNull(pointLayout);
         assertTrue(((GroupLayout)pointLayout).isStruct());
-        checkFieldABIType(pointLayout, "i",  Type.INT);
-        checkFieldABIType(pointLayout, "j",  Type.INT);
+        checkField(pointLayout, "i", SystemABI.C_INT);
+        checkField(pointLayout, "j", SystemABI.C_INT);
     }
 
     private void checkPoint3D(Class<?> point3DCls) {
         MemoryLayout point3DLayout = findLayout(point3DCls);
         assertNotNull(point3DLayout);
         assertTrue(((GroupLayout)point3DLayout).isStruct());
-        checkFieldABIType(point3DLayout, "i",  Type.INT);
-        checkFieldABIType(point3DLayout, "j",  Type.INT);
-        checkFieldABIType(point3DLayout, "k",  Type.INT);
+        checkField(point3DLayout, "i", SystemABI.C_INT);
+        checkField(point3DLayout, "j", SystemABI.C_INT);
+        checkField(point3DLayout, "k", SystemABI.C_INT);
     }
 }

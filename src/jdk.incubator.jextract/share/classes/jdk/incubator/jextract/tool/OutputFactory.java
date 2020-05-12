@@ -31,6 +31,7 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
+import jdk.incubator.jextract.Type.Primitive;
 import jdk.internal.foreign.abi.SharedUtils;
 
 import javax.tools.JavaFileObject;
@@ -69,6 +70,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
     private final String clsName;
     private final String pkgName;
     private StructBuilder structBuilder;
+    private Map<Declaration, String> structClassNames = new HashMap<>();
     private List<String> structSources = new ArrayList<>();
     private Set<String> nestedClassNames = new HashSet<>();
     private int nestedClassNameCount = 0;
@@ -83,6 +85,10 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
      */
     private String uniqueNestedClassName(String name) {
         return nestedClassNames.add(name.toLowerCase())? name : (name + "$" + nestedClassNameCount++);
+    }
+
+    private String structClassName(Declaration decl) {
+        return structClassNames.computeIfAbsent(decl, d -> uniqueNestedClassName("C" + d.name()));
     }
 
     // have we seen this Variable earlier?
@@ -112,15 +118,15 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
     }
 
     private static String getCLangConstantsHolder() {
-        String prefix = "jdk.incubator.foreign.MemoryLayouts.";
+        String prefix = "jdk.incubator.foreign.SystemABI.";
         String abi = SharedUtils.getSystemABI().name();
         switch (abi) {
             case SystemABI.ABI_SYSV:
                 return prefix + "SysV";
             case SystemABI.ABI_WINDOWS:
-                return prefix + "WinABI";
+                return prefix + "Win64";
             case SystemABI.ABI_AARCH64:
-                return prefix + "AArch64ABI";
+                return prefix + "AArch64";
             default:
                 throw new UnsupportedOperationException("Unsupported ABI: " + abi);
         }
@@ -182,14 +188,10 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
 
         List<JavaFileObject> files = new ArrayList<>();
         String pkgPrefix = pkgName.isEmpty()? "" : "package " + pkgName + ";\n";
-        for (SystemABI.Type type : SystemABI.Type.values()) {
-            // FIXME: ignore pointer and complex type
-            if (type == SystemABI.Type.POINTER || type == SystemABI.Type.COMPLEX_LONG_DOUBLE) {
-                continue;
-            }
-
-            String typeName = type.name().toLowerCase();
-            MemoryLayout layout = abi.layoutFor(type).get();
+        for (Primitive.Kind type : Primitive.Kind.values()) {
+            if (type.layout().isEmpty()) continue;
+            String typeName = type.typeName().toLowerCase().replace(' ', '_');
+            MemoryLayout layout = type.layout().get();
             String contents =  pkgPrefix +
                     lines.stream().collect(Collectors.joining("\n")).
                             replace("-X", typeName).
@@ -201,9 +203,9 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         return files;
     }
 
-    private static Class<?> classForType(SystemABI.Type type, MemoryLayout layout) {
+    private static Class<?> classForType(Primitive.Kind type, MemoryLayout layout) {
         boolean isFloat = switch(type) {
-            case FLOAT, DOUBLE, LONG_DOUBLE -> true;
+            case Float, Double, LongDouble -> true;
             default-> false;
         };
         return TypeTranslator.layoutToClass(isFloat, layout);
@@ -236,23 +238,19 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             //skip decl-only
             return null;
         }
-        String name = d.name();
-        if (parent instanceof Declaration.Typedef) {
-            name = parent.name();
-        }
-
         boolean structClass = false;
+        StructBuilder oldStructBuilder = this.structBuilder;
         if (!d.name().isEmpty() || !isRecord(parent)) {
             //only add explicit struct layout if the struct is not to be flattened inside another struct
             switch (d.kind()) {
                 case STRUCT:
                 case UNION: {
                     structClass = true;
-                    String structClassName = uniqueNestedClassName("C" + name);
-                    this.structBuilder = new StructBuilder(structClassName, pkgName, constantHelper);
+                    String className = structClassName(d.name().isEmpty() ? parent : d);
+                    this.structBuilder = new StructBuilder(className, pkgName, constantHelper);
                     structBuilder.incrAlign();
                     structBuilder.classBegin();
-                    structBuilder.addLayoutGetter(structClassName, d.layout().get());
+                    structBuilder.addLayoutGetter(className, d.layout().get());
                     break;
                 }
             }
@@ -261,7 +259,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         if (structClass) {
             this.structBuilder.classEnd();
             structSources.add(structBuilder.getSource());
-            this.structBuilder = null;
+            this.structBuilder = oldStructBuilder;
         }
         return null;
     }
@@ -325,7 +323,19 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         if (type instanceof Type.Declared) {
             Declaration.Scoped s = ((Type.Declared) type).tree();
             if (!s.name().equals(tree.name())) {
-                return visitScoped(s, tree);
+                switch (s.kind()) {
+                    case STRUCT:
+                    case UNION: {
+                        if (s.name().isEmpty()) {
+                            visitScoped(s, tree);
+                        } else {
+                            builder.emitTypedef(uniqueNestedClassName("C" + tree.name()), structClassName(s));
+                        }
+                    }
+                    break;
+                    default:
+                        visitScoped(s, tree);
+                }
             }
         } else if (type instanceof Type.Primitive) {
              builder.emitPrimitiveTypedef((Type.Primitive)type, uniqueNestedClassName("C" + tree.name()));

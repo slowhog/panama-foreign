@@ -25,16 +25,15 @@
 package jdk.internal.foreign.abi;
 
 import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.SequenceLayout;
 import jdk.incubator.foreign.SystemABI;
+import jdk.incubator.foreign.ValueLayout;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.Utils;
-
-import jdk.incubator.foreign.GroupLayout;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.SequenceLayout;
-import jdk.incubator.foreign.ValueLayout;
 import jdk.internal.foreign.abi.aarch64.AArch64ABI;
 import jdk.internal.foreign.abi.x64.sysv.SysVx64ABI;
 import jdk.internal.foreign.abi.x64.windows.Windowsx64ABI;
@@ -42,6 +41,7 @@ import jdk.internal.foreign.abi.x64.windows.Windowsx64ABI;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.util.List;
 import java.util.stream.IntStream;
 
 import static java.lang.invoke.MethodHandles.collectArguments;
@@ -59,7 +59,7 @@ public class SharedUtils {
     static {
         try {
             var lookup = MethodHandles.lookup();
-            MH_ALLOC_BUFFER = lookup.findStatic(MemorySegment.class, "allocateNative",
+            MH_ALLOC_BUFFER = lookup.findStatic(SharedUtils.class, "allocateNative",
                     methodType(MemorySegment.class, MemoryLayout.class));
             MH_BASEADDRESS = lookup.findVirtual(MemorySegment.class, "baseAddress",
                     methodType(MemoryAddress.class));
@@ -68,6 +68,11 @@ public class SharedUtils {
         } catch (ReflectiveOperationException e) {
             throw new BootstrapMethodError(e);
         }
+    }
+
+    // workaround for https://bugs.openjdk.java.net/browse/JDK-8239083
+    private static MemorySegment allocateNative(MemoryLayout layout) {
+        return MemorySegment.allocateNative(layout);
     }
 
     /**
@@ -181,11 +186,32 @@ public class SharedUtils {
         return dest;
     }
 
-    public static void checkFunctionTypes(MethodType mt, FunctionDescriptor cDesc) {
-        if (mt.parameterCount() != cDesc.argumentLayouts().size())
-            throw new IllegalArgumentException("arity must match!");
-        if ((mt.returnType() == void.class) == cDesc.returnLayout().isPresent())
-            throw new IllegalArgumentException("return type presence must match!");
+    private static void checkCompatibleType(Class<?> carrier, MemoryLayout layout, long addressSize) {
+        if (carrier.isPrimitive()) {
+            Utils.checkPrimitiveCarrierCompat(carrier, layout);
+        } else if (carrier == MemoryAddress.class) {
+            Utils.checkLayoutType(layout, ValueLayout.class);
+            if (layout.bitSize() != addressSize)
+                throw new IllegalArgumentException("Address size mismatch: " + addressSize + " != " + layout.bitSize());
+        } else if(carrier == MemorySegment.class) {
+           Utils.checkLayoutType(layout, GroupLayout.class);
+        } else {
+            throw new IllegalArgumentException("Unsupported carrier: " + carrier);
+        }
+    }
+
+    public static void checkFunctionTypes(MethodType mt, FunctionDescriptor cDesc, long addressSize) {
+        if (mt.returnType() == void.class != cDesc.returnLayout().isEmpty())
+            throw new IllegalArgumentException("Return type mismatch: " + mt + " != " + cDesc);
+        List<MemoryLayout> argLayouts = cDesc.argumentLayouts();
+        if (mt.parameterCount() != argLayouts.size())
+            throw new IllegalArgumentException("Arity mismatch: " + mt + " != " + cDesc);
+
+        int paramCount = mt.parameterCount();
+        for (int i = 0; i < paramCount; i++) {
+            checkCompatibleType(mt.parameterType(i), argLayouts.get(i), addressSize);
+        }
+        cDesc.returnLayout().ifPresent(rl -> checkCompatibleType(mt.returnType(), rl, addressSize));
     }
 
     public static Class<?> primitiveCarrierForSize(long size) {

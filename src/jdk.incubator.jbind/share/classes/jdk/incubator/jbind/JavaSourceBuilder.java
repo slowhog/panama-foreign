@@ -39,8 +39,6 @@ import jdk.incubator.foreign.SystemABI;
 import jdk.incubator.foreign.ValueLayout;
 import jdk.incubator.jextract.Declaration;
 
-import static jdk.incubator.foreign.SystemABI.NATIVE_TYPE;
-
 /**
  * A helper class to generate header interface class in source form.
  * After aggregating various constituents of a .java source, build
@@ -206,10 +204,7 @@ class JavaSourceBuilder {
 
     private void addLayout(MemoryLayout l) {
         if (l instanceof ValueLayout) {
-            SystemABI.Type type = l.attribute(NATIVE_TYPE)
-                                   .map(SystemABI.Type.class::cast)
-                                   .orElseThrow(()->new AssertionError("Should not get here: " + l));
-            sb.append(TypeTranslator.typeToLayoutName(type));
+            sb.append(TypeTranslator.typeToLayoutName((ValueLayout) l));
         } else if (l instanceof SequenceLayout) {
             sb.append("MemoryLayout.ofSequence(");
             if (((SequenceLayout) l).elementCount().isPresent()) {
@@ -218,15 +213,8 @@ class JavaSourceBuilder {
             addLayout(((SequenceLayout) l).elementLayout());
             sb.append(")");
         } else if (l instanceof GroupLayout) {
-            SystemABI.Type type = l.attribute(NATIVE_TYPE)
-                                   .map(SystemABI.Type.class::cast)
-                                   .orElse(null);
-            if (type == SystemABI.Type.COMPLEX_LONG_DOUBLE) {
-                if (!ABI.equals(SystemABI.ABI_SYSV)) {
-                    throw new RuntimeException("complex long double is supported only for SysV ABI");
-                } else {
-                    sb.append("C_COMPLEX_LONGDOUBLE");
-                }
+            if (l == SystemABI.SysV.C_COMPLEX_LONGDOUBLE) {
+                sb.append("C_COMPLEX_LONGDOUBLE");
             } else {
                 if (((GroupLayout) l).isStruct()) {
                     sb.append("MemoryLayout.ofStruct(\n");

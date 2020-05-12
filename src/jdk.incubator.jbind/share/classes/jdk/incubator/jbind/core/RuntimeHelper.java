@@ -106,11 +106,11 @@ public class RuntimeHelper {
         }
     }
 
-    public static final MemoryAddress upcallStub(MethodHandle handle, FunctionDescriptor fdesc) {
+    public static final MemorySegment upcallStub(MethodHandle handle, FunctionDescriptor fdesc) {
         return ABI.upcallStub(handle, fdesc);
     }
 
-    public static final <Z> MemoryAddress upcallStub(Class<Z> fi, Z z, FunctionDescriptor fdesc, String mtypeDesc) {
+    public static final <Z> MemorySegment upcallStub(Class<Z> fi, Z z, FunctionDescriptor fdesc, String mtypeDesc) {
         try {
             MethodHandle handle = MH_LOOKUP.findVirtual(fi, "apply",
                     MethodType.fromMethodDescriptorString(mtypeDesc, LOADER));

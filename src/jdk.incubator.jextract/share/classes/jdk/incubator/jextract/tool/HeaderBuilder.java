@@ -113,23 +113,8 @@ class HeaderBuilder extends JavaSourceBuilder {
     public void emitPrimitiveTypedef(Type.Primitive primType, String className) {
         Type.Primitive.Kind kind = primType.kind();
         if (primitiveKindSupported(kind)) {
-            incrAlign();
-            indent();
-            sb.append(PUB_MODS);
-            sb.append("class ");
-            sb.append(className);
-            sb.append(" extends ");
-            sb.append("C" + kind.typeName().replace(" ", "_"));
-            sb.append(" {\n");
-            incrAlign();
-            indent();
-            // private constructor
-            sb.append("private ");
-            sb.append(className);
-            sb.append("() {}");
-            decrAlign();
-            sb.append("}\n");
-            decrAlign();
+            String superClassName = "C" + kind.typeName().replace(" ", "_");
+            emitTypedef(className, superClassName);
         }
     }
 
@@ -140,9 +125,30 @@ class HeaderBuilder extends JavaSourceBuilder {
         };
     }
 
+    public void emitTypedef(String className, String superClassName) {
+        incrAlign();
+        indent();
+        sb.append(PUB_MODS);
+        sb.append("class ");
+        sb.append(className);
+        sb.append(" extends ");
+        sb.append(superClassName);
+        sb.append(" {\n");
+        incrAlign();
+        indent();
+        // private constructor
+        sb.append("private ");
+        sb.append(className);
+        sb.append("() {}\n");
+        decrAlign();
+        indent();
+        sb.append("}\n");
+        decrAlign();
+    }
+
     private void addFunctionalFactory(String className, MethodType mtype, FunctionDescriptor fDesc) {
         indent();
-        sb.append(PUB_MODS + "MemoryAddress allocate(" + className + " fi) {\n");
+        sb.append(PUB_MODS + "MemorySegment allocate(" + className + " fi) {\n");
         incrAlign();
         indent();
         sb.append("return RuntimeHelper.upcallStub(" + className + ".class, fi, " + functionGetCallString(className, fDesc) + ", " +
