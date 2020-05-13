@@ -32,9 +32,7 @@ import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SystemABI;
 
-import static jdk.incubator.foreign.SystemABI.C_DOUBLE;
-import static jdk.incubator.foreign.SystemABI.C_LONG;
-import static jdk.incubator.foreign.SystemABI.C_POINTER;
+import static jdk.incubator.foreign.SystemABI.*;
 
 public class VarargsInvoker {
 
@@ -141,10 +139,14 @@ public class VarargsInvoker {
     }
 
     private MemoryLayout variadicLayout(Class<?> c) {
-        if (c == char.class || c == byte.class || c == short.class || c == int.class || c == long.class) {
-            //it is ok to approximate with a machine word here; numerics arguments in a prototype-less
-            //function call are always rounded up to a register size anyway.
-            return C_LONG;
+        if (c == byte.class) {
+            return C_CHAR;
+        } else if (c == char.class || c == short.class) {
+            return C_SHORT;
+        } else if (c == int.class) {
+            return C_INT;
+        } else if (c == long.class) {
+            return C_LONGLONG;
         } else if (c == float.class || c == double.class) {
             return C_DOUBLE;
         } else if (MemoryAddress.class.isAssignableFrom(c)) {

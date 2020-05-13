@@ -58,32 +58,6 @@ public class TypeTranslator implements Type.Visitor<Class<?>, Void> {
         }
     }
 
-    static String typeToLayoutName(ValueLayout vl) {
-        if (vl == SystemABI.C_BOOL) {
-            return "C_BOOL";
-        } else if (vl == SystemABI.C_CHAR) {
-            return "C_CHAR";
-        } else if (vl == SystemABI.C_SHORT) {
-            return "C_SHORT";
-        } else if (vl == SystemABI.C_INT) {
-            return "C_INT";
-        } else if (vl == SystemABI.C_LONG) {
-            return "C_LONG";
-        } else if (vl == SystemABI.C_LONGLONG) {
-            return "C_LONGLONG";
-        } else if (vl == SystemABI.C_FLOAT) {
-            return "C_FLOAT";
-        } else if (vl == SystemABI.C_DOUBLE) {
-            return "C_DOUBLE";
-        } else if (vl == SystemABI.C_LONGDOUBLE) {
-            return "C_LONGDOUBLE";
-        } else if (vl == SystemABI.C_POINTER) {
-            return "C_POINTER";
-        } else {
-            throw new RuntimeException("should not reach here, problematic layout: " + vl);
-        }
-    }
-
     static String typeToLayoutName(Type.Primitive.Kind type) {
         return switch (type) {
             case Bool -> "C_BOOL";

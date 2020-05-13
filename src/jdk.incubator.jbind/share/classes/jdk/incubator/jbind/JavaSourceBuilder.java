@@ -45,13 +45,26 @@ import jdk.incubator.jextract.Declaration;
  * method is called to get overall generated source string.
  */
 class JavaSourceBuilder {
-    private static final String ABI = SystemABI.getSystemABI().name();
+    private static final String ABI;
+    private static final String ABI_CLASS_ATTR;
+
+    static {
+        ABI = SystemABI.getSystemABI().name();
+        ABI_CLASS_ATTR = switch (ABI) {
+            case SystemABI.ABI_SYSV -> SystemABI.SysV.CLASS_ATTRIBUTE_NAME;
+            case SystemABI.ABI_WINDOWS -> SystemABI.Win64.CLASS_ATTRIBUTE_NAME;
+            case SystemABI.ABI_AARCH64 -> SystemABI.AArch64.CLASS_ATTRIBUTE_NAME;
+            default -> throw new UnsupportedOperationException("Unsupported ABI: " + ABI);
+        };
+    }
+
     // buffer
     protected StringBuffer sb;
     // current line alignment (number of 4-spaces)
     protected int align;
 
     JavaSourceBuilder(int align) {
+        super();
         this.align = align;
         this.sb = new StringBuffer();
     }
@@ -79,17 +92,37 @@ class JavaSourceBuilder {
         addImportSection();
     }
 
-    private static String AbiTypes() {
-        String prefix = "jdk.incubator.foreign.MemoryLayouts.";
-        switch (ABI) {
-            case SystemABI.ABI_SYSV:
-                return prefix + "SysV";
-            case SystemABI.ABI_WINDOWS:
-                return prefix + "WinABI";
-            case SystemABI.ABI_AARCH64:
-                return prefix + "AArch64ABI";
-            default:
-                throw new UnsupportedOperationException("Unsupported ABI: " + ABI);
+    private static boolean matchLayout(ValueLayout a, ValueLayout b) {
+        if (a == b) return true;
+        return (a.bitSize() == b.bitSize() &&
+            a.order() == b.order() &&
+            a.bitAlignment() == b.bitAlignment() &&
+            a.attribute(ABI_CLASS_ATTR).equals(b.attribute(ABI_CLASS_ATTR)));
+    }
+
+    static String typeToLayoutName(ValueLayout vl) {
+        if (matchLayout(vl, SystemABI.C_BOOL)) {
+            return "C_BOOL";
+        } else if (matchLayout(vl, SystemABI.C_CHAR)) {
+            return "C_CHAR";
+        } else if (matchLayout(vl, SystemABI.C_SHORT)) {
+            return "C_SHORT";
+        } else if (matchLayout(vl, SystemABI.C_INT)) {
+            return "C_INT";
+        } else if (matchLayout(vl, SystemABI.C_LONG)) {
+            return "C_LONG";
+        } else if (matchLayout(vl, SystemABI.C_LONGLONG)) {
+            return "C_LONGLONG";
+        } else if (matchLayout(vl, SystemABI.C_FLOAT)) {
+            return "C_FLOAT";
+        } else if (matchLayout(vl, SystemABI.C_DOUBLE)) {
+            return "C_DOUBLE";
+        } else if (matchLayout(vl, SystemABI.C_LONGDOUBLE)) {
+            return "C_LONGDOUBLE";
+        } else if (matchLayout(vl, SystemABI.C_POINTER)) {
+            return "C_POINTER";
+        } else {
+            throw new RuntimeException("should not reach here, problematic layout: " + vl);
         }
     }
 
@@ -99,9 +132,7 @@ class JavaSourceBuilder {
         sb.append("import java.lang.invoke.VarHandle;\n");
         sb.append("import jdk.incubator.foreign.*;\n");
         sb.append("import jdk.incubator.foreign.MemoryLayout.PathElement;\n");
-        sb.append("import static ");
-        sb.append(AbiTypes());
-        sb.append(".*;\n\n");
+        sb.append("import static jdk.incubator.foreign.SystemABI.*;\n\n");
     }
 
     protected void addImport(String value) {
@@ -204,7 +235,7 @@ class JavaSourceBuilder {
 
     private void addLayout(MemoryLayout l) {
         if (l instanceof ValueLayout) {
-            sb.append(TypeTranslator.typeToLayoutName((ValueLayout) l));
+            sb.append(typeToLayoutName((ValueLayout) l));
         } else if (l instanceof SequenceLayout) {
             sb.append("MemoryLayout.ofSequence(");
             if (((SequenceLayout) l).elementCount().isPresent()) {
