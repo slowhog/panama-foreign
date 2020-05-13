@@ -258,7 +258,9 @@ public class MethodHandles {
             newModes &= ~Lookup.MODULE;
         }
 
-        if (!callerModule.isNamed() && targetModule.isNamed()) {
+        if (!(callerModule == null && targetModule == null) &&
+                !callerModule.isNamed() && targetModule.isNamed())
+        {
             IllegalAccessLogger logger = IllegalAccessLogger.illegalAccessLogger();
             if (logger != null) {
                 logger.logIfOpenedForIllegalAccess(caller, targetClass);

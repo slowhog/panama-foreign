@@ -33,7 +33,7 @@ import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
 import sun.nio.FFIUtils.Scope;
 
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_SHORT;
+import static jdk.incubator.foreign.SystemABI.C_SHORT;
 
 /**
  * File type detector that uses a file extension to look up its MIME type

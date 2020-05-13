@@ -38,8 +38,8 @@ import java.util.concurrent.TimeUnit;
 import jdk.incubator.foreign.MemoryAddress;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_INT;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_UCHAR;
+import static jdk.incubator.foreign.SystemABI.C_INT;
+import static jdk.incubator.foreign.SystemABI.C_CHAR;
 import static jdk.internal.panama.sys.errno_h.ECANCELED;
 import static sun.nio.FFIUtils.Scope;
 import static sun.nio.FFIUtils.errno;
@@ -639,7 +639,7 @@ class UnixCopyFile {
 
     static void transfer(int dst, int src, long addressToPollForCancel) throws UnixException {
         try (Scope s = localScope()) {
-            MemoryAddress buf = s.allocateArray(C_UCHAR, 8192);
+            MemoryAddress buf = s.allocateArray(C_CHAR, 8192);
             MemoryAddress cancel = FFIUtils.resizePointer(MemoryAddress.ofLong(addressToPollForCancel), C_INT.byteSize());
             while (true) {
                 int n = UnixNativeDispatcher.read(src, buf, 8192);

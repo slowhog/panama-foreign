@@ -42,7 +42,7 @@ public abstract class Struct<T extends Struct<T>> {
     };
 
     protected final MemoryAddress getFieldAddr(String name) {
-        return addr.addOffset(getLayout().offset(MemoryLayout.PathElement.groupElement(name)) >> 3);
+        return addr.addOffset(getLayout().byteOffset(MemoryLayout.PathElement.groupElement(name)));
     }
 
     protected final VarHandle getFieldHandle(String name, Class<?> carrier) {

@@ -42,11 +42,10 @@ import jdk.internal.panama.LibC;
 import jdk.internal.vm.annotation.ForceInline;
 import sun.nio.ch.IOStatus;
 
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_CHAR;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_INT;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_LONG;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_POINTER;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_UCHAR;
+import static jdk.incubator.foreign.SystemABI.C_CHAR;
+import static jdk.incubator.foreign.SystemABI.C_INT;
+import static jdk.incubator.foreign.SystemABI.C_LONG;
+import static jdk.incubator.foreign.SystemABI.C_POINTER;
 import static jdk.internal.panama.sys.errno_h.EAGAIN;
 import static jdk.internal.panama.sys.errno_h.EINTR;
 import static jdk.internal.panama.sys.errno_h.EWOULDBLOCK;
@@ -114,7 +113,7 @@ public class FFIUtils {
     public static class CTypeAccess {
         public static VarHandle VH_POINTER = C_POINTER.varHandle(long.class);
         public static VarHandle VH_LONG = C_LONG.varHandle(long.class);
-        public static VarHandle VH_UCHAR = C_UCHAR.varHandle(byte.class);
+        public static VarHandle VH_UCHAR = C_CHAR.varHandle(byte.class);
         public static VarHandle VH_INT = C_INT.varHandle(int.class);
 
         public static long readLong(MemoryAddress addr) {

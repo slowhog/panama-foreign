@@ -34,9 +34,9 @@ import jdk.internal.panama.LibC;
 import jdk.internal.panama.unistd_h;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_CHAR;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_POINTER;
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_ULONG;
+import static jdk.incubator.foreign.SystemABI.C_CHAR;
+import static jdk.incubator.foreign.SystemABI.C_POINTER;
+import static jdk.incubator.foreign.SystemABI.C_LONG;
 import static jdk.internal.panama.LibC.dirent;
 import static jdk.internal.panama.LibC.group;
 import static jdk.internal.panama.LibC.passwd;
@@ -218,7 +218,7 @@ class UnixNativeDispatcher {
         long lineSize = 0;
         try (Scope s = localScope()) {
             MemoryAddress ptrBuf = s.allocate(C_POINTER.byteSize());
-            MemoryAddress ptrSize = s.allocate(C_ULONG.byteSize());
+            MemoryAddress ptrSize = s.allocate(C_LONG.byteSize());
             FFIUtils.CTypeAccess.writeLong(ptrBuf, 0);
             FFIUtils.CTypeAccess.writeLong(ptrSize, 0);
             int saved_errno;

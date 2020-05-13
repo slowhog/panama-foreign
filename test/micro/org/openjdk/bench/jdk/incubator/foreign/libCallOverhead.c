@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2019, Arm Limited. All rights reserved.
+ * Copyright (c) 2020 Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,20 +20,15 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.internal.foreign.abi.aarch64;
 
-enum ArgumentClassImpl {
-    POINTER, INTEGER, VECTOR, MEMORY;
+#ifdef _WIN64
+#define EXPORT __declspec(dllexport)
+#else
+#define EXPORT
+#endif
 
-    public boolean isIntegral() {
-        return this == INTEGER || this == POINTER;
-    }
+EXPORT void func() {}
 
-    public boolean isPointer() {
-        return this == POINTER;
-    }
-
-    public boolean isIndirect() {
-        return this == MEMORY;
-    }
+EXPORT int identity(int x) {
+  return x;
 }

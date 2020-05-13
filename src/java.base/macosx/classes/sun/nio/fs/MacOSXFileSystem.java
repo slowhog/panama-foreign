@@ -32,7 +32,7 @@ import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
 import sun.nio.FFIUtils.Scope;
 
-import static jdk.incubator.foreign.MemoryLayouts.SysV.C_SHORT;
+import static jdk.incubator.foreign.SystemABI.C_SHORT;
 import static jdk.internal.macos.cf.CFString_h.kCFStringEncodingUTF16;
 import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormC;
 import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormD;
