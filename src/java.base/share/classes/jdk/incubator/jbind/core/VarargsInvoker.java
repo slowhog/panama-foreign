@@ -82,7 +82,7 @@ public class VarargsInvoker {
 
         assert pos == nNamedArgs;
         for (Object o: unnamedArgs) {
-            argTypes[pos] = regulate(o.getClass());
+            argTypes[pos] = normalize(o.getClass());
             argLayouts[pos] = variadicLayout(argTypes[pos]);
             pos++;
         }
@@ -125,10 +125,20 @@ public class VarargsInvoker {
         }
     }
 
-    private Class<?> regulate(Class<?> c) {
+    private Class<?> promote(Class<?> c) {
+        if (c == byte.class || c == char.class || c == short.class || c == int.class) {
+            return long.class;
+        } else if (c == float.class) {
+            return double.class;
+        } else {
+            return c;
+        }
+    }
+
+    private Class<?> normalize(Class<?> c) {
         c = unboxIfNeeded(c);
         if (c.isPrimitive()) {
-            return c;
+            return promote(c);
         }
         if (MemoryAddress.class.isAssignableFrom(c)) {
             return MemoryAddress.class;
@@ -140,15 +150,9 @@ public class VarargsInvoker {
     }
 
     private MemoryLayout variadicLayout(Class<?> c) {
-        if (c == byte.class) {
-            return C_CHAR;
-        } else if (c == char.class || c == short.class) {
-            return C_SHORT;
-        } else if (c == int.class) {
-            return C_INT;
-        } else if (c == long.class) {
+        if (c == long.class) {
             return C_LONGLONG;
-        } else if (c == float.class || c == double.class) {
+        } else if (c == double.class) {
             return C_DOUBLE;
         } else if (MemoryAddress.class.isAssignableFrom(c)) {
             return C_POINTER;
