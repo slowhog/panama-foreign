@@ -48,8 +48,11 @@ public class RuntimeHelper {
         }
     }
 
-    public static final MemoryAddress lookupGlobalVariable(LibraryLookup[] LIBRARIES, String name) {
-        return lookup(LIBRARIES, name).orElse(null);
+    public static final MemoryAddress lookupGlobalVariable(LibraryLookup[] LIBRARIES, String name, MemoryLayout layout) {
+        return lookup(LIBRARIES, name).map(a ->
+            MemorySegment.ofNativeRestricted(
+                 a, layout.byteSize(), null, null, a
+            ).withAccessModes(MemorySegment.READ | MemorySegment.WRITE).baseAddress()).orElse(null);
     }
 
     public static final MethodHandle downcallHandle(LibraryLookup[] LIBRARIES, String name, String desc, FunctionDescriptor fdesc, boolean variadic) {
@@ -165,10 +168,20 @@ public class RuntimeHelper {
             }
         }
 
+        private Class<?> promote(Class<?> c) {
+            if (c == byte.class || c == char.class || c == short.class || c == int.class) {
+                return long.class;
+            } else if (c == float.class) {
+                return double.class;
+            } else {
+                return c;
+            }
+        }
+
         private Class<?> normalize(Class<?> c) {
             c = unboxIfNeeded(c);
             if (c.isPrimitive()) {
-                return c;
+                return promote(c);
             }
             if (MemoryAddress.class.isAssignableFrom(c)) {
                 return MemoryAddress.class;
@@ -180,11 +193,9 @@ public class RuntimeHelper {
         }
 
         private MemoryLayout variadicLayout(Class<?> c) {
-            if (c == char.class || c == byte.class || c == short.class || c == int.class || c == long.class) {
-                //it is ok to approximate with a machine word here; numerics arguments in a prototype-less
-                //function call are always rounded up to a register size anyway.
+            if (c == long.class) {
                 return C_LONGLONG;
-            } else if (c == float.class || c == double.class) {
+            } else if (c == double.class) {
                 return C_DOUBLE;
             } else if (MemoryAddress.class.isAssignableFrom(c)) {
                 return C_POINTER;
