@@ -164,6 +164,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         try {
             tree.accept(this, null);
         } catch (Exception ex) {
+            System.err.println("Troubld declaration: " + tree);
             ex.printStackTrace();
         }
     }
