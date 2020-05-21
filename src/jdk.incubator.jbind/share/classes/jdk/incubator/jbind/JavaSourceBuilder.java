@@ -24,7 +24,10 @@
  */
 package jdk.incubator.jbind;
 
+import java.lang.constant.ClassDesc;
+import java.lang.constant.DirectMethodHandleDesc;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle.VarHandleDesc;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -45,32 +48,21 @@ import jdk.incubator.jextract.Declaration;
  * method is called to get overall generated source string.
  */
 class JavaSourceBuilder {
-    private static final String ABI;
-    private static final String ABI_CLASS_ATTR;
-
-    static {
-        ABI = SystemABI.getSystemABI().name();
-        ABI_CLASS_ATTR = switch (ABI) {
-            case SystemABI.ABI_SYSV -> SystemABI.SysV.CLASS_ATTRIBUTE_NAME;
-            case SystemABI.ABI_WINDOWS -> SystemABI.Win64.CLASS_ATTRIBUTE_NAME;
-            case SystemABI.ABI_AARCH64 -> SystemABI.AArch64.CLASS_ATTRIBUTE_NAME;
-            default -> throw new UnsupportedOperationException("Unsupported ABI: " + ABI);
-        };
-    }
-
     // buffer
     protected StringBuffer sb;
     // current line alignment (number of 4-spaces)
     protected int align;
+    protected ConstantHelper constantHelper;
 
-    JavaSourceBuilder(int align) {
+    JavaSourceBuilder(ConstantHelper constantHelper, int align) {
         super();
+        this.constantHelper = constantHelper;
         this.align = align;
         this.sb = new StringBuffer();
     }
 
-    JavaSourceBuilder() {
-        this(0);
+    JavaSourceBuilder(ConstantHelper constantHelper) {
+        this(constantHelper, 0);
     }
 
     protected int align() {
@@ -90,40 +82,6 @@ class JavaSourceBuilder {
             sb.append(";\n\n");
         }
         addImportSection();
-    }
-
-    private static boolean matchLayout(ValueLayout a, ValueLayout b) {
-        if (a == b) return true;
-        return (a.bitSize() == b.bitSize() &&
-            a.order() == b.order() &&
-            a.bitAlignment() == b.bitAlignment() &&
-            a.attribute(ABI_CLASS_ATTR).equals(b.attribute(ABI_CLASS_ATTR)));
-    }
-
-    static String typeToLayoutName(ValueLayout vl) {
-        if (matchLayout(vl, SystemABI.C_BOOL)) {
-            return "C_BOOL";
-        } else if (matchLayout(vl, SystemABI.C_CHAR)) {
-            return "C_CHAR";
-        } else if (matchLayout(vl, SystemABI.C_SHORT)) {
-            return "C_SHORT";
-        } else if (matchLayout(vl, SystemABI.C_INT)) {
-            return "C_INT";
-        } else if (matchLayout(vl, SystemABI.C_LONG)) {
-            return "C_LONG";
-        } else if (matchLayout(vl, SystemABI.C_LONGLONG)) {
-            return "C_LONGLONG";
-        } else if (matchLayout(vl, SystemABI.C_FLOAT)) {
-            return "C_FLOAT";
-        } else if (matchLayout(vl, SystemABI.C_DOUBLE)) {
-            return "C_DOUBLE";
-        } else if (matchLayout(vl, SystemABI.C_LONGDOUBLE)) {
-            return "C_LONGDOUBLE";
-        } else if (matchLayout(vl, SystemABI.C_POINTER)) {
-            return "C_POINTER";
-        } else {
-            throw new RuntimeException("should not reach here, problematic layout: " + vl);
-        }
     }
 
     protected void addImportSection() {
@@ -169,31 +127,7 @@ class JavaSourceBuilder {
         sb.append("}\n");
     }
 
-    protected void addLibraries(String[] libraryNames, String[] libraryPaths) {
-        indent();
-        sb.append(PRI_MODS + "LibraryLookup[] LIBRARIES = RuntimeHelper.libraries(");
-        sb.append(stringArray(libraryNames) + ", " + stringArray(libraryPaths) + ");\n");
-    }
-
-    private String stringArray(String[] elements) {
-        return Stream.of(elements)
-                .map(n -> "\"" + n + "\"")
-                .collect(Collectors.joining(",", "new String[] {", "}"));
-    }
-
-    private String getLayoutName(String elementName) {
-        return elementName + "$LAYOUT";
-    }
-
-    protected void addLayout(String elementName, MemoryLayout layout) {
-        indent();
-        sb.append(PUB_MODS + "MemoryLayout " + getLayoutName(elementName) + " = ");
-        addLayout(layout);
-        sb.append(";\n");
-    }
-
     protected void addStructConstructor(String name) {
-        String layoutVar = getLayoutName(name);
         indent();
         sb.append("protected " + name + "(MemoryAddress addr) { super(addr); }\n");
         indent();
@@ -202,186 +136,35 @@ class JavaSourceBuilder {
         sb.append(PUB_MODS + name + " allocate(LongFunction<MemoryAddress> allocator, int count) {\n");
         incrAlign();
         indent();
-        sb.append("return new " + name + "(allocator.apply(" + layoutVar + ".byteSize() * count));\n");
+        sb.append("return new " + name + "(allocator.apply(sizeof() * count));\n");
         decrAlign();
         indent();
         sb.append("}\n");
         indent();
         sb.append(PUB_MODS + name + " allocate(LongFunction<MemoryAddress> allocator) { return allocate(allocator, 1); }\n");
         indent();
-        sb.append(PUB_CLS_MODS + name + " offset(int count) { return at(ptr().addOffset("
-                + layoutVar + ".byteSize() * count)); }\n");
+        sb.append(PUB_CLS_MODS + name + " offset(int count) { return at(ptr().addOffset(sizeof() * count)); }\n");
     }
 
     protected void addLayoutMethod(String elementName, GroupLayout layout) {
+        var desc = constantHelper.addLayout(elementName, layout);
         indent();
-        String varName = getLayoutName(elementName);
-        sb.append(PUB_MODS + "GroupLayout " + varName + " = ");
-        addLayout(layout);
-        sb.append(";\n");
+        sb.append(PUB_MODS + "GroupLayout $LAYOUT() {\n");
+        incrAlign();
+        indent();
+        sb.append("return (GroupLayout) " + getCallString(desc) + ";\n");
+        decrAlign();
+        indent();
+        sb.append("}\n");
+        indent();
+        sb.append(PUB_MODS + "long sizeof() { return $LAYOUT().byteSize(); }\n");
+        indent();
+        sb.append(PUB_MODS + "long offsetof(String fieldName) { return $LAYOUT().byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }\n");
+
         indent();
         sb.append("@Override\n");
         indent();
-        sb.append(PUB_CLS_MODS + "GroupLayout getLayout() {\n");
-        incrAlign();
-        indent();
-        sb.append("return ");
-        sb.append(varName);
-        sb.append(";\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
-    }
-
-    private void addLayout(MemoryLayout l) {
-        if (l instanceof ValueLayout) {
-            sb.append(typeToLayoutName((ValueLayout) l));
-        } else if (l instanceof SequenceLayout) {
-            sb.append("MemoryLayout.ofSequence(");
-            if (((SequenceLayout) l).elementCount().isPresent()) {
-                sb.append(((SequenceLayout) l).elementCount().getAsLong() + ", ");
-            }
-            addLayout(((SequenceLayout) l).elementLayout());
-            sb.append(")");
-        } else if (l instanceof GroupLayout) {
-            if (l == SystemABI.SysV.C_COMPLEX_LONGDOUBLE) {
-                sb.append("C_COMPLEX_LONGDOUBLE");
-            } else {
-                if (((GroupLayout) l).isStruct()) {
-                    sb.append("MemoryLayout.ofStruct(\n");
-                } else {
-                    sb.append("MemoryLayout.ofUnion(\n");
-                }
-                incrAlign();
-                String delim = "";
-                for (MemoryLayout e : ((GroupLayout) l).memberLayouts()) {
-                    sb.append(delim);
-                    indent();
-                    addLayout(e);
-                    delim = ",\n";
-                }
-                sb.append("\n");
-                decrAlign();
-                indent();
-                sb.append(")");
-            }
-        } else {
-            //padding
-            sb.append("MemoryLayout.ofPaddingBits(" + l.bitSize() + ")");
-        }
-        if (l.name().isPresent()) {
-            sb.append(".withName(\"" +  l.name().get() + "\")");
-        }
-    }
-
-    protected void addVarHandle(String name, Class<?> type, Declaration parent, int dimensions) {
-        String ty = type.getName();
-        boolean isAddr = ty.contains("MemoryAddress");
-        if (isAddr) {
-            ty = "long";
-        }
-        indent();
-        sb.append(PUB_MODS + "VarHandle " + getVarHandleName(name, parent) + " = \n");
-        incrAlign();
-        indent();
-        if (isAddr) {
-            sb.append("MemoryHandles.asAddressVarHandle(");
-        }
-        sb.append(getLayoutName(parent == null ? name : parent.name()));
-        sb.append(".varHandle(" + ty + ".class");
-        if (parent != null) {
-            sb.append(", PathElement.groupElement(\"" + name + "\")");
-        }
-        for (int i = 0; i < dimensions; i++) {
-            sb.append(", PathElement.sequenceElement()");
-        }
-        sb.append(")");
-        if (isAddr) {
-            sb.append(")");
-        }
-        sb.append(";\n");
-        decrAlign();
-    }
-
-    private String getMethodHandleName(String name) {
-        return "mh_" + name;
-    }
-
-    protected void addMethodHandle(Declaration.Function funcTree, MethodType mtype, FunctionDescriptor desc) {
-        String mhVar = getMethodHandleName(funcTree.name());
-        indent();
-        sb.append("public static MethodHandle " + mhVar + ";\n");
-        indent();
-        sb.append(PUB_MODS + "MethodHandle get" + mhVar + "() {\n");
-        incrAlign();
-        indent();
-        sb.append("if (" + mhVar + " == null) {\n");
-        incrAlign();
-        indent();
-        sb.append(mhVar + " = RuntimeHelper.downcallHandle(\n");
-        incrAlign();
-        indent();
-        sb.append("LIBRARIES, \"" + NamingUtils.getSymbolInLib(funcTree) + "\"");
-        sb.append(",\n");
-        indent();
-        sb.append("\"" + mtype.toMethodDescriptorString() + "\",\n");
-        indent();
-        addFunction(desc);
-        sb.append(", ");
-        // isVariadic
-        sb.append(funcTree.type().varargs());
-        sb.append("\n");
-        decrAlign();
-        indent();
-        sb.append(");\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
-        indent();
-        sb.append("return " + mhVar + ";\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
-    }
-
-    protected void addAddressLookup(String name, String symbol) {
-        sb.append("RuntimeHelper.lookupGlobalVariable(LIBRARIES, \"" + symbol + "\", "
-                + getLayoutName(name) + ")");
-    }
-
-    private void addFunction(FunctionDescriptor f) {
-        final boolean noArgs = f.argumentLayouts().isEmpty();
-        if (f.returnLayout().isPresent()) {
-            sb.append("FunctionDescriptor.of(");
-            addLayout(f.returnLayout().get());
-            if (!noArgs) {
-                sb.append(",");
-            }
-        } else {
-            sb.append("FunctionDescriptor.ofVoid(");
-        }
-        if (!noArgs) {
-            sb.append("\n");
-            incrAlign();
-            String delim = "";
-            for (MemoryLayout e : f.argumentLayouts()) {
-                sb.append(delim);
-                indent();
-                addLayout(e);
-                delim = ",\n";
-            }
-            sb.append("\n");
-            decrAlign();
-            indent();
-        }
-        sb.append(")");
-    }
-
-    protected void addAddress(String name, String symbol) {
-        indent();
-        sb.append(PUB_MODS + "MemoryAddress " + name + "$ADDR" + " = ");
-        addAddressLookup(name, symbol);
-        sb.append(";\n");
+        sb.append(PUB_CLS_MODS + "GroupLayout getLayout() { return $LAYOUT(); }\n");
     }
 
     protected void addConstant(String name, Class<?> type, Object value) {
@@ -415,27 +198,34 @@ class JavaSourceBuilder {
         }
     }
 
-    static int funcIntfCounter = 0;
-
-    protected void addUpcallFactory(FunctionDescriptor desc) {
-        String fnName = "FI" + funcIntfCounter++;
-        indent();
-        sb.append(PRI_MODS + "FunctionDescriptor " + fnName + "$DESC = ");
-        addFunction(desc);
-        sb.append(";\n");
-        indent();
-        sb.append(PUB_MODS + "MemoryAddress " + fnName + "$make(MethodHandle handle) {\n");
-        incrAlign();
-        indent();
-        sb.append("return RuntimeHelper.upcallStub(handle, " + fnName + "$DESC);\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
+    public void addLayoutGetter(String javaName, MemoryLayout layout) {
+        emitForwardGetter(constantHelper.addLayout(javaName, layout));
     }
 
-    protected void addStaticFunctionWrapper(Declaration.Function f, MethodType mtype) {
+    public void addVarHandleGetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
+        emitForwardGetter(constantHelper.addVarHandle(javaName, nativeName, layout, type, parentLayout));
+    }
+
+    public void addMethodHandleGetter(String javaName, String nativeName, MethodType mtype, FunctionDescriptor desc, boolean varargs) {
+        emitForwardGetter(constantHelper.addMethodHandle(javaName, nativeName, mtype, desc, varargs));
+    }
+
+    public void addAddressGetter(String javaName, String nativeName, MemoryLayout layout) {
+        emitForwardGetter(constantHelper.addAddress(javaName, nativeName, layout));
+    }
+
+    public void addConstantGetter(String javaName, Class<?> type, Object value) {
+        emitForwardGetter(constantHelper.addConstant(javaName, type, value));
+    }
+
+    public void addStaticFunctionWrapper(Declaration.Function f, MethodType mtype, FunctionDescriptor desc) {
+        String javaName = NamingUtils.toSafeName(f.name());
+        String nativeName = NamingUtils.getSymbolInLib(f);
+        boolean varargs = f.type().varargs();
+
+        incrAlign();
         indent();
-        sb.append(PUB_MODS + mtype.returnType().getName() + " " + f.name() + "(");
+        sb.append(PUB_MODS + mtype.returnType().getName() + " " + javaName + "(");
         String delim = "";
         List<String> pNames = new ArrayList<>();
         for (int i = 0 ; i < f.parameters().size() ; i++) {
@@ -449,7 +239,7 @@ class JavaSourceBuilder {
             sb.append(delim + mtype.parameterType(i).getName() + " " + pName);
             delim = ", ";
         }
-        if (f.type().varargs()) {
+        if (varargs) {
             String lastArg = "x" + f.parameters().size();
             sb.append(", Object... " + lastArg);
             pNames.add(lastArg);
@@ -463,7 +253,8 @@ class JavaSourceBuilder {
         if (!mtype.returnType().equals(void.class)) {
             sb.append("return (" + mtype.returnType().getName() + ")");
         }
-        sb.append("get" + getMethodHandleName(f.name()) + "().invokeExact(" + String.join(", ", pNames) + ");\n");
+        sb.append(methodHandleGetCallString(javaName, nativeName, mtype, desc, varargs))
+          .append(".invokeExact(").append(String.join(", ", pNames)).append(");\n");
         decrAlign();
         indent();
         sb.append("} catch (Throwable ex) {\n");
@@ -476,19 +267,23 @@ class JavaSourceBuilder {
         decrAlign();
         indent();
         sb.append("}\n");
+        decrAlign();
     }
 
-    void addDescriptor(String name, FunctionDescriptor desc) {
+    private void addFunctionalFactory(String className, MethodType mtype, FunctionDescriptor fDesc) {
+        indent();
+        sb.append(PUB_MODS + "MemorySegment allocate(" + className + " fi) {\n");
         incrAlign();
         indent();
-        sb.append(PRI_MODS + "FunctionDescriptor " + name + "$DESC = ");
-        addFunction(desc);
-        sb.append(";\n");
+        sb.append("return RuntimeHelper.upcallStub(" + className + ".class, fi, " + functionGetCallString(className, fDesc) + ", " +
+                "\"" + mtype.toMethodDescriptorString() + "\");\n");
         decrAlign();
         indent();
+        sb.append("}\n");
     }
 
-    void addFunctionalInterface(String name, MethodType mtype) {
+    public void addFunctionalInterface(String name, MethodType mtype,  FunctionDescriptor fDesc) {
+        incrAlign();
         indent();
         sb.append("public interface " + name + " {\n");
         incrAlign();
@@ -500,43 +295,40 @@ class JavaSourceBuilder {
             delim = ", ";
         }
         sb.append(");\n");
+        addFunctionalFactory(name, mtype, fDesc);
         decrAlign();
         indent();
         sb.append("}\n");
-    }
-
-    private String getVarHandleName(String name, Declaration parent) {
-        return "vh_" + ((parent == null) ? name  : (parent.name() + "$" + name));
-    }
-
-    protected void addFunctionalFactory(String name, MethodType mtype) {
+        decrAlign();
         indent();
-        sb.append(PUB_MODS + "MemoryAddress " + name + "$make(" + name + " fi) {\n");
+    }
+
+    protected String emitAdaptedVHGetter(DirectMethodHandleDesc vh, boolean isAddr) {
+        indent();
+        sb.append(PUB_MODS + "VarHandle " + vh.methodName() + "() {\n");
         incrAlign();
         indent();
-        sb.append("return RuntimeHelper.upcallStub(" + name + ".class, fi, " + name + "$DESC, " +
-                "\"" + mtype.toMethodDescriptorString() + "\");\n");
+        sb.append("return ");
+        if (isAddr) {
+            sb.append("MemoryHandles.asAddressVarHandle(");
+        }
+        sb.append(getCallString(vh));
+        if (isAddr) {
+            sb.append(")");
+        }
+        sb.append(";\n");
         decrAlign();
         indent();
         sb.append("}\n");
+        return vh.methodName();
     }
 
-    void addVHGetter(String name, Class<?> type, Declaration parent, int dimensions) {
+    protected void beginGetter(String javaName, String typeName, int dimensions, boolean isGlobal) {
         indent();
-        String vhName = getVarHandleName(name, parent);
-        String vhParam = parent != null ? "ptr()" : (name + "$ADDR");
-        String vhGetStmt = vhName + ".get(" + vhParam ;
-        for (int i = 0; i < dimensions; i++) {
-            vhGetStmt += ", idx" + i;
-        }
-        vhGetStmt += ")";
-        String typeName = type.getName();
-        if (typeName.contains("MemoryAddress")) {
-            typeName = "MemoryAddress";
-        }
-        vhGetStmt = "(" + typeName +") " + vhGetStmt;
-        sb.append(parent == null ? PUB_MODS : PUB_CLS_MODS);
-        sb.append(typeName + " " + name + "$get(");
+        sb.append(isGlobal ? PUB_MODS : PUB_CLS_MODS);
+        sb.append(typeName);
+        sb.append(" ");
+        sb.append(javaName).append("$get(");
         for (int i = 0; i < dimensions; i++) {
             if (i > 0) {
                 sb.append(", ");
@@ -545,84 +337,208 @@ class JavaSourceBuilder {
         }
         sb.append(") {\n");
         incrAlign();
-        indent();
-        sb.append("return " + vhGetStmt + ";\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
     }
 
-    void addVHSetter(String name, Class<?> type, Declaration parent, int dimensions) {
+    protected void beginSetter(String javaName, String typeName, int dimensions, boolean isGlobal) {
         indent();
-        String vhName = getVarHandleName(name, parent);
-        String typeName = type.getName();
-        String vhParam = parent != null ? "ptr()" : (name + "$ADDR");
+        sb.append(isGlobal ? PUB_MODS : PUB_CLS_MODS);
+        sb.append("void ").append(javaName).append("$set(");
         for (int i = 0; i < dimensions; i++) {
-            vhParam += ", idx" + i;
+            sb.append("long idx" + i).append(", ");
         }
-        if (typeName.contains("MemoryAddress")) {
-            typeName = "MemoryAddress";
-        }
-        vhParam += ", x";
-        sb.append(parent == null ? PUB_MODS : PUB_CLS_MODS);
-        sb.append("void " + name + "$set(");
+        sb.append(typeName);
+        sb.append(" value) {\n");
+        incrAlign();
+    }
+
+    private void emitVHGetter(String typeName, String vhStmt, String addrStmt, int dimensions) {
+        indent();
+        sb.append("return (").append(typeName).append(") ");
+        sb.append(vhStmt);
+        sb.append(".get(");
+        sb.append(addrStmt);
         for (int i = 0; i < dimensions; i++) {
-            sb.append("long idx" + i +", ");
+            sb.append(", idx" + i);
         }
-        sb.append(typeName + " x) {\n");
+        sb.append(");\n");
+    }
+
+    private void emitVHSetter(String vhStmt, String addrStmt, int dimensions) {
+        indent();
+        sb.append(vhStmt);
+        sb.append(".set(");
+        sb.append(addrStmt);
+        for (int i = 0; i < dimensions; i++) {
+            sb.append(", idx" + i);
+        }
+        sb.append(", value);\n");
+    }
+
+    private void emitCarrierAddr(String addrStmt, String layoutStmt, int dimensions) {
+        indent();
+        sb.append("MemoryAddress addr = ").append(addrStmt).append(";\n");
+        if (dimensions > 0) {
+            indent();
+            sb.append("long offset = ").append(layoutStmt).append(".byteOffsets(\n");
+            incrAlign();
+            for (int i = 0; i < dimensions; i++) {
+                if (i != 0) {
+                    sb.append(",\n");
+                }
+                indent();
+                sb.append("MemoryLayout.PathElement.sqeuqnceElement(idx" + i).append(")");
+            }
+            sb.append(");\n");
+            decrAlign();
+            indent();
+            sb.append("addr = addr.addOffset(offset);\n");
+        }
+    }
+
+    private void emitCarrierGetter(String typeName, String addrStmt, String layoutStmt, int dimensions) {
+        emitCarrierAddr(addrStmt, layoutStmt, dimensions);
+        indent();
+        sb.append("return ").append(typeName).append(".at(addr);\n");
+    }
+
+    private void emitCarrierSetter(String typeName, String addrStmt, String layoutStmt, int dimensions) {
+        emitCarrierAddr(addrStmt, layoutStmt, dimensions);
+        indent();
+        sb.append("MemoryAddress.copy(value.ptr(), addr, ").append(typeName).append(".sizeof());\n");
+    }
+
+    public void addPrimitiveGlobal(String javaName, String nativeName, MemoryLayout layout, Class<?> type, int dimensions) {
+        constantHelper.addLayout(javaName, layout);
+        String addrStmt = getCallString(constantHelper.addAddress(javaName, nativeName, layout));
+        boolean isAddr = MemoryAddress.class.isAssignableFrom(type);
+        DirectMethodHandleDesc vh = constantHelper.addVarHandle(javaName, nativeName, layout, isAddr ? long.class : type, null);
+        String typeName = isAddr ? "MemoryAddress" : type.getName();
+        // adapted VarHandle method
+        String vhMethod = emitAdaptedVHGetter(vh, isAddr);
+
+        String vhStmt = vhMethod + "()";
+        // Getter
+        beginGetter(javaName, typeName, dimensions, true);
+        emitVHGetter(typeName, vhStmt, addrStmt, dimensions);
+        classEnd();
+        // Setter
+        beginSetter(javaName, typeName, dimensions, true);
+        emitVHSetter(vhStmt, addrStmt, dimensions);
+        classEnd();
+    }
+
+    public void addRecordGlobal(String javaName, String nativeName, MemoryLayout layout, ClassDesc CD_type, int dimensions) {
+        String layoutStmt = getCallString(constantHelper.addLayout(javaName, layout));
+        String typeName = simpleName(CD_type);
+        String addrStmt = getCallString(constantHelper.addAddress(javaName, nativeName, layout));
+        // Getter
+        beginGetter(javaName, typeName, dimensions, true);
+        emitCarrierGetter(typeName, addrStmt, layoutStmt, dimensions);
+        classEnd();
+        // Setter
+        beginSetter(javaName, typeName, dimensions, true);
+        emitCarrierSetter(typeName, addrStmt, layoutStmt, dimensions);
+        classEnd();
+    }
+
+    private Declaration.Scoped requireRecord(Declaration parent) {
+        Declaration.Scoped record = (Declaration.Scoped) parent;
+        assert (record.kind() == Declaration.Scoped.Kind.UNION ||
+                record.kind() == Declaration.Scoped.Kind.STRUCT);
+        return record;
+    }
+
+    private void emitFieldAddr(String fieldName) {
+        indent();
+        sb.append(PUB_CLS_MODS).append("MemoryAddress ").append(fieldName).append("$ptr() {\n");
         incrAlign();
         indent();
-        sb.append(vhName + ".set(" + vhParam + ");\n");
+        sb.append("return getFieldAddr(\"").append(fieldName).append("\");\n");
         decrAlign();
         indent();
         sb.append("}\n");
     }
 
-    void addCarrierGetter(String name, String typeName, Declaration parent, int dimensions) {
-        indent();
-        sb.append(parent == null ? PUB_MODS : PUB_CLS_MODS);
-        sb.append(typeName + " " + name + "$get() {\n");
-        incrAlign();
-        indent();
-        String addr = parent == null ? name + "$ADDR" :
-                "getFieldAddr(\"" + StringUtils.quote(name) + "\")";
-        sb.append("return " + typeName + ".at(" + addr + ");\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
+    public void addPrimitiveField(String fieldName, Declaration parent, Class<?> type, int dimensions) {
+        String javaName = NamingUtils.toSafeName(fieldName);
+        boolean isAddr = MemoryAddress.class.isAssignableFrom(type);
+        String typeName = isAddr ? "MemoryAddress" : type.getName();
+        String vhStmt = "getFieldHandle(\"" + fieldName + "\", " + typeName + ".class)";
+        String addrStmt = "ptr()";
+
+        // Field address
+        emitFieldAddr(javaName);
+        // Getter
+        beginGetter(javaName, typeName, dimensions, false);
+        emitVHGetter(typeName, vhStmt, addrStmt, dimensions);
+        classEnd();
+        // Setter
+        beginSetter(javaName, typeName, dimensions, false);
+        emitVHSetter(vhStmt, addrStmt, dimensions);
+        classEnd();
     }
 
-    void addCarrierSetter(String name, String typeName, Declaration parent, int dimensions) {
-        indent();
-        sb.append(parent == null ? PUB_MODS : PUB_CLS_MODS);
-        sb.append("void " + name + "$set(");
-        sb.append(typeName + " x) {\n");
-        incrAlign();
-        indent();
-        String addr = parent != null ?
-                "ptr()" : name + "$ADDR";
-        sb.append("MemoryAddress.copy(x.ptr(), ");
-        sb.append(addr + ", x.getLayout().byteSize());\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
-    }
+    public void addRecordField(String fieldName, Declaration parent, ClassDesc CD_type, int dimensions) {
+        String javaName = NamingUtils.toSafeName(fieldName);
+        String typeName = simpleName(CD_type);
+        String addrStmt = javaName + "$ptr()";
+        String layoutStmt = "$LAYOUT().select(MemoryLayout.PathElement.groupElement(\"" + fieldName + "\"))";
 
-    void addAddress(String name, Declaration parent) {
-        indent();
-        sb.append(PUB_CLS_MODS + "MemoryAddress " + name + "$ptr() {\n");
-        incrAlign();
-        indent();
-        sb.append("return getFieldAddr(\"" + StringUtils.quote(name) + "\");\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
+        // Field address
+        emitFieldAddr(javaName);
+        // Getter
+        beginGetter(javaName, typeName, dimensions, false);
+        emitCarrierGetter(typeName, addrStmt, layoutStmt, dimensions);
+        classEnd();
+        // Setter
+        beginSetter(javaName, typeName, dimensions, false);
+        emitCarrierSetter(typeName, addrStmt, layoutStmt, dimensions);
+        classEnd();
     }
 
     protected String build() {
         String res = sb.toString();
         this.sb = null;
         return res.toString();
+    }
+
+    protected void emitForwardGetter(DirectMethodHandleDesc desc) {
+        incrAlign();
+        indent();
+        sb.append(PUB_MODS + desc.invocationType().returnType().displayName() + " " + desc.methodName() + "() {\n");
+        incrAlign();
+        indent();
+        sb.append("return " + getCallString(desc) + ";\n");
+        decrAlign();
+        indent();
+        sb.append("}\n");
+        decrAlign();
+    }
+
+    protected String getCallString(DirectMethodHandleDesc desc) {
+        return desc.owner().displayName() + "." + desc.methodName() + "()";
+    }
+
+    protected String simpleName(ClassDesc returnType) {
+        String name = returnType.displayName();
+        int lastNestSymbol = name.lastIndexOf('$');
+        return returnType.displayName().substring(lastNestSymbol + 1);
+    }
+
+    protected String functionGetCallString(String javaName, FunctionDescriptor fDesc) {
+        return getCallString(constantHelper.addFunctionDesc(javaName, fDesc));
+    }
+
+    protected String methodHandleGetCallString(String javaName, String nativeName, MethodType mt, FunctionDescriptor fDesc, boolean varargs) {
+        return getCallString(constantHelper.addMethodHandle(javaName, nativeName, mt, fDesc, varargs));
+    }
+
+    protected String varHandleGetCallString(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
+        return getCallString(constantHelper.addVarHandle(javaName, nativeName, layout, type, parentLayout));
+    }
+
+    protected String addressGetCallString(String javaName, String nativeName, MemoryLayout layout) {
+        return getCallString(constantHelper.addAddress(javaName, nativeName, layout));
     }
 
     protected void indent() {

@@ -25,23 +25,28 @@
 
 package jdk.incubator.jbind;
 
-import jdk.incubator.jextract.Declaration;
-import jdk.incubator.jextract.Type;
+import java.lang.constant.ClassDesc;
 import java.lang.invoke.MethodType;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
 import javax.tools.JavaFileObject;
+
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.jextract.Declaration;
+import jdk.incubator.jextract.Type;
 
 public class StaticWrapperSourceFactory extends AbstractCodeFactory implements Declaration.Visitor<Void, Declaration> {
     private final Set<String> constants = new HashSet<>();
-    protected final JavaSourceBuilder builder = new JavaSourceBuilder();
+    protected final JavaSourceBuilder builder;
+    protected final ConstantHelper constantHelper;
     protected final TypeTranslator typeTranslator = new TypeTranslator();
     private final AnonymousRegistry aliases;
+    private final ClassDesc CD_class;
 
     static JavaFileObject[] generate(Declaration.Scoped decl, String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths) {
         return new StaticWrapperSourceFactory(clsName, pkgName, aliases, libraryNames, libraryPaths).generate(decl);
@@ -50,6 +55,10 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
     public StaticWrapperSourceFactory(String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths) {
         super(clsName, pkgName, libraryNames, libraryPaths);
         this.aliases = aliases;
+        String qualName = pkgName.isEmpty() ? clsName : pkgName + "." + clsName;
+        this.CD_class = ClassDesc.of(qualName);
+        this.constantHelper = new ConstantHelper(qualName, libraryNames.toArray(new String[0]));
+        this.builder = new JavaSourceBuilder(constantHelper);
     }
 
     public JavaFileObject[] generate(Declaration.Scoped decl) {
@@ -57,8 +66,6 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         builder.addImport("java.util.function.LongFunction");
         builder.addLineBreak();
         builder.classBegin(clsName);
-        builder.addLibraries(libraryNames.toArray(new String[0]),
-                libraryPaths != null ? libraryPaths.toArray(new String[0]) : null);
         //generate all decls
         decl.members().forEach(this::generateDecl);
 
@@ -66,7 +73,8 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         String src = builder.build();
 
         return new JavaFileObject[] {
-                fileFromString(pkgName, clsName, src)
+                fileFromString(pkgName, clsName, src),
+                constantHelper.build()
         };
     }
 
@@ -88,22 +96,17 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         }
 
         MethodType mtype = typeTranslator.getMethodType(funcTree.type());
-        builder.addLineBreak();
-        builder.addMethodHandle(funcTree, mtype, descriptor);
         //generate static wrapper for function
-        builder.addStaticFunctionWrapper(funcTree, mtype);
+        builder.addStaticFunctionWrapper(funcTree, mtype, descriptor);
         int i = 0;
         for (Declaration.Variable param : funcTree.parameters()) {
             Type.Function f = getAsFunctionPointer(param.type());
             if (f != null) {
                 String name = funcTree.name() + "$" + (param.name().isEmpty() ? "x" + i : param.name());
-                //add descriptor constant
-                builder.addDescriptor(name, descriptor);
+                name = NamingUtils.toSafeName(name);
                 //generate functional interface
                 MethodType fitype = typeTranslator.getMethodType(f);
-                builder.addFunctionalInterface(name, fitype);
-                //generate helper
-                builder.addFunctionalFactory(name, fitype);
+                builder.addFunctionalInterface(name, fitype, Type.descriptorFor(f).orElseThrow());
                 i++;
             }
         }
@@ -162,32 +165,32 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         boolean isRecord = isRecord(type);
         String clzName = isRecord ? ((Type.Declared) type).tree().name() : clazz.getName();
 
+        // Diagnosis, not suppose to happen
         if (clzName.isEmpty()) {
             System.err.println("Anonymous field typename for " + fieldName);
             System.err.println("  Type declaration for the field is " + ((Type.Declared) type).tree().toString());
             // skip for now
             return null;
+        } else if (clzName.contains("MemorySegment")) {
+            // Any reason we getting this? Array have being reduced to element type
+            System.err.println("MemorySegment type expected for " + fieldName);
+            System.err.println("  Type declaration for the field is " + ((Type.Declared) type).tree().toString());
         }
 
         if (parent == null) {
+            String nativeName = NamingUtils.getSymbolInLib(tree);
             // global variable
-            builder.addLayout(fieldName, layout);
-            builder.addAddress(fieldName, NamingUtils.getSymbolInLib(tree));
+            if (isRecord) {
+                builder.addRecordGlobal(fieldName, nativeName, layout, CD_class.nested(clzName), dimensions);
+            } else {
+                builder.addPrimitiveGlobal(fieldName, nativeName, layout, clazz, dimensions);
+            }
         } else {
-            builder.addAddress(fieldName, parent);
-        }
-
-        //add getter and setters
-        if (clsName.contains("MemorySegment")) {
-            // FIXME: We cannot construct MS with address
-            // skip for now
-        } else if (isRecord) {
-            builder.addCarrierGetter(fieldName, clzName, parent, dimensions);
-            builder.addCarrierSetter(fieldName, clzName, parent, dimensions);
-        } else {
-            builder.addVarHandle(fieldName, clazz, parent, dimensions);
-            builder.addVHGetter(fieldName, clazz, parent, dimensions);
-            builder.addVHSetter(fieldName, clazz, parent, dimensions);
+            if (isRecord) {
+                builder.addRecordField(fieldName, parent, CD_class.nested(clzName), dimensions);
+            } else {
+                builder.addPrimitiveField(fieldName, parent, clazz, dimensions);
+            }
         }
         return null;
     }

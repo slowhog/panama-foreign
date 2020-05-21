@@ -39,7 +39,7 @@ import jdk.incubator.foreign.FunctionDescriptor;
  */
 public class HandleSourceFactory extends  AbstractCodeFactory implements Declaration.Visitor<Void, Declaration> {
     private final Set<String> constants = new HashSet<>();
-    protected final JavaSourceBuilder builder = new JavaSourceBuilder();
+    protected final JavaSourceBuilder builder = new JavaSourceBuilder(null);
     protected final TypeTranslator typeTranslator = new TypeTranslator();
     private final Configurations ctx;
 
@@ -56,8 +56,6 @@ public class HandleSourceFactory extends  AbstractCodeFactory implements Declara
     public JavaFileObject[] generate(Declaration.Scoped decl) {
         builder.addPackagePrefix(pkgName);
         builder.classBegin(clsName);
-        builder.addLibraries(libraryNames.toArray(new String[0]),
-                libraryPaths != null ? libraryPaths.toArray(new String[0]) : null);
         //generate all decls
         decl.members().forEach(this::generateDecl);
 
