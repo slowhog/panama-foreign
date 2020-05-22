@@ -32,7 +32,7 @@ import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
 import sun.nio.FFIUtils.Scope;
 
-import static jdk.incubator.foreign.SystemABI.C_SHORT;
+import static jdk.incubator.foreign.CSupport.C_SHORT;
 import static jdk.internal.macos.cf.CFString_h.kCFStringEncodingUTF16;
 import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormC;
 import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormD;
@@ -64,7 +64,7 @@ class MacOSXFileSystem extends BsdFileSystem {
         try (Scope s = FFIUtils.localScope()) {
             long byteCounts = C_SHORT.byteSize() * path.length;
             MemoryAddress buf = s.allocate(byteCounts);
-            MemoryAddress.copy(MemorySegment.ofArray(path).baseAddress(), buf, byteCounts);
+            FFIUtils.asSegment(buf, byteCounts).copyFrom(MemorySegment.ofArray(path));
             LibMacOS.CFStringAppendCharacters(csref, buf, path.length);
             LibMacOS.CFStringNormalize(csref, form);
             long len = LibMacOS.CFStringGetLength(csref);
@@ -74,7 +74,7 @@ class MacOSXFileSystem extends BsdFileSystem {
             char[] rv = new char[(int) len];
             // minus the terminating 0
             byteCounts -= C_SHORT.byteSize();
-            MemoryAddress.copy(buf, MemorySegment.ofArray(rv).baseAddress(), byteCounts);
+            MemorySegment.ofArray(rv).copyFrom(FFIUtils.asSegment(buf, byteCounts));
             return rv;
         } finally {
             LibMacOS.CFRelease(csref);

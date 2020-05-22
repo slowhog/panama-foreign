@@ -33,17 +33,17 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Optional;
+import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.SystemABI;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.abi.SharedUtils;
 
 public class RuntimeHelper {
-    private final static SystemABI ABI = SharedUtils.getSystemABI();
+    private final static ForeignLinker ABI = SharedUtils.getSystemLinker();
     private final static ClassLoader LOADER = RuntimeHelper.class.getClassLoader();
 
     private final static MethodHandles.Lookup MH_LOOKUP = MethodHandles.lookup();

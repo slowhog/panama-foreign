@@ -42,10 +42,10 @@ import jdk.internal.panama.LibC;
 import jdk.internal.vm.annotation.ForceInline;
 import sun.nio.ch.IOStatus;
 
-import static jdk.incubator.foreign.SystemABI.C_CHAR;
-import static jdk.incubator.foreign.SystemABI.C_INT;
-import static jdk.incubator.foreign.SystemABI.C_LONG;
-import static jdk.incubator.foreign.SystemABI.C_POINTER;
+import static jdk.incubator.foreign.CSupport.C_CHAR;
+import static jdk.incubator.foreign.CSupport.C_INT;
+import static jdk.incubator.foreign.CSupport.C_LONG;
+import static jdk.incubator.foreign.CSupport.C_POINTER;
 import static jdk.internal.panama.sys.errno_h.EAGAIN;
 import static jdk.internal.panama.sys.errno_h.EINTR;
 import static jdk.internal.panama.sys.errno_h.EWOULDBLOCK;
@@ -63,7 +63,7 @@ public class FFIUtils {
             MemorySegment buf = MemorySegment.allocateNative(len);
             used.add(buf);
             MemoryAddress ptr = buf.baseAddress();
-            MemoryAddress.copy(MemorySegment.ofArray(ar).baseAddress(), ptr, ar.length);
+            buf.copyFrom(MemorySegment.ofArray(ar));
             MemoryHandles.varHandle(byte.class, ByteOrder.nativeOrder()).set(ptr.addOffset(len - 1), (byte) 0);
             return buf.baseAddress();
         }
@@ -186,7 +186,7 @@ public class FFIUtils {
 
     public static byte[] toByteArray(MemoryAddress addr, long len) {
         byte[] ar = new byte[(int) len];
-        MemoryAddress.copy(addr, MemorySegment.ofArray(ar).baseAddress(), len);
+        MemorySegment.ofArray(ar).copyFrom(addr.segment().asSlice(addr.segmentOffset(), len));
         return ar;
     }
 
@@ -236,5 +236,9 @@ public class FFIUtils {
                 throw new IOException(getErrorMsg(errno, reading ? "Read failed" : "Write failed"));
             }
         }
+    }
+
+    public static MemorySegment asSegment(MemoryAddress addr, long length) {
+        return addr.segment().asSlice(addr.segmentOffset(), length);
     }
 }

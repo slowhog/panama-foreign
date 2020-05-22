@@ -38,8 +38,8 @@ import java.util.concurrent.TimeUnit;
 import jdk.incubator.foreign.MemoryAddress;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.SystemABI.C_INT;
-import static jdk.incubator.foreign.SystemABI.C_CHAR;
+import static jdk.incubator.foreign.CSupport.C_INT;
+import static jdk.incubator.foreign.CSupport.C_CHAR;
 import static jdk.internal.panama.sys.errno_h.ECANCELED;
 import static sun.nio.FFIUtils.Scope;
 import static sun.nio.FFIUtils.errno;

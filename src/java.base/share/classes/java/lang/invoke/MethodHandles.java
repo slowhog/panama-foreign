@@ -2227,8 +2227,8 @@ public class MethodHandles {
         }
 
         /**
-         * Displays the name of the class from which lookups are to be made.
-         * followed with "/" and the name of the {@linkplain #previousLookupClass()
+         * Displays the name of the class from which lookups are to be made,
+         * followed by "/" and the name of the {@linkplain #previousLookupClass()
          * previous lookup class} if present.
          * (The name is the one reported by {@link java.lang.Class#getName() Class.getName}.)
          * If there are restrictions on the access permitted to this lookup,
@@ -5472,6 +5472,40 @@ System.out.println((int) f0.invokeExact("x", "y")); // 2
                 ? (rtype != void.class)
                 : (rtype != filterType.parameterType(0) || filterValues != 1))
             throw newIllegalArgumentException("target and filter types do not match", targetType, filterType);
+    }
+
+    /**
+     * Filter the return value of a target method handle with a filter function. The filter function is
+     * applied to the return value of the original handle; if the filter specifies more than one parameters,
+     * then any remaining parameter is appended to the adapter handle. In other words, the adaptation works
+     * as follows:
+     * <blockquote><pre>{@code
+     * T target(A...)
+     * V filter(B... , T)
+     * V adapter(A... a, B... b) {
+     *     T t = target(a...);
+     *     return filter(b..., t);
+     * }</pre></blockquote>
+     * <p>
+     * If the filter handle is a unary function, then this method behaves like {@link #filterReturnValue(MethodHandle, MethodHandle)}.
+     *
+     * @param target the target method handle
+     * @param filter the filter method handle
+     * @return the adapter method handle
+     */
+    /* package */ static MethodHandle collectReturnValue(MethodHandle target, MethodHandle filter) {
+        MethodType targetType = target.type();
+        MethodType filterType = filter.type();
+        BoundMethodHandle result = target.rebind();
+        LambdaForm lform = result.editor().collectReturnValueForm(filterType.basicType());
+        MethodType newType = targetType.changeReturnType(filterType.returnType());
+        if (filterType.parameterList().size() > 1) {
+            for (int i = 0 ; i < filterType.parameterList().size() - 1 ; i++) {
+                newType = newType.appendParameterTypes(filterType.parameterType(i));
+            }
+        }
+        result = result.copyWithExtendL(newType, lform, filter);
+        return result;
     }
 
     /**

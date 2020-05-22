@@ -33,7 +33,7 @@ import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
 import sun.nio.FFIUtils.Scope;
 
-import static jdk.incubator.foreign.SystemABI.C_SHORT;
+import static jdk.incubator.foreign.CSupport.C_SHORT;
 
 /**
  * File type detector that uses a file extension to look up its MIME type
@@ -63,13 +63,12 @@ class UTIFileTypeDetector extends AbstractFileTypeDetector {
     }
 
     private String probe0(String fileExtension) {
-        try (Scope s = FFIUtils.localScope()) {
-            char[] tmp = fileExtension.toCharArray();
-            long bytes = C_SHORT.byteSize() * tmp.length;
-            MemoryAddress buf = s.allocate(bytes);
-            MemoryAddress.copy(MemorySegment.ofArray(tmp).baseAddress(), buf, C_SHORT.byteSize() * tmp.length);
+        char[] tmp = fileExtension.toCharArray();
+        long bytes = C_SHORT.byteSize() * tmp.length;
+        try (MemorySegment buf = MemorySegment.allocateNative(bytes)) {
+            buf.copyFrom(MemorySegment.ofArray(tmp));
             var ext = LibMacOS.CFStringCreateWithCharacters(MemoryAddress.NULL,
-                    buf, bytes);
+                    buf.baseAddress(), bytes);
             if (FFIUtils.isNull(ext)) {
                 return null;
             }

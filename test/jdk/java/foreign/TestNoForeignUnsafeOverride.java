@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,31 +21,25 @@
  * questions.
  */
 
-package jdk.incubator.jbind.core;
+/*
+ * @test
+ * @modules java.base/jdk.internal.misc
+ *          jdk.incubator.foreign/jdk.internal.foreign
+ * @run testng TestNoForeignUnsafeOverride
+ */
 
-import java.lang.invoke.VarHandle;
-import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.foreign.MemorySegment;
 
-public abstract class Struct<T extends Struct<T>> {
-    private final MemoryAddress addr;
+import org.testng.annotations.Test;
 
-    protected Struct(MemoryAddress addr) {
-        this.addr = addr;
+public class TestNoForeignUnsafeOverride {
+    static {
+        System.setProperty("foreign.restricted", "permit");
     }
 
-    public abstract GroupLayout getLayout();
-
-    public MemoryAddress ptr() {
-        return addr;
-    };
-
-    protected final MemoryAddress getFieldAddr(String name) {
-        return addr.addOffset(getLayout().offset(MemoryLayout.PathElement.groupElement(name)) >> 3);
-    }
-
-    protected final VarHandle getFieldHandle(String name, Class<?> carrier) {
-        return getLayout().varHandle(carrier, MemoryLayout.PathElement.groupElement(name));
+    @Test(expectedExceptions = IllegalAccessError.class)
+    public void testUnsafeAccess() {
+        MemorySegment.ofNativeRestricted(MemoryAddress.ofLong(42), 10, null, null, null);
     }
 }

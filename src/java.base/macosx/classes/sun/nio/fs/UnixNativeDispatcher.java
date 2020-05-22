@@ -34,9 +34,9 @@ import jdk.internal.panama.LibC;
 import jdk.internal.panama.unistd_h;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.SystemABI.C_CHAR;
-import static jdk.incubator.foreign.SystemABI.C_POINTER;
-import static jdk.incubator.foreign.SystemABI.C_LONG;
+import static jdk.incubator.foreign.CSupport.C_CHAR;
+import static jdk.incubator.foreign.CSupport.C_POINTER;
+import static jdk.incubator.foreign.CSupport.C_LONG;
 import static jdk.internal.panama.LibC.dirent;
 import static jdk.internal.panama.LibC.group;
 import static jdk.internal.panama.LibC.passwd;
@@ -87,7 +87,7 @@ class UnixNativeDispatcher {
         long len = (ar[ar.length - 1] == '\0') ? ar.length : ar.length + 1;
         MemorySegment buf = MemorySegment.allocateNative(len);
         MemoryAddress ptr = buf.baseAddress();
-        MemoryAddress.copy(MemorySegment.ofArray(ar).baseAddress(), ptr, ar.length);
+        buf.copyFrom(MemorySegment.ofArray(ar));
         MemoryHandles.varHandle(byte.class, ByteOrder.nativeOrder()).set(ptr.addOffset(len - 1), (byte) 0);
         return buf;
     }
