@@ -134,8 +134,7 @@ module java.base {
     // see make/gensrc/GenModuleInfo.gmk
 
     exports sun.invoke.util to
-        jdk.compiler,
-        jdk.incubator.foreign;
+        jdk.compiler;
     exports com.sun.security.ntlm to
         java.security.sasl;
     exports jdk.internal to
@@ -150,10 +149,7 @@ module java.base {
         java.naming,
         java.rmi,
         jdk.jlink,
-        jdk.net,
-        jdk.incubator.foreign;
-    exports jdk.internal.access.foreign to
-        jdk.incubator.foreign;
+        jdk.net;
     exports jdk.internal.event to
         jdk.jfr;
     exports jdk.internal.jimage to
@@ -163,8 +159,7 @@ module java.base {
     exports jdk.internal.loader to
         java.instrument,
         java.logging,
-        java.naming,
-        jdk.incubator.foreign;
+        java.naming;
     exports jdk.internal.jmod to
         jdk.compiler,
         jdk.jlink;
@@ -201,8 +196,7 @@ module java.base {
         jdk.jshell,
         jdk.nio.mapmode,
         jdk.unsupported,
-        jdk.internal.vm.ci,
-        jdk.incubator.foreign;
+        jdk.internal.vm.ci;
     exports jdk.internal.module to
         java.instrument,
         java.management.rmi,
@@ -217,8 +211,7 @@ module java.base {
     exports jdk.internal.platform to
         jdk.management;
     exports jdk.internal.ref to
-        java.desktop,
-        jdk.incubator.foreign;
+        java.desktop;
     exports jdk.internal.reflect to
         java.logging,
         java.sql,
@@ -231,7 +224,6 @@ module java.base {
         jdk.management.agent;
     exports jdk.internal.vm.annotation to
         jdk.internal.vm.ci,
-        jdk.incubator.foreign,
         jdk.unsupported;
     exports jdk.internal.util.jar to
         jdk.jartool;
@@ -261,8 +253,7 @@ module java.base {
         java.management,
         jdk.crypto.cryptoki,
         jdk.net,
-        jdk.sctp,
-        jdk.incubator.foreign;
+        jdk.sctp;
     exports sun.nio.cs to
         jdk.charsets;
     exports sun.reflect.annotation to
@@ -279,8 +270,7 @@ module java.base {
     exports sun.security.action to
         java.desktop,
         java.security.jgss,
-        jdk.crypto.ec,
-        jdk.incubator.foreign;
+        jdk.crypto.ec;
     exports sun.security.internal.interfaces to
         jdk.crypto.cryptoki;
     exports sun.security.internal.spec to
