@@ -172,10 +172,9 @@ class KQueue {
 
     static {
         IOUtil.load();
-        GroupLayout layout = kevent.kevent$LAYOUT;
-        SIZEOF_KQUEUEEVENT = (int) layout.byteSize();
-        OFFSET_FILTER = (int) layout.byteOffset(MemoryLayout.PathElement.groupElement("filter"));
-        OFFSET_IDENT = (int) layout.byteOffset(MemoryLayout.PathElement.groupElement("ident"));
-        OFFSET_FLAGS = (int) layout.byteOffset(MemoryLayout.PathElement.groupElement("flags"));
+        SIZEOF_KQUEUEEVENT = (int) kevent.sizeof();
+        OFFSET_FILTER = (int) kevent.offsetof("filter");
+        OFFSET_IDENT = (int) kevent.offsetof("ident");
+        OFFSET_FLAGS = (int) kevent.offsetof("flags");
     }
 }

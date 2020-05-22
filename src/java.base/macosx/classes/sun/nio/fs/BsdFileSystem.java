@@ -91,7 +91,7 @@ class BsdFileSystem extends UnixFileSystem {
 
             while (count != numEntries) {
                 Scope s2 = s.fork();
-                long size = statfs.statfs$LAYOUT.byteSize() * numEntries;
+                long size = statfs.sizeof() * numEntries;
                 MemoryAddress buf = s2.allocate(size);
                 count = numEntries;
                 numEntries = LibC.getfsstat(buf, (int) size, MNT_WAIT);

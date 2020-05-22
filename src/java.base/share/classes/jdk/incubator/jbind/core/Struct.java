@@ -24,9 +24,13 @@
 package jdk.incubator.jbind.core;
 
 import java.lang.invoke.VarHandle;
+import java.util.Arrays;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.foreign.MemoryLayout.PathElement;
+import jdk.incubator.foreign.SequenceLayout;
 
 public abstract class Struct<T extends Struct<T>> {
     private final MemoryAddress addr;
@@ -45,7 +49,26 @@ public abstract class Struct<T extends Struct<T>> {
         return addr.addOffset(getLayout().byteOffset(MemoryLayout.PathElement.groupElement(name)));
     }
 
+    /**
+     * Return the leaf handle for field, to be called with struct address
+     * If the field is an array, proper coordinate will be inserted
+     */
     protected final VarHandle getFieldHandle(String name, Class<?> carrier) {
-        return getLayout().varHandle(carrier, MemoryLayout.PathElement.groupElement(name));
+        MemoryLayout fieldLayout = getLayout().select(MemoryLayout.PathElement.groupElement(name));
+        long offset = getLayout().byteOffset(MemoryLayout.PathElement.groupElement(name));
+        int dims = 0;
+        while (fieldLayout instanceof SequenceLayout) {
+            dims++;
+            fieldLayout = ((SequenceLayout) fieldLayout).elementLayout();
+        }
+        PathElement[] args = new PathElement[dims];
+        Arrays.fill(args, MemoryLayout.PathElement.sequenceElement());
+        boolean isAddr = MemoryAddress.class.isAssignableFrom(carrier);
+        VarHandle vh = fieldLayout.varHandle(isAddr ? long.class : carrier, args);
+        vh = MemoryHandles.withOffset(vh, offset);
+        if (isAddr) {
+            vh = MemoryHandles.asAddressVarHandle(vh);
+        }
+        return vh;
     }
 }

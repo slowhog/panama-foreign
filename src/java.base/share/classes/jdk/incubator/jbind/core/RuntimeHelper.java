@@ -48,6 +48,16 @@ public class RuntimeHelper {
 
     private final static MethodHandles.Lookup MH_LOOKUP = MethodHandles.lookup();
 
+    public static final LibraryLookup[] libraries(String... libNames) {
+        if (libNames.length == 0) {
+            return new LibraryLookup[] { LibraryLookup.ofDefault() };
+        } else {
+            return Arrays.stream(libNames)
+                .map(libName -> LibraryLookup.ofLibrary(libName))
+                .toArray(LibraryLookup[]::new);
+        }
+    }
+
     public static final LibraryLookup[] libraries(String[] libNames, String[] libPaths) {
         if (libNames.length == 0) {
             return new LibraryLookup[]{LibraryLookup.ofDefault()};

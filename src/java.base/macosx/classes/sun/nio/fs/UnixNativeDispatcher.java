@@ -494,14 +494,13 @@ class UnixNativeDispatcher {
     {
         try (Scope s = localScope()) {
             MemoryAddress file = copyToNativeBytes(path, s);
-            MemoryAddress ptv = s.allocateArray(timeval.timeval$LAYOUT, 2);
-            timeval v0 = timeval.at(ptv);
-            timeval v1 = timeval.at(ptv.addOffset(timeval.timeval$LAYOUT.byteSize()));
+            timeval v0 = timeval.allocate(s::allocate, 2);
+            timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
             v1.tv_sec$set(times1 / 1000_000);
             v1.tv_usec$set((int) (times1 % 1000_000));
-            restartable(() -> LibC.utimes(file, ptv));
+            restartable(() -> LibC.utimes(file, v0.ptr()));
         }
     }
 
@@ -510,14 +509,13 @@ class UnixNativeDispatcher {
      */
     static void futimes(int fd, long times0, long times1) throws UnixException {
         try (Scope s = localScope()) {
-            MemoryAddress ptv = s.allocateArray(timeval.timeval$LAYOUT, 2);
-            timeval v0 = timeval.at(ptv);
-            timeval v1 = timeval.at(ptv.addOffset(timeval.timeval$LAYOUT.byteSize()));
+            timeval v0 = timeval.allocate(s::allocate, 2);
+            timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
             v1.tv_sec$set(times1 / 1000_000);
             v1.tv_usec$set((int) (times1 % 1000_000));
-            restartable(() -> LibC.futimes(fd, ptv));
+            restartable(() -> LibC.futimes(fd, v0.ptr()));
         }
     }
 
@@ -525,16 +523,14 @@ class UnixNativeDispatcher {
      * futimens(int fildes, const struct timespec times[2])
      */
     static void futimens(int fd, long times0, long times1) throws UnixException {
-        long size = timespec.timespec$LAYOUT.byteSize();
-        try (MemorySegment ptv = MemorySegment.allocateNative(size * 2)) {
-            MemoryAddress ptr = ptv.baseAddress();
-            timespec v0 = timespec.at(ptr);
-            timespec v1 = timespec.at(ptr.addOffset(size));
+        try (Scope s = localScope()) {
+            timespec v0 = timespec.allocate(s::allocate, 2);
+            timespec v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000_000);
             v0.tv_nsec$set((int) (times0 % 1000_000_000));
             v1.tv_sec$set(times1 / 1000_000_000);
             v1.tv_nsec$set((int) (times1 % 1000_000_000));
-            restartable(() -> LibC.futimens(fd, ptr));
+            restartable(() -> LibC.futimens(fd, v0.ptr()));
         }
     }
 
@@ -546,14 +542,13 @@ class UnixNativeDispatcher {
     {
         try (Scope s = localScope()) {
             MemoryAddress file = copyToNativeBytes(path, s);
-            MemoryAddress ptv = s.allocateArray(timeval.timeval$LAYOUT, 2);
-            timeval v0 = timeval.at(ptv);
-            timeval v1 = timeval.at(ptv.addOffset(timeval.timeval$LAYOUT.byteSize()));
+            timeval v0 = timeval.allocate(s::allocate, 2);
+            timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
             v1.tv_sec$set(times1 / 1000_000);
             v1.tv_usec$set((int) (times1 % 1000_000));
-            restartable(() -> LibC.lutimes(file, ptv));
+            restartable(() -> LibC.lutimes(file, v0.ptr()));
         }
     }
 
@@ -610,7 +605,7 @@ class UnixNativeDispatcher {
         MemoryAddress dirp = MemoryAddress.ofLong(dir);
         setErrno(0);
 
-        MemoryAddress pdir = FFIUtils.resizePointer(LibC.readdir(dirp), dirent.dirent$LAYOUT.byteSize());
+        MemoryAddress pdir = FFIUtils.resizePointer(LibC.readdir(dirp), dirent.sizeof());
         if (FFIUtils.isNull(pdir)) {
             checkErrno(0);
             return null;
