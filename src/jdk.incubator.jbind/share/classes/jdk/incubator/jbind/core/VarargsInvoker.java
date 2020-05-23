@@ -23,19 +23,23 @@
 
 package jdk.incubator.jbind.core;
 
+import static jdk.incubator.foreign.CSupport.C_DOUBLE;
+import static jdk.incubator.foreign.CSupport.C_LONGLONG;
+import static jdk.incubator.foreign.CSupport.C_POINTER;
+
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+
+import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.SystemABI;
-
-import static jdk.incubator.foreign.SystemABI.*;
 
 public class VarargsInvoker {
-
+    private static final ForeignLinker ABI = CSupport.getSystemLinker();
     private static final MethodHandle INVOKE_MH;
     private final MemoryAddress symbol;
     private final MethodType varargs;
@@ -91,7 +95,7 @@ public class VarargsInvoker {
         FunctionDescriptor f = (function.returnLayout().isEmpty()) ?
                 FunctionDescriptor.ofVoid(argLayouts) :
                 FunctionDescriptor.of(function.returnLayout().get(), argLayouts);
-        MethodHandle mh = SystemABI.getSystemABI().downcallHandle(symbol, mt, f);
+        MethodHandle mh = ABI.downcallHandle(symbol, mt, f);
         // flatten argument list so that it can be passed to an asSpreader MH
         Object[] allArgs = new Object[nNamedArgs + unnamedArgs.length];
         System.arraycopy(args, 0, allArgs, 0, nNamedArgs);
@@ -123,6 +127,7 @@ public class VarargsInvoker {
             return clazz;
         }
     }
+
     private Class<?> promote(Class<?> c) {
         if (c == byte.class || c == char.class || c == short.class || c == int.class) {
             return long.class;

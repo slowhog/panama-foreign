@@ -30,6 +30,7 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemoryLayout.PathElement;
+import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
 
 public abstract class Struct<T extends Struct<T>> {
@@ -70,5 +71,9 @@ public abstract class Struct<T extends Struct<T>> {
             vh = MemoryHandles.asAddressVarHandle(vh);
         }
         return vh;
+    }
+
+    public MemorySegment asSegment() {
+        return addr.segment().asSlice(addr.segmentOffset(), getLayout().byteSize());
     }
 }

@@ -38,7 +38,6 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
-import jdk.incubator.foreign.SystemABI;
 import jdk.incubator.foreign.ValueLayout;
 import jdk.incubator.jextract.Declaration;
 
@@ -90,7 +89,7 @@ class JavaSourceBuilder {
         sb.append("import java.lang.invoke.VarHandle;\n");
         sb.append("import jdk.incubator.foreign.*;\n");
         sb.append("import jdk.incubator.foreign.MemoryLayout.PathElement;\n");
-        sb.append("import static jdk.incubator.foreign.SystemABI.*;\n\n");
+        sb.append("import static jdk.incubator.foreign.CSupport.*;\n\n");
     }
 
     protected void addImport(String value) {
@@ -404,7 +403,7 @@ class JavaSourceBuilder {
     private void emitCarrierSetter(String typeName, String addrStmt, String layoutStmt, int dimensions) {
         emitCarrierAddr(addrStmt, layoutStmt, dimensions);
         indent();
-        sb.append("MemoryAddress.copy(value.ptr(), addr, ").append(typeName).append(".sizeof());\n");
+        sb.append(typeName).append(".at(addr).asSegment().copyFrom(value.asSegment());\n");
     }
 
     public void addPrimitiveGlobal(String javaName, String nativeName, MemoryLayout layout, Class<?> type, int dimensions) {

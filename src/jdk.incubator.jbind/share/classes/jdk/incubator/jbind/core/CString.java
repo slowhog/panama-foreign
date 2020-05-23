@@ -31,7 +31,7 @@ import jdk.incubator.foreign.NativeAllocationScope;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import static jdk.incubator.foreign.SystemABI.C_CHAR;
+import static jdk.incubator.foreign.CSupport.C_CHAR;
 
 public final class CString {
     private CString() {
@@ -46,7 +46,9 @@ public final class CString {
 
     private static void copy(MemoryAddress addr, byte[] bytes) {
         var heapSegment = MemorySegment.ofArray(bytes);
-        MemoryAddress.copy(heapSegment.baseAddress(), addr, bytes.length);
+        addr.segment()
+            .asSlice(addr.segmentOffset(), bytes.length)
+            .copyFrom(heapSegment);
         byteArrHandle.set(addr, (long)bytes.length, (byte)0);
     }
 
