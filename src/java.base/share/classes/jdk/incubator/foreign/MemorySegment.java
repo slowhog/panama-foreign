@@ -31,7 +31,6 @@ import java.nio.ByteBuffer;
 import jdk.internal.foreign.AbstractMemorySegmentImpl;
 import jdk.internal.foreign.HeapMemorySegmentImpl;
 import jdk.internal.foreign.MappedMemorySegmentImpl;
-import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.Utils;
 
@@ -111,21 +110,22 @@ import java.util.function.Consumer;
  * work in parallel on disjoint segment slices (this assumes that the access mode {@link #ACQUIRE} is set).
  * For instance, the following code can be used to sum all int values in a memory segment in parallel:
  * <blockquote><pre>{@code
+MemorySegment segment = ...
 SequenceLayout SEQUENCE_LAYOUT = MemoryLayout.ofSequence(1024, MemoryLayouts.JAVA_INT);
 VarHandle VH_int = SEQUENCE_LAYOUT.elementLayout().varHandle(int.class);
-int sum = StreamSupport.stream(segment.spliterator(SEQUENCE_LAYOUT), true)
-            .mapToInt(segment -> (int)VH_int.get(segment.baseAddress))
+int sum = StreamSupport.stream(MemorySegment.spliterator(segment, SEQUENCE_LAYOUT), true)
+            .mapToInt(s -> (int)VH_int.get(s.baseAddress()))
             .sum();
  * }</pre></blockquote>
  *
  * <h2><a id = "access-modes">Access modes</a></h2>
  *
  * Memory segments supports zero or more <em>access modes</em>. Supported access modes are {@link #READ},
- * {@link #WRITE}, {@link #CLOSE} and {@link #ACQUIRE}. The set of access modes supported by a segment alters the
+ * {@link #WRITE}, {@link #CLOSE}, {@link #ACQUIRE} and {@link #HANDOFF}. The set of access modes supported by a segment alters the
  * set of operations that are supported by that segment. For instance, attempting to call {@link #close()} on
  * a segment which does not support the {@link #CLOSE} access mode will result in an exception.
  * <p>
- * The set of supported access modes can only be made stricter (by supporting <em>less</em> access modes). This means
+ * The set of supported access modes can only be made stricter (by supporting <em>fewer</em> access modes). This means
  * that restricting the set of access modes supported by a segment before sharing it with other clients
  * is generally a good practice if the creator of the segment wants to retain some control over how the segment
  * is going to be accessed.
@@ -150,7 +150,7 @@ MemorySegment roSegment = segment.withAccessModes(segment.accessModes() & ~WRITE
  * To allow for interoperability with existing code, a byte buffer view can be obtained from a memory segment
  * (see {@link #asByteBuffer()}). This can be useful, for instance, for those clients that want to keep using the
  * {@link ByteBuffer} API, but need to operate on large memory segments. Byte buffers obtained in such a way support
- * the same spatial and temporal access restrictions associated to the memory address from which they originated.
+ * the same spatial and temporal access restrictions associated to the memory segment from which they originated.
  *
  * @apiNote In the future, if the Java language permits, {@link MemorySegment}
  * may become a {@code sealed} interface, which would prohibit subclassing except by
@@ -177,7 +177,8 @@ public interface MemorySegment extends AutoCloseable {
      * The returned spliterator splits the segment according to the specified sequence layout; that is,
      * if the supplied layout is a sequence layout whose element count is {@code N}, then calling {@link Spliterator#trySplit()}
      * will result in a spliterator serving approximatively {@code N/2} elements (depending on whether N is even or not).
-     * As such, splitting is possible as long as {@code N >= 2}.
+     * As such, splitting is possible as long as {@code N >= 2}. The spliterator returns segments that feature the same
+     * <a href="#access-modes">access modes</a> as the given segment less the {@link #CLOSE} access mode.
      * <p>
      * The returned spliterator effectively allows to slice a segment into disjoint sub-segments, which can then
      * be processed in parallel by multiple threads (if the access mode {@link #ACQUIRE} is set).
@@ -216,7 +217,7 @@ public interface MemorySegment extends AutoCloseable {
      *      owned by {@code newOwner}.
      * @throws IllegalStateException if this segment is not <em>alive</em>, or if access occurs from a thread other than the
      * thread owning this segment, or if the segment cannot be closed because it is being operated upon by a different
-     * thread (see {@link #spliterator(SequenceLayout)}).
+     * thread (see {@link #spliterator(MemorySegment, SequenceLayout)}).
      * @throws NullPointerException if {@code newOwner == null}
      * @throws IllegalArgumentException if the segment is already a confined segment owner by {@code newOnwer}.
      * @throws UnsupportedOperationException if this segment does not support the {@link #HANDOFF} access mode.
@@ -231,13 +232,13 @@ public interface MemorySegment extends AutoCloseable {
 
     /**
      * Obtains a segment view with specific <a href="#access-modes">access modes</a>. Supported access modes are {@link #READ}, {@link #WRITE},
-     * {@link #CLOSE} and {@link #ACQUIRE}. It is generally not possible to go from a segment with stricter access modes
+     * {@link #CLOSE}, {@link #ACQUIRE} and {@link #HANDOFF}. It is generally not possible to go from a segment with stricter access modes
      * to one with less strict access modes. For instance, attempting to add {@link #WRITE} access mode to a read-only segment
      * will be met with an exception.
      * @param accessModes an ORed mask of zero or more access modes.
      * @return a segment view with specific access modes.
-     * @throws UnsupportedOperationException when {@code mask} is an access mask which is less strict than the one supported by this
-     * segment.
+     * @throws IllegalArgumentException when {@code mask} is an access mask which is less strict than the one supported by this
+     * segment, or when {@code mask} contains bits not associated with any of the supported access modes.
      */
     MemorySegment withAccessModes(int accessModes);
 
@@ -245,12 +246,13 @@ public interface MemorySegment extends AutoCloseable {
      * Does this segment support a given set of access modes?
      * @param accessModes an ORed mask of zero or more access modes.
      * @return true, if the access modes in {@code accessModes} are stricter than the ones supported by this segment.
+     * @throws IllegalArgumentException when {@code mask} contains bits not associated with any of the supported access modes.
      */
     boolean hasAccessModes(int accessModes);
 
     /**
      * Returns the <a href="#access-modes">access modes</a> associated with this segment; the result is represented as ORed values from
-     * {@link #READ}, {@link #WRITE}, {@link #CLOSE} and {@link #ACQUIRE}.
+     * {@link #READ}, {@link #WRITE}, {@link #CLOSE}, {@link #ACQUIRE} and {@link #HANDOFF}.
      * @return the access modes associated with this segment.
      */
     int accessModes();
@@ -333,6 +335,32 @@ public interface MemorySegment extends AutoCloseable {
     void copyFrom(MemorySegment src);
 
     /**
+     * Finds and returns the offset, in bytes, of the first mismatch between
+     * this segment and a given other segment. The offset is relative to the
+     * {@link #baseAddress() base address} of each segment and will be in the
+     * range of 0 (inclusive) up to the {@link #byteSize() size} (in bytes) of
+     * the smaller memory segment (exclusive).
+     * <p>
+     * If the two segments share a common prefix then the returned offset is
+     * the length of the common prefix and it follows that there is a mismatch
+     * between the two segments at that offset within the respective segments.
+     * If one segment is a proper prefix of the other then the returned offset is
+     * the smaller of the segment sizes, and it follows that the offset is only
+     * valid for the larger segment. Otherwise, there is no mismatch and {@code
+     * -1} is returned.
+     *
+     * @param other the segment to be tested for a mismatch with this segment
+     * @return the relative offset, in bytes, of the first mismatch between this
+     * and the given other segment, otherwise -1 if no mismatch
+     * @throws IllegalStateException if either this segment of the other segment
+     * have been already closed, or if access occurs from a thread other than the
+     * thread owning either segment
+     * @throws UnsupportedOperationException if either this segment or the other
+     * segment does not feature at least the {@link MemorySegment#READ} access mode
+     */
+    long mismatch(MemorySegment other);
+
+    /**
      * Wraps this segment in a {@link ByteBuffer}. Some of the properties of the returned buffer are linked to
      * the properties of this segment. For instance, if this segment is <em>immutable</em>
      * (e.g. the segment has access mode {@link #READ} but not {@link #WRITE}), then the resulting buffer is <em>read-only</em>
@@ -368,6 +396,10 @@ public interface MemorySegment extends AutoCloseable {
      * buffer. The segment starts relative to the buffer's position (inclusive)
      * and ends relative to the buffer's limit (exclusive).
      * <p>
+     * The segment will feature all <a href="#access-modes">access modes</a> (see {@link #ALL_ACCESS}),
+     * unless the given buffer is {@linkplain ByteBuffer#isReadOnly() read-only} in which case the segment will
+     * not feature the {@link #WRITE} access mode.
+     * <p>
      * The resulting memory segment keeps a reference to the backing buffer, to ensure it remains <em>reachable</em>
      * for the life-time of the segment.
      *
@@ -382,7 +414,8 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated byte array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -395,7 +428,8 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated char array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -408,7 +442,8 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated short array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -421,7 +456,7 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated int array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>.
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -434,7 +469,8 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated float array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -447,7 +483,8 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated long array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -460,7 +497,8 @@ public interface MemorySegment extends AutoCloseable {
      * Creates a new array memory segment that models the memory associated with a given heap-allocated double array.
      * <p>
      * The resulting memory segment keeps a reference to the backing array, to ensure it remains <em>reachable</em>
-     * for the life-time of the segment.
+     * for the life-time of the segment. The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @param arr the primitive array backing the array memory segment.
      * @return a new array memory segment.
@@ -511,26 +549,33 @@ allocateNative(bytesSize, 1);
 
     /**
      * Creates a new mapped memory segment that models a memory-mapped region of a file from a given path.
+     * <p>
+     * The segment will feature all <a href="#access-modes">access modes</a> (see {@link #ALL_ACCESS}),
+     * unless the given mapping mode is {@linkplain FileChannel.MapMode#READ_ONLY READ_ONLY}, in which case
+     * the segment will not feature the {@link #WRITE} access mode.
      *
      * @implNote When obtaining a mapped segment from a newly created file, the initialization state of the contents of the block
      * of mapped memory associated with the returned mapped memory segment is unspecified and should not be relied upon.
      *
      * @param path the path to the file to memory map.
+     * @param bytesOffset the offset (expressed in bytes) within the file at which the mapped segment is to start.
      * @param bytesSize the size (in bytes) of the mapped memory backing the memory segment.
      * @param mapMode a file mapping mode, see {@link FileChannel#map(FileChannel.MapMode, long, long)}; the chosen mapping mode
      *                might affect the behavior of the returned memory mapped segment (see {@link MappedMemorySegment#force()}).
      * @return a new mapped memory segment.
+     * @throws IllegalArgumentException if {@code bytesOffset < 0}.
      * @throws IllegalArgumentException if {@code bytesSize < 0}.
      * @throws UnsupportedOperationException if an unsupported map mode is specified.
      * @throws IOException if the specified path does not point to an existing file, or if some other I/O error occurs.
      */
-    static MappedMemorySegment mapFromPath(Path path, long bytesSize, FileChannel.MapMode mapMode) throws IOException {
-        return MappedMemorySegmentImpl.makeMappedSegment(path, bytesSize, mapMode);
+    static MappedMemorySegment mapFromPath(Path path, long bytesOffset, long bytesSize, FileChannel.MapMode mapMode) throws IOException {
+        return MappedMemorySegmentImpl.makeMappedSegment(path, bytesOffset, bytesSize, mapMode);
     }
 
     /**
      * Creates a new native memory segment that models a newly allocated block of off-heap memory with given size and
-     * alignment constraint (in bytes).
+     * alignment constraint (in bytes). The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      *
      * @implNote The block of off-heap memory associated with the returned native memory segment is initialized to zero.
      * Moreover, a client is responsible to call the {@link MemorySegment#close()} on a native memory segment,
@@ -560,7 +605,8 @@ allocateNative(bytesSize, 1);
      * bounds, and can therefore be closed; closing such a segment can optionally result in calling an user-provided cleanup
      * action. This method can be very useful when interacting with custom native memory sources (e.g. custom allocators,
      * GPU memory, etc.), where an address to some underlying memory region is typically obtained from native code
-     * (often as a plain {@code long} value).
+     * (often as a plain {@code long} value). The segment will feature all <a href="#access-modes">access modes</a>
+     * (see {@link #ALL_ACCESS}).
      * <p>
      * This method is <em>restricted</em>. Restricted method are unsafe, and, if used incorrectly, their use might crash
      * the JVM crash or, worse, silently result in memory corruption. Thus, clients should refrain from depending on
@@ -628,4 +674,11 @@ allocateNative(bytesSize, 1);
      * @see MemorySegment#withAccessModes(int)
      */
     int HANDOFF = ACQUIRE << 1;
+
+    /**
+     * Default access mode; this is a union of all the access modes supported by memory segments.
+     * @see MemorySegment#accessModes()
+     * @see MemorySegment#withAccessModes(int)
+     */
+    int ALL_ACCESS = READ | WRITE | CLOSE | ACQUIRE | HANDOFF;
 }
