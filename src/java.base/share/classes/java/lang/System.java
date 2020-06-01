@@ -2277,6 +2277,10 @@ public final class System {
                 return StringConcatHelper.initialCoder();
             }
 
+            public long stringConcatMix(long lengthCoder, String constant) {
+                return StringConcatHelper.mix(lengthCoder, constant);
+            }
+
             public Object classData(Class<?> c) {
                 return c.getClassData();
             }
