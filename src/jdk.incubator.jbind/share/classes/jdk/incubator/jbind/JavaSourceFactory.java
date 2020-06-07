@@ -49,7 +49,6 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     final DeclarationSet uniqVariables = new DeclarationSet("variable");
     final DeclarationSet uniqTypes = new DeclarationSet("type declaration");
     final DeclarationSet uniqConstants = new DeclarationSet("constant definition");
-    final DeclarationMatch comparator = new DeclarationMatch();
     final PatternFilter<Path> headers;
     final PatternFilter<String> symbols;
 
@@ -116,13 +115,13 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
             if (existing == null) {
                 decls.put(name, d);
             } else {
-                if (DeclarationMatch.match(existing, d)) {
+                if (existing.equals(d)) {
                     log.print(Level.INFO, String.format("Matching %s: %s", description, name));
                 } else {
                     log.print(Level.WARNING, String.format("Override mismatched %s: %s\n\t%s\n\t%s",
                             description, name, position(d.pos()), position(existing.pos())));
-                    log.print(Level.WARNING, String.format("  Now: ") + d.toString());
-                    log.print(Level.WARNING, String.format("  Old: ") + d.toString());
+                    log.print(Level.WARNING, String.format("  New: ") + d.toString());
+                    log.print(Level.WARNING, String.format("  Old: ") + existing.toString());
                     decls.put(name, d);
                 }
             }
