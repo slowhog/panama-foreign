@@ -204,7 +204,7 @@ class ConstantHelper {
     }
 
     public DirectMethodHandleDesc addLayout(String javaName, MemoryLayout layout) {
-        return emitCondyGetter(javaName + "$LAYOUT", MemoryLayout.class, desc(layout));
+        return emitCondyGetter(javaName + "$LAYOUT", layout.getClass(), desc(layout));
     }
 
     public DirectMethodHandleDesc addVarHandle(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
