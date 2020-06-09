@@ -58,7 +58,7 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
         String qualName = pkgName.isEmpty() ? clsName : pkgName + "." + clsName;
         this.CD_class = ClassDesc.of(qualName);
         this.constantHelper = new ConstantHelper(qualName, libraryNames.toArray(new String[0]));
-        this.builder = new JavaSourceBuilder(constantHelper);
+        this.builder = new HybridBuilder(constantHelper);
     }
 
     public JavaFileObject[] generate(Declaration.Scoped decl) {
@@ -97,7 +97,7 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
 
         MethodType mtype = typeTranslator.getMethodType(funcTree.type());
         //generate static wrapper for function
-        builder.addStaticFunctionWrapper(funcTree, mtype, descriptor);
+        builder.addFunction(funcTree, mtype, descriptor);
         int i = 0;
         for (Declaration.Variable param : funcTree.parameters()) {
             Type.Function f = getAsFunctionPointer(param.type());
@@ -181,13 +181,13 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
             String nativeName = NamingUtils.getSymbolInLib(tree);
             // global variable
             if (isRecord) {
-                builder.addRecordGlobal(fieldName, nativeName, layout, CD_class.nested(clzName), dimensions);
+                builder.addRecordTypeGlobal(fieldName, nativeName, layout, CD_class.nested(clzName), dimensions);
             } else {
                 builder.addPrimitiveGlobal(fieldName, nativeName, layout, clazz, dimensions);
             }
         } else {
             if (isRecord) {
-                builder.addRecordField(fieldName, parent, CD_class.nested(clzName), dimensions);
+                builder.addRecordTypeField(fieldName, parent, CD_class.nested(clzName), dimensions);
             } else {
                 builder.addPrimitiveField(fieldName, parent, clazz, dimensions);
             }
@@ -208,17 +208,12 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
             switch (d.kind()) {
                 case STRUCT:
                 case UNION:
-                    String clsName = NamingUtils.toSafeName(name);
-                    builder.addLineBreak();
-                    builder.classBegin(true, clsName, "Struct<" + clsName + ">");
-                    builder.addStructConstructor(clsName);
-                    builder.addLineBreak();
-                    builder.addLayoutMethod(name, (GroupLayout) d.layout().get());
+                    builder.beginRecordType(name, (GroupLayout) d.layout().get());
                     d.members().forEach(fieldTree -> {
                         builder.addLineBreak();
                         fieldTree.accept(this, d.name().isEmpty() ? parent : d);
                     });
-                    builder.classEnd();
+                    builder.closeBracket();
                     break;
             }
         }

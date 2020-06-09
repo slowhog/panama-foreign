@@ -55,22 +55,7 @@ public abstract class Struct<T extends Struct<T>> {
      * If the field is an array, proper coordinate will be inserted
      */
     protected final VarHandle getFieldHandle(String name, Class<?> carrier) {
-        MemoryLayout fieldLayout = getLayout().select(MemoryLayout.PathElement.groupElement(name));
-        long offset = getLayout().byteOffset(MemoryLayout.PathElement.groupElement(name));
-        int dims = 0;
-        while (fieldLayout instanceof SequenceLayout) {
-            dims++;
-            fieldLayout = ((SequenceLayout) fieldLayout).elementLayout();
-        }
-        PathElement[] args = new PathElement[dims];
-        Arrays.fill(args, MemoryLayout.PathElement.sequenceElement());
-        boolean isAddr = MemoryAddress.class.isAssignableFrom(carrier);
-        VarHandle vh = fieldLayout.varHandle(isAddr ? long.class : carrier, args);
-        vh = MemoryHandles.withOffset(vh, offset);
-        if (isAddr) {
-            vh = MemoryHandles.asAddressVarHandle(vh);
-        }
-        return vh;
+        return RuntimeHelper.fieldHandle(carrier, getLayout(), name);
     }
 
     public MemorySegment asSegment() {

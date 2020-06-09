@@ -28,6 +28,7 @@ package jdk.incubator.jbind.core;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -36,10 +37,13 @@ import java.util.Optional;
 import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.SequenceLayout;
 
 public class RuntimeHelper {
     private final static ForeignLinker ABI = CSupport.getSystemLinker();
@@ -132,4 +136,26 @@ public class RuntimeHelper {
         }
     }
 
+    public static VarHandle varHandle(Class<?> carrier, MemoryLayout layout) {
+        boolean isAddr = MemoryAddress.class.isAssignableFrom(carrier);
+        int dims = 0;
+        MemoryLayout tmp = layout;
+        while (tmp instanceof SequenceLayout) {
+            dims++;
+            tmp = ((SequenceLayout) tmp).elementLayout();
+        }
+        MemoryLayout.PathElement[] args = new MemoryLayout.PathElement[dims];
+        Arrays.fill(args, MemoryLayout.PathElement.sequenceElement());
+        VarHandle vh = layout.varHandle(isAddr ? long.class : carrier, args);
+        if (isAddr) {
+            vh = MemoryHandles.asAddressVarHandle(vh);
+        }
+        return vh;
+    }
+
+    public static VarHandle fieldHandle(Class<?> carrier, GroupLayout layout, String fieldName) {
+        MemoryLayout fieldLayout = layout.select(MemoryLayout.PathElement.groupElement(fieldName));
+        long offset = layout.byteOffset(MemoryLayout.PathElement.groupElement(fieldName));
+        return MemoryHandles.withOffset(varHandle(carrier, fieldLayout), offset);
+    }
 }

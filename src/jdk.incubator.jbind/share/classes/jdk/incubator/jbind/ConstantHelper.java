@@ -25,6 +25,7 @@
 package jdk.incubator.jbind;
 
 import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
@@ -56,7 +57,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.VarHandle;
 import java.net.URI;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -426,15 +427,6 @@ class ConstantHelper {
         return DynamicConstantDesc.ofNamed(BSM_INVOKE, "libraries", CD_LIBRARIES, args);
     }
 
-    private static ConstantDesc varHandleDesc(String name, ConstantDesc memoryLayout, ClassDesc carrier, ConstantDesc... path) {
-        ConstantDesc[] args = new ConstantDesc[path.length + 3];
-        args[0] = MH_MemoryLayout_varHandle;
-        args[1] = memoryLayout;
-        args[2] = carrier;
-        System.arraycopy(path, 0, args, 3, path.length);
-        return DynamicConstantDesc.ofNamed(BSM_INVOKE, "VH_" + name, CD_VarHandle, args);
-    }
-
     private static ConstantDesc groupElementDesc(String fieldName) {
         return DynamicConstantDesc.ofNamed(BSM_INVOKE, "groupElement_" + fieldName, CD_PathElelemt, MH_PathElement_groupElement, fieldName);
     }
@@ -444,19 +436,28 @@ class ConstantHelper {
         if (isAddr) {
             type = long.class;
         }
+
         ConstantDesc rv;
-        if (parentLayout != null) {
-            rv = varHandleDesc(javaName, desc(parentLayout), desc(type), groupElementDesc(nativeName));
+        ArrayList<ConstantDesc> args = new ArrayList<>();
+        args.add(MH_MemoryLayout_varHandle);
+
+        boolean isField = parentLayout != null;
+        if (isField) {
+            assert parentLayout instanceof GroupLayout;
+            assert ((GroupLayout) parentLayout).select(MemoryLayout.PathElement.groupElement(nativeName)).equals(layout);
+            args.add(desc(parentLayout));
         } else {
-            int dims = 0;
-            while (layout instanceof SequenceLayout) {
-                dims++;
-                layout = ((SequenceLayout) layout).elementLayout();
-            }
-            ConstantDesc[] args = new ConstantDesc[dims];
-            Arrays.fill(args, SEQUENCE_ELEMENT);
-            rv = varHandleDesc(javaName, desc(layout), desc(type), args);
+            args.add(desc(layout));
         }
+        args.add(desc(type));
+        if (isField) {
+            args.add(groupElementDesc(nativeName));
+        }
+        while (layout instanceof SequenceLayout) {
+            args.add(SEQUENCE_ELEMENT);
+            layout = ((SequenceLayout) layout).elementLayout();
+        }
+        rv = DynamicConstantDesc.ofNamed(BSM_INVOKE, "VH_" + javaName, CD_VarHandle, args.toArray(new ConstantDesc[0]));
         if (isAddr) {
             rv = DynamicConstantDesc.ofNamed(BSM_INVOKE, "ASADDRVH", CD_VarHandle, MH_MemoryHandles_asAddressVarHandle, rv);
         }

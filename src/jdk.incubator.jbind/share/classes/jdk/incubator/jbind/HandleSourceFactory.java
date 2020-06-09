@@ -39,7 +39,7 @@ import jdk.incubator.foreign.FunctionDescriptor;
  */
 public class HandleSourceFactory extends  AbstractCodeFactory implements Declaration.Visitor<Void, Declaration> {
     private final Set<String> constants = new HashSet<>();
-    protected final JavaSourceBuilder builder = new JavaSourceBuilder(null);
+    protected final JavaSourceBuilder builder = new SourceOnlyBuilder();
     protected final TypeTranslator typeTranslator = new TypeTranslator();
     private final Configurations ctx;
 
