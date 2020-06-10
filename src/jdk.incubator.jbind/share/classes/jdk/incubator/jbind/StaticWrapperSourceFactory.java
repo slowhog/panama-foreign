@@ -48,34 +48,44 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
     private final AnonymousRegistry aliases;
     private final ClassDesc CD_class;
 
-    static JavaFileObject[] generate(Declaration.Scoped decl, String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths) {
-        return new StaticWrapperSourceFactory(clsName, pkgName, aliases, libraryNames, libraryPaths).generate(decl);
+    static JavaFileObject[] generate(Declaration.Scoped decl, String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths, boolean useCondy) {
+        return new StaticWrapperSourceFactory(clsName, pkgName, aliases, libraryNames, libraryPaths, useCondy).generate(decl);
     }
 
-    public StaticWrapperSourceFactory(String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths) {
+    public StaticWrapperSourceFactory(String clsName, String pkgName, AnonymousRegistry aliases, List<String> libraryNames, List<String> libraryPaths, boolean useCondy) {
         super(clsName, pkgName, libraryNames, libraryPaths);
         this.aliases = aliases;
         String qualName = pkgName.isEmpty() ? clsName : pkgName + "." + clsName;
         this.CD_class = ClassDesc.of(qualName);
-        this.constantHelper = new ConstantHelper(qualName, libraryNames.toArray(new String[0]));
-        this.builder = new HybridBuilder(constantHelper);
+        if (useCondy) {
+            this.constantHelper = new ConstantHelper(qualName, libraryNames.toArray(new String[0]));
+            this.builder = new HybridBuilder(constantHelper);
+        } else {
+            this.constantHelper = null;
+            this.builder = new SourceOnlyBuilder(libraryNames);
+        }
     }
 
     public JavaFileObject[] generate(Declaration.Scoped decl) {
         builder.addPackagePrefix(pkgName);
         builder.addImport("java.util.function.LongFunction");
         builder.addLineBreak();
-        builder.classBegin(clsName);
+        builder.beginLibraryClass(clsName);
         //generate all decls
         decl.members().forEach(this::generateDecl);
 
         builder.classEnd();
         String src = builder.build();
 
-        return new JavaFileObject[] {
-                fileFromString(pkgName, clsName, src),
-                constantHelper.build()
-        };
+        JavaFileObject[] rv;
+        if (constantHelper != null) {
+            rv = new JavaFileObject[2];
+            rv[1] = constantHelper.build();
+        } else {
+            rv = new JavaFileObject[1];
+        }
+        rv[0] = fileFromString(pkgName, clsName, src);
+        return rv;
     }
 
     private void generateDecl(Declaration tree) {

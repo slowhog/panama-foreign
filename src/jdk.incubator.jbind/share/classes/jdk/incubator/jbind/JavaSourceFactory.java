@@ -198,7 +198,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         return Arrays.asList(
                 StaticWrapperSourceFactory.generate(
                     root, ctx.getMainClsName(), ctx.targetPackageName(),
-                    registry, ctx.getLibs(), ctx.getLibPaths()));
+                    registry, ctx.getLibs(), ctx.getLibPaths(), ctx.useCondy()));
     }
 
     public List<JavaFileObject> generate(Declaration.Scoped decl) {
@@ -223,7 +223,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         files.addAll(Arrays.asList(
             StaticWrapperSourceFactory.generate(
                 root, ctx.getMainClsName(), ctx.targetPackageName(),
-                anonymousNames, ctx.getLibs(), ctx.getLibPaths())));
+                anonymousNames, ctx.getLibs(), ctx.getLibPaths(), ctx.useCondy())));
         return files;
     }
 

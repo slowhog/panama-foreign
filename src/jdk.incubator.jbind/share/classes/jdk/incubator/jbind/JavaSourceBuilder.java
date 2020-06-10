@@ -249,6 +249,10 @@ abstract class JavaSourceBuilder {
         addLayoutHelperMethods(clsName, layout);
     }
 
+    public void beginLibraryClass(String name) {
+        classBegin(name);
+    }
+
     // Implementation helper methods
     protected void beginGetter(String javaName, String typeName, int dimensions, boolean isGlobal) {
         indent();

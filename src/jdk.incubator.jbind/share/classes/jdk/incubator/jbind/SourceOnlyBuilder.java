@@ -49,6 +49,7 @@ import jdk.incubator.jextract.Declaration;
 class SourceOnlyBuilder extends JavaSourceBuilder {
     private static final String ABI;
     private static final String ABI_CLASS_ATTR;
+    private final String[] libraryNames;
 
     static {
         ABI = CSupport.getSystemLinker().name();
@@ -58,6 +59,16 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
             case CSupport.AArch64.NAME -> CSupport.AArch64.CLASS_ATTRIBUTE_NAME;
             default -> throw new UnsupportedOperationException("Unsupported Foreign Linker: " + ABI);
         };
+    }
+
+    SourceOnlyBuilder(List<String> libraryNames) {
+        this.libraryNames = libraryNames.toArray(new String[0]);
+    }
+
+    @Override
+    public void beginLibraryClass(String name) {
+        super.beginLibraryClass(name);
+        addLibraries(libraryNames);
     }
 
     @Override
@@ -135,9 +146,13 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
     public void addPrimitiveField(String fieldName, Declaration parent, Class<?> type, int dimensions) {
         String javaName = NamingUtils.toSafeName(fieldName);
         String typeName = type.getName();
-        String vhStmt = "getFieldHandle(\"" + fieldName + "\", " + typeName + ".class)";
+        String vhStmt = javaName + "$VH";
         String addrStmt = "ptr()";
 
+        // Field handle
+        indent();
+        sb.append(PUB_MODS).append("VarHandle ").append(vhStmt).append(" = RuntimeHelper.fieldHandle(")
+                .append(typeName).append(".class, $LAYOUT, \"").append(fieldName).append("\");\n");
         // Field address
         emitFieldAddr(javaName);
         // Getter
@@ -173,14 +188,7 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
     protected String describeMethodHandle(String javaName, String nativeName, MethodType mt, FunctionDescriptor fDesc, boolean varargs) {
         String mhVar = "mh_" + javaName;
         indent();
-        sb.append("public static MethodHandle " + mhVar + ";\n");
-        indent();
-        sb.append(PUB_MODS + "MethodHandle get" + mhVar + "() {\n");
-        incrAlign();
-        indent();
-        sb.append("if (" + mhVar + " == null) {\n");
-        incrAlign();
-        indent();
+        sb.append(PUB_MODS + "MethodHandle ");
         sb.append(mhVar + " = RuntimeHelper.downcallHandle(\n");
         incrAlign();
         indent();
@@ -197,14 +205,6 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         decrAlign();
         indent();
         sb.append(");\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
-        indent();
-        sb.append("return " + mhVar + ";\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
         return mhVar;
     }
 
@@ -262,18 +262,6 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         } else {
             throw new RuntimeException("should not reach here, problematic layout: " + vl);
         }
-    }
-
-    protected void addLibraries(String[] libraryNames, String[] libraryPaths) {
-        indent();
-        sb.append(PRI_MODS + "LibraryLookup[] LIBRARIES = RuntimeHelper.libraries(");
-        sb.append(stringArray(libraryNames) + ", " + stringArray(libraryPaths) + ");\n");
-    }
-
-    private String stringArray(String[] elements) {
-        return Stream.of(elements)
-                .map(n -> "\"" + n + "\"")
-                .collect(Collectors.joining(",", "new String[] {", "}"));
     }
 
     private String getLayoutName(String elementName) {
@@ -396,5 +384,17 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
     protected void addAddressLookup(String name, String symbol) {
         sb.append("RuntimeHelper.lookupGlobalVariable(LIBRARIES, \"" + symbol + "\", "
                 + getLayoutName(name) + ")");
+    }
+
+    void addLibraries(String[] libraryNames) {
+        indent();
+        sb.append(PRI_MODS + "LibraryLookup[] LIBRARIES = RuntimeHelper.libraries(");
+        sb.append(stringArray(libraryNames) + ");\n");
+    }
+
+    private String stringArray(String[] elements) {
+        return Stream.of(elements)
+                .map(n -> "\"" + n + "\"")
+                .collect(Collectors.joining(",", "new String[] {", "}"));
     }
 }

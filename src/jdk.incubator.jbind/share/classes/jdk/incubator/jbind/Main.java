@@ -30,6 +30,7 @@ import jdk.incubator.jextract.JextractTask;
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -72,29 +73,33 @@ public class Main {
 
     private OptionParser setupOptionParser() {
         OptionParser parser = new OptionParser(false);
+
+        // short optiones starts with -
         parser.accepts("C", Log.format("help.C")).withRequiredArg();
         parser.accepts("I", Log.format("help.I")).withRequiredArg();
         parser.acceptsAll(List.of("L", "library-path"), Log.format("help.L")).withRequiredArg();
         parser.accepts("d", Log.format("help.d")).withRequiredArg();
+        // option is expected to specify paths to load shared libraries
+        parser.accepts("l", Log.format("help.l")).withRequiredArg();
+        parser.accepts("o", Log.format("help.o")).withRequiredArg();
+        parser.acceptsAll(List.of("t", "target-package"), Log.format("help.t")).withRequiredArg();
+        parser.acceptsAll(List.of("n", "name"), Log.format("help.n")).withRequiredArg();
+        parser.acceptsAll(List.of("?", "h", "help"), Log.format("help.h")).forHelp();
+
+        // long options starts with --
+        parser.accepts("condy", Log.format("help.condy"));
         parser.accepts("dry-run", Log.format("help.dry_run"));
         parser.accepts("exclude-symbols", Log.format("help.exclude", "symbols")).withRequiredArg();
         parser.accepts("include-symbols", Log.format("help.include", "symbols")).withRequiredArg();
         parser.accepts("exclude-headers", Log.format("help.exclude", "headers")).withRequiredArg();
         parser.accepts("include-headers", Log.format("help.include", "headers")).withRequiredArg();
-        // option is expected to specify paths to load shared libraries
-        parser.accepts("l", Log.format("help.l")).withRequiredArg();
         parser.accepts("log", Log.format("help.log")).withRequiredArg();
         parser.accepts("package-map", Log.format("help.package_map")).withRequiredArg();
         parser.accepts("missing-symbols", Log.format("help.missing_symbols")).withRequiredArg();
         parser.accepts("no-locations", Log.format("help.no.locations"));
-        parser.accepts("o", Log.format("help.o")).withRequiredArg();
-        parser.accepts("record-library-path", Log.format("help.record_library_path"));
         parser.accepts("src-dump-dir", Log.format("help.src_dump_dir")).withRequiredArg();
         parser.accepts("static-forwarder", Log.format("help.static_forwarder")).
                 withRequiredArg().ofType(boolean.class);
-        parser.acceptsAll(List.of("t", "target-package"), Log.format("help.t")).withRequiredArg();
-        parser.acceptsAll(List.of("n", "name"), Log.format("help.n")).withRequiredArg();
-        parser.acceptsAll(List.of("?", "h", "help"), Log.format("help.h")).forHelp();
         parser.nonOptions(Log.format("help.non.option"));
 
         return parser;
@@ -179,14 +184,11 @@ public class Main {
             }
         }
 
-        if (options.has("src-dump-dir")) {
-            Path dest = Paths.get((String) options.valueOf("src-dump-dir"));
-            builder.setOutputSourceDir(dest);
-        }
-
         if (options.has("package-map")) {
             options.valuesOf("package-map").forEach(p -> processPackageMapping(p, builder));
         }
+
+        builder.useCondy(options.has("condy"));
 
         for (Object header : options.nonOptionArguments()) {
             Path p = Paths.get((String)header);
@@ -247,12 +249,18 @@ public class Main {
         tryAddPatterns(optionSet, "include-symbols", symbols::addInclude);
         tryAddPatterns(optionSet, "exclude-symbols", symbols::addExclude);
 
-        JavaFileObject[] files = JavaSourceFactory.of(ctx)
+        List<? extends JavaFileObject> files = JavaSourceFactory.of(ctx)
                 .withHeaderFilter(headers.buildPathMatcher())
                 .withSymbolFilter(symbols.buildRegexMatcher())
-                .generate(root)
-                .toArray(JavaFileObject[]::new);
-        jextract.write(ctx.getOutputPath(), files);
+                .generate(root);
+
+        Path binaryOutputDir = Paths.get(optionSet.has("d") ? (String) optionSet.valueOf("d") : ".");
+        Path sourceOutputDir = optionSet.has("src-dump-dir") ? Paths.get((String) optionSet.valueOf("src-dump-dir")) : binaryOutputDir;
+        try {
+            new Writer(binaryOutputDir, sourceOutputDir, files).writeAll(true);
+        } catch (IOException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
     private int run(String[] args) {

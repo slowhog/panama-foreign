@@ -37,22 +37,25 @@ public class Configurations {
     private final HeaderResolver resolver;
     private final List<String> libs;
     private final List<String> libPaths;
-    private final Path outputSourceDir;
     private final String targetPackageName;
     private final List<Path> sources;
     private final String mainClsName;
+    private final boolean useCondy;
 
     Set<FunctionDescriptor> functionalInterfaces = new HashSet<>();
 
-    Configurations(Log log, HeaderResolver resolver, List<String> libs, List<String> libPaths, Path out, String targetPkgName, List<Path> sources, String mainClsName)  {
+    Configurations(Log log, HeaderResolver resolver, List<String> libs, List<String> libPaths,
+            String targetPkgName, List<Path> sources, String mainClsName, boolean useCondy)
+    {
+        super();
         this.log = log;
         this.resolver = resolver;
         this.libs = Collections.unmodifiableList(libs);
         this.libPaths = Collections.unmodifiableList(libPaths);
-        this.outputSourceDir = out;
         this.targetPackageName = targetPkgName;
         this.sources = sources;
         this.mainClsName = mainClsName;
+        this.useCondy = useCondy;
     }
 
     static class Builder {
@@ -60,7 +63,7 @@ public class Configurations {
         private final List<String> libraryPaths = new ArrayList<>();
         private final HeaderResolver resolver;
         private final Log log;
-        private Path outputSourceDir = Paths.get(".");
+        private boolean useCondy = false;
         private final String targetPkgName;
         List<Path> sources = new ArrayList<>();
         private String mainClsName = null;
@@ -79,8 +82,8 @@ public class Configurations {
             libraryPaths.add(path);
         }
 
-        void setOutputSourceDir(Path out) {
-            this.outputSourceDir = out;
+        void useCondy(boolean useCondy) {
+            this.useCondy = useCondy;
         }
 
         void usePackageForFolder(Path path, String pkgName) {
@@ -101,10 +104,11 @@ public class Configurations {
             return new Configurations(log, resolver,
                     Collections.unmodifiableList(libraryNames),
                     Collections.unmodifiableList(libraryPaths),
-                    outputSourceDir, targetPkgName,
+                    targetPkgName,
                     Collections.unmodifiableList(sources),
                     mainClsName != null ? mainClsName :
-                            libraryNames.isEmpty() ? "LibsByJVM" : "Lib" + libraryNames.get(0));
+                            libraryNames.isEmpty() ? "LibsByJVM" : "Lib" + libraryNames.get(0),
+                    useCondy);
         }
     }
 
@@ -116,8 +120,8 @@ public class Configurations {
         return resolver.headerFor(file);
     }
     public List<Path> getSources() { return sources; }
-    public Path getOutputPath() { return outputSourceDir; }
     public String getMainClsName() { return mainClsName; }
+    public boolean useCondy() { return useCondy; }
 
     public static Path getBuiltinHeadersDir() {
         return Paths.get(System.getProperty("java.home"), "conf", "jextract");
