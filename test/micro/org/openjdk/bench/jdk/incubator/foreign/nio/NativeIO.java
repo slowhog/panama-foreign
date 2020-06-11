@@ -48,7 +48,7 @@ import org.openjdk.bench.jdk.incubator.foreign.nio.support.UnixNativeDispatcher;
 @Measurement(iterations = 50, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @State(org.openjdk.jmh.annotations.Scope.Thread)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Fork(3)
+@Fork(value=3, jvmArgsAppend={"--add-modules", "jdk.incubator.foreign,jdk.incubator.jbind", "-Dforeign.restricted=permit"})
 public class NativeIO {
     @Benchmark
     public void getcwdinfoBuiltinNio() throws IOException {
