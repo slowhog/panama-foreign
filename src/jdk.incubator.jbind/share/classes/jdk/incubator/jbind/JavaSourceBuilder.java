@@ -397,6 +397,8 @@ abstract class JavaSourceBuilder {
     protected void emitFieldAddr(String fieldName) {
         long offset = currentStructLayout.byteOffset(MemoryLayout.PathElement.groupElement(fieldName));
         indent();
+        sb.append(PUB_MODS).append("long ").append(fieldName).append("$OFFSET = ").append(offset).append("L;\n");
+        indent();
         sb.append(PUB_CLS_MODS).append("MemoryAddress ").append(fieldName).append("$ptr() {\n");
         incrAlign();
         indent();
