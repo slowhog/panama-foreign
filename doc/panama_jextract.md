@@ -87,10 +87,10 @@ java -Dforeign.restricted=permit --add-modules jdk.incubator.foreign HelloWorld.
 ```sh
 
 jextract -l python2.7 \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/python2.7/ \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/python2.7/ \
   -t org.python \
-   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/python2.7/Python.h
+   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/python2.7/Python.h
 
 ```
 
@@ -136,8 +136,9 @@ java -Dforeign.restricted=permit --add-modules jdk.incubator.foreign \
 ```sh
 
 jextract -l readline -t org.unix \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/usr/include \
-   /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/usr/include/readline/readline.h
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
+   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/readline/readline.h
+
 
 ```
 
@@ -159,7 +160,7 @@ public class Readline {
             // print char* as is
             System.out.println(p);
             // convert char* ptr from readline as Java String & print it
-            System.out.println("Hello, " + Cstring.toJavaString(p));
+            System.out.println("Hello, " + Cstring.toJavaStringRestricted(p));
         }
     }
 }
@@ -181,9 +182,9 @@ java -Dforeign.restricted=permit --add-modules jdk.incubator.foreign \
 ```sh
 
 jextract -t org.unix -lcurl \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/usr/include/ \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/usr/include/curl/ \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/usr/include/curl/curl.h
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/curl/ \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/curl/curl.h
 
 ```
 
@@ -254,7 +255,7 @@ The following command can be used to extract cblas.h on MacOs
 ```sh
 
 jextract -C "-D FORCE_OPENBLAS_COMPLEX_STRUCT" \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
   -l openblas -t blas /usr/local/opt/openblas/include/cblas.h
 
 ```
@@ -263,7 +264,7 @@ jextract -C "-D FORCE_OPENBLAS_COMPLEX_STRUCT" \
 
 ```java
 
-import jdk.incubator.foreign.NativeAllocationScope;
+import jdk.incubator.foreign.NativeScope;
 import blas.*;
 import static blas.RuntimeHelper.*;
 import static blas.cblas_h.*;
@@ -286,7 +287,8 @@ public class TestBlas {
         incy = 1;
         alpha = 1;
         beta = 0;
-        try (NativeAllocationScope scope = NativeAllocationScope.unboundedScope()) {
+
+        try (var scope = NativeScope.unboundedScope()) {
             var a = Cdouble.allocateArray(m*n, scope);
             var x = Cdouble.allocateArray(n, scope);
             var y = Cdouble.allocateArray(n, scope);
@@ -320,6 +322,7 @@ public class TestBlas {
             Cdouble.set(y, 1, 0.0);
             Cdouble.set(y, 2, 0.0);
             Cdouble.set(y, 3, 0.0);
+
             cblas_dgemv(Layout, transa, m, n, alpha, a, lda, x, incx, beta, y, incy);
             /* Print y */
             for (i = 0; i < n; i++) {
@@ -350,7 +353,7 @@ On Mac OS, lapack is installed under /usr/local/opt/lapack directory.
 ```sh
 
 jextract \
-   -I /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include \
+   -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
    -l lapacke -t lapack \
    --filter lapacke.h \
    /usr/local/opt/lapack/include/lapacke.h
@@ -361,7 +364,8 @@ jextract \
 
 ```java
 
-import jdk.incubator.foreign.NativeAllocationScope;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.NativeScope;
 import lapack.*;
 import static lapack.lapacke_h.*;
 
@@ -369,7 +373,7 @@ public class TestLapack {
     public static void main(String[] args) {
 
         /* Locals */
-        try (var scope = NativeAllocationScope.unboundedScope()) {
+        try (var scope = NativeScope.unboundedScope()) {
             var A = Cdouble.allocateArray(new double[]{
                     1, 2, 3, 4, 5, 1, 3, 5, 2, 4, 1, 4, 2, 5, 3
             }, scope);
@@ -433,9 +437,9 @@ java -Dforeign.restricted=permit \
 ```sh
 
 jextract -t org.unix \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
   --filter libproc.h \
-  /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/libproc.h
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/libproc.h
 
 ```
 
@@ -443,7 +447,7 @@ jextract -t org.unix \
 
 ```java
 
-import jdk.incubator.foreign.NativeAllocationScope;
+import jdk.incubator.foreign.NativeScope;
 import org.unix.*;
 import static jdk.incubator.foreign.MemoryAddress.NULL;
 import static org.unix.libproc_h.*;
@@ -452,7 +456,7 @@ public class LibprocMain {
     private static final int NAME_BUF_MAX = 256;
 
     public static void main(String[] args) {
-        try (var scope = NativeAllocationScope.unboundedScope()) {
+        try (var scope = NativeScope.unboundedScope()) {
             // get the number of processes
             int numPids = proc_listallpids(NULL, 0);
             // allocate an array
@@ -501,7 +505,7 @@ java -Dforeign.restricted=permit \
 ```sh
 
 jextract -t com.github -lgit2 \
-  -I /Library/Developer/CommandLineTools/SDKs/MacOSX10.14.sdk/usr/include/ \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/ \
   -I ${LIBGIT2_HOME}/include/ \
   -I ${LIBGIT2_HOME}/include/git2 \
   ${LIBGIT2_HOME}/include/git2.h
@@ -512,11 +516,10 @@ jextract -t com.github -lgit2 \
 
 ```java
 
+import jdk.incubator.foreign.NativeScope;
 import static com.github.git2_h.*;
 import static jdk.incubator.foreign.CSupport.*;
 import static jdk.incubator.foreign.MemoryAddress.NULL;
-import static jdk.incubator.foreign.NativeAllocationScope.*;
-import static com.github.Cstring.*;
 
 public class GitClone {
     public static void main(String[] args) {
@@ -525,7 +528,7 @@ public class GitClone {
               System.exit(1);
           }
           git_libgit2_init();
-          try (var scope = unboundedScope()) {
+          try (var scope = NativeScope.unboundedScope()) {
               var repo = scope.allocate(C_POINTER, NULL);
               var url = toCString(args[0], scope);
               var path = toCString(args[1], scope);
@@ -534,7 +537,6 @@ public class GitClone {
           git_libgit2_shutdown();
     }
 }
-
 ```
 
 ### Compiling and running the libgit2 sample
@@ -553,5 +555,125 @@ java -Dforeign.restricted=permit --add-modules jdk.incubator.foreign \
 ```sh
 
 sh run.sh https://github.com/libgit2/libgit2.git libgit2
+
+```
+
+## Using sqlite3 library from Java (Mac OS)
+
+
+### jextract sqlite3.h
+
+```sh
+
+jextract \
+  -I /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sqlite3.h \
+  -t org.sqlite -lsqlite3
+
+```
+### Java program that uses sqlite3
+
+```java
+
+import jdk.incubator.foreign.NativeScope;
+import org.sqlite.Cpointer;
+import org.sqlite.Cstring;
+import static jdk.incubator.foreign.MemoryAddress.NULL;
+import static org.sqlite.sqlite3_h.*;
+
+public class SqliteMain {
+   public static void main(String[] args) throws Exception {
+        try (var scope = NativeScope.unboundedScope()) {
+            // char** errMsgPtrPtr;
+            var errMsgPtrPtr = Cpointer.allocate(NULL, scope);
+
+            // sqlite3** dbPtrPtr;
+            var dbPtrPtr = Cpointer.allocate(NULL, scope);
+
+            int rc = sqlite3_open(Cstring.toCString("employee.db",scope), dbPtrPtr);
+            if (rc != 0) {
+                System.err.println("sqlite3_open failed: " + rc);
+                return;
+            } else {
+                System.out.println("employee db opened");
+            }
+
+            // sqlite3* dbPtr;
+            var dbPtr = Cpointer.get(dbPtrPtr);
+
+            // create a new table
+            var sql = Cstring.toCString(
+                "CREATE TABLE EMPLOYEE ("  +
+                "  ID INT PRIMARY KEY NOT NULL," +
+                "  NAME TEXT NOT NULL,"    +
+                "  SALARY REAL NOT NULL )", scope);
+
+            rc = sqlite3_exec(dbPtr, sql, NULL, NULL, errMsgPtrPtr);
+
+            if (rc != 0) {
+                System.err.println("sqlite3_exec failed: " + rc);
+                System.err.println("SQL error: " + Cstring.toJavaStringRestricted(Cpointer.get(errMsgPtrPtr)));
+                sqlite3_free(Cpointer.get(errMsgPtrPtr));
+            } else {
+                System.out.println("employee table created");
+            }
+
+            // insert two rows
+            sql = Cstring.toCString(
+                "INSERT INTO EMPLOYEE (ID,NAME,SALARY) " +
+                    "VALUES (134, 'Xyz', 200000.0); " +
+                "INSERT INTO EMPLOYEE (ID,NAME,SALARY) " +
+                    "VALUES (333, 'Abc', 100000.0);", scope
+            );
+            rc = sqlite3_exec(dbPtr, sql, NULL, NULL, errMsgPtrPtr);
+
+            if (rc != 0) {
+                System.err.println("sqlite3_exec failed: " + rc);
+                System.err.println("SQL error: " + Cstring.toJavaStringRestricted(Cpointer.get(errMsgPtrPtr)));
+                sqlite3_free(Cpointer.get(errMsgPtrPtr));
+            } else {
+                System.out.println("rows inserted");
+            }
+
+            int[] rowNum = new int[1];
+            // callback to print rows from SELECT query
+            var callback = sqlite3_exec$callback.allocate((a, argc, argv, columnNames) -> {
+                System.out.println("Row num: " + rowNum[0]++);
+                System.out.println("numColumns = " + argc);
+                argv = Cpointer.asArrayRestricted(argv, argc);
+                columnNames = Cpointer.asArrayRestricted(columnNames, argc);
+                for (int i = 0; i < argc; i++) {
+                     String name = Cstring.toJavaStringRestricted(Cpointer.get(columnNames, i));
+                     String value = Cstring.toJavaStringRestricted(Cpointer.get(argv, i));
+                     System.out.printf("%s = %s\n", name, value);
+                }
+                return 0;
+            }, scope);
+
+            // select query
+            sql = Cstring.toCString("SELECT * FROM EMPLOYEE", scope);
+            rc = sqlite3_exec(dbPtr, sql, callback, NULL, errMsgPtrPtr);
+
+            if (rc != 0) {
+                System.err.println("sqlite3_exec failed: " + rc);
+                System.err.println("SQL error: " + Cstring.toJavaStringRestricted(Cpointer.get(errMsgPtrPtr)));
+                sqlite3_free(Cpointer.get(errMsgPtrPtr));
+            } else {
+                System.out.println("done");
+            }
+
+            sqlite3_close(dbPtr);
+        }
+    }
+}
+```
+
+### Compiling and running the sqlite3 sample
+
+```sh
+
+java -Dforeign.restricted=permit \
+   --add-modules jdk.incubator.foreign \
+   -Djava.library.path=/usr/lib SqliteMain.java
 
 ```

@@ -342,11 +342,13 @@ hotspot_JTREG_MAX_MEM := 0
 hotspot_JTREG_ASSERT := false
 hotspot_JTREG_NATIVEPATH := $(TEST_IMAGE_DIR)/hotspot/jtreg/native
 jdk_JTREG_NATIVEPATH := $(TEST_IMAGE_DIR)/jdk/jtreg/native
+lib-test_JTREG_NATIVEPATH := $(TEST_IMAGE_DIR)/lib-test/jtreg/native
 
 jdk_JTREG_PROBLEM_LIST += $(TOPDIR)/test/jdk/ProblemList.txt
 jaxp_JTREG_PROBLEM_LIST += $(TOPDIR)/test/jaxp/ProblemList.txt
 langtools_JTREG_PROBLEM_LIST += $(TOPDIR)/test/langtools/ProblemList.txt
 hotspot_JTREG_PROBLEM_LIST += $(TOPDIR)/test/hotspot/jtreg/ProblemList.txt
+lib-test_JTREG_PROBLEM_LIST += $(TOPDIR)/test/lib-test/ProblemList.txt
 
 langtools_JTREG_MAX_MEM := 768m
 
@@ -680,8 +682,6 @@ define SetupRunMicroTestBody
 
   # Current tests needs to open java.io
   $1_MICRO_JAVA_OPTIONS += --add-opens=java.base/java.io=ALL-UNNAMED
-  # Set library path for native dependencies
-  $1_MICRO_JAVA_OPTIONS += -Djava.library.path=$$(TEST_IMAGE_DIR)/micro/native
 
   # Save output as JSON or CSV file
   ifneq ($$(MICRO_RESULTS_FORMAT), )
@@ -689,10 +689,14 @@ define SetupRunMicroTestBody
     $1_MICRO_BASIC_OPTIONS += -rff $$($1_TEST_RESULTS_DIR)/jmh-result.$(MICRO_RESULTS_FORMAT)
   endif
 
+  # Set library path for native dependencies
+  $1_JMH_JVM_ARGS := -Djava.library.path=$$(TEST_IMAGE_DIR)/micro/native
+
   ifneq ($$(MICRO_VM_OPTIONS)$$(MICRO_JAVA_OPTIONS), )
-    JMH_JVM_ARGS := $$(MICRO_VM_OPTIONS) $$(MICRO_JAVA_OPTIONS)
-    $1_MICRO_VM_OPTIONS := -jvmArgs $(call ShellQuote,$$(JMH_JVM_ARGS))
+    $1_JMH_JVM_ARGS += $$(MICRO_VM_OPTIONS) $$(MICRO_JAVA_OPTIONS)
   endif
+
+  $1_MICRO_VM_OPTIONS := -jvmArgs $(call ShellQuote,$$($1_JMH_JVM_ARGS))
 
   ifneq ($$(MICRO_ITER), )
     $1_MICRO_ITER := -i $$(MICRO_ITER)

@@ -24,16 +24,20 @@
  */
 package jdk.internal.foreign.abi.x64.sysv;
 
+import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.internal.foreign.abi.SharedUtils;
 import jdk.internal.foreign.abi.UpcallStubs;
 
 import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 import static jdk.incubator.foreign.CSupport.*;
 
@@ -51,6 +55,21 @@ public class SysVx64Linker implements ForeignLinker {
 
     static final long ADDRESS_SIZE = 64; // bits
 
+    private static final MethodHandle MH_unboxVaList;
+    private static final MethodHandle MH_boxVaList;
+
+    static {
+        try {
+            MethodHandles.Lookup lookup = MethodHandles.lookup();
+            MH_unboxVaList = lookup.findVirtual(CSupport.VaList.class, "address",
+                MethodType.methodType(MemoryAddress.class));
+            MH_boxVaList = lookup.findStatic(SysVx64Linker.class, "newVaListOfAddress",
+                MethodType.methodType(VaList.class, MemoryAddress.class));
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     public static SysVx64Linker getInstance() {
         if (instance == null) {
             instance = new SysVx64Linker();
@@ -58,13 +77,23 @@ public class SysVx64Linker implements ForeignLinker {
         return instance;
     }
 
+    public static VaList newVaList(Consumer<VaList.Builder> actions) {
+        SysVVaList.Builder builder = SysVVaList.builder();
+        actions.accept(builder);
+        return builder.build();
+    }
+
     @Override
     public MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
-        return CallArranger.arrangeDowncall(symbol, type, function);
+        MethodType llMt = SharedUtils.convertVaListCarriers(type, SysVVaList.CARRIER);
+        MethodHandle handle = CallArranger.arrangeDowncall(symbol, llMt, function);
+        handle = SharedUtils.unboxVaLists(type, handle, MH_unboxVaList);
+        return handle;
     }
 
     @Override
     public MemorySegment upcallStub(MethodHandle target, FunctionDescriptor function) {
+        target = SharedUtils.boxVaLists(target, MH_boxVaList);
         return UpcallStubs.upcallAddress(CallArranger.arrangeUpcall(target, target.type(), function));
     }
 
@@ -85,5 +114,13 @@ public class SysVx64Linker implements ForeignLinker {
             case POINTER -> ArgumentClassImpl.POINTER;
             default -> null;
         });
+    }
+
+    public static VaList newVaListOfAddress(MemoryAddress ma) {
+        return SysVVaList.ofAddress(ma);
+    }
+
+    public static VaList emptyVaList() {
+        return SysVVaList.empty();
     }
 }

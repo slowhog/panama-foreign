@@ -23,7 +23,7 @@
 
 import java.util.stream.DoubleStream;
 import java.util.stream.IntStream;
-import jdk.incubator.foreign.NativeAllocationScope;
+import jdk.incubator.foreign.NativeScope;
 import org.testng.annotations.Test;
 import test.jextract.test8241925.*;
 import static org.testng.Assert.assertEquals;
@@ -41,7 +41,7 @@ import static test.jextract.test8241925.test8241925_h.*;
 public class LibTest8241925Test {
     @Test
     public void test() {
-        try (var scope = NativeAllocationScope.unboundedScope()) {
+        try (var scope = NativeScope.unboundedScope()) {
             var addr = Cint.allocate(12, scope);
             assertEquals(Cint.get(addr), 12);
             square(addr);
@@ -68,12 +68,12 @@ public class LibTest8241925Test {
                 assertEquals(dblArray[i], convertedDblArray[i], 0.1);
             }
 
-            assertEquals(Cstring.toJavaString(name()), "java");
+            assertEquals(Cstring.toJavaStringRestricted(name()), "java");
 
             var dest = Cchar.allocateArray(12, scope);
             Cstring.copy(dest, "hello ");
             var src = Cstring.toCString("world", scope);
-            assertEquals(Cstring.toJavaString(concatenate(dest, src)), "hello world");
+            assertEquals(Cstring.toJavaStringRestricted(concatenate(dest, src)), "hello world");
         }
     }
 }
