@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Predicate;
 import java.util.logging.Level;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.tools.JavaFileObject;
 
@@ -51,6 +52,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     final DeclarationSet uniqConstants = new DeclarationSet("constant definition");
     final PatternFilter<Path> headers;
     final PatternFilter<String> symbols;
+    final List<Path> sources;
 
     Configurations ctx;
 
@@ -86,6 +88,11 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         this.ctx = cfg;
         this.symbols = symbols;
         this.headers = headers;
+        this.sources = (symbols.hasIncludes() || headers.hasIncludes()) ?
+                Collections.emptyList() :
+                ctx.getSources().stream()
+                    .map(Path::toAbsolutePath)
+                    .collect(Collectors.toList());
     }
 
     class DeclarationSet {
@@ -185,7 +192,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         if (decl instanceof Declaration.Constant) {
             return true;
         }
-        return false;
+        return sources.contains(pos.path());
     }
 
     List<JavaFileObject> generateLib(Predicate<Declaration> filter, AnonymousRegistry registry) {
