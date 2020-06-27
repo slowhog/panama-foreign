@@ -1293,7 +1293,9 @@ public:
 
   // Convenience function to be used in situations where the heap type can be
   // asserted to be this type.
-  static G1CollectedHeap* heap();
+  static G1CollectedHeap* heap() {
+    return named_heap<G1CollectedHeap>(CollectedHeap::G1);
+  }
 
   void set_region_short_lived_locked(HeapRegion* hr);
   // add appropriate methods for any other surv rate groups
@@ -1454,7 +1456,6 @@ public:
   virtual void print_extended_on(outputStream* st) const;
   virtual void print_on_error(outputStream* st) const;
 
-  virtual void print_gc_threads_on(outputStream* st) const;
   virtual void gc_threads_do(ThreadClosure* tc) const;
 
   // Override
