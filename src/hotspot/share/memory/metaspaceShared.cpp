@@ -88,6 +88,8 @@ address MetaspaceShared::_i2i_entry_code_buffers = NULL;
 size_t MetaspaceShared::_i2i_entry_code_buffers_size = 0;
 void* MetaspaceShared::_shared_metaspace_static_top = NULL;
 intx MetaspaceShared::_relocation_delta;
+char* MetaspaceShared::_requested_base_address;
+bool MetaspaceShared::_use_optimized_module_handling = true;
 
 // The CDS archive is divided into the following regions:
 //     mc  - misc code (the method entry trampolines, c++ vtables)
@@ -240,33 +242,53 @@ char* MetaspaceShared::read_only_space_alloc(size_t num_bytes) {
 
 size_t MetaspaceShared::reserved_space_alignment() { return os::vm_allocation_granularity(); }
 
+static bool shared_base_valid(char* shared_base) {
 #ifdef _LP64
-// Check SharedBaseAddress for validity. At this point, os::init() must
-//  have been ran.
-static void check_SharedBaseAddress() {
-  SharedBaseAddress = align_up(SharedBaseAddress,
-                               MetaspaceShared::reserved_space_alignment());
-  if (!CompressedKlassPointers::is_valid_base((address)SharedBaseAddress)) {
-    log_warning(cds)("SharedBaseAddress=" PTR_FORMAT " is invalid for this "
-                     "platform, option will be ignored.",
-                     p2i((address)SharedBaseAddress));
-    SharedBaseAddress = Arguments::default_SharedBaseAddress();
-  }
-}
+  return CompressedKlassPointers::is_valid_base((address)shared_base);
+#else
+  return true;
 #endif
+}
+
+static bool shared_base_too_high(char* shared_base, size_t cds_total) {
+  if (SharedBaseAddress != 0 && shared_base < (char*)SharedBaseAddress) {
+    // SharedBaseAddress is very high (e.g., 0xffffffffffffff00) so
+    // align_up(SharedBaseAddress, MetaspaceShared::reserved_space_alignment()) has wrapped around.
+    return true;
+  }
+  if (max_uintx - uintx(shared_base) < uintx(cds_total)) {
+    // The end of the archive will wrap around
+    return true;
+  }
+
+  return false;
+}
+
+static char* compute_shared_base(size_t cds_total) {
+  char* shared_base = (char*)align_up((char*)SharedBaseAddress, MetaspaceShared::reserved_space_alignment());
+  const char* err = NULL;
+  if (shared_base_too_high(shared_base, cds_total)) {
+    err = "too high";
+  } else if (!shared_base_valid(shared_base)) {
+    err = "invalid for this platform";
+  }
+  if (err) {
+    log_warning(cds)("SharedBaseAddress (" INTPTR_FORMAT ") is %s. Reverted to " INTPTR_FORMAT,
+                     p2i((void*)SharedBaseAddress), err,
+                     p2i((void*)Arguments::default_SharedBaseAddress()));
+    SharedBaseAddress = Arguments::default_SharedBaseAddress();
+    shared_base = (char*)align_up((char*)SharedBaseAddress, MetaspaceShared::reserved_space_alignment());
+  }
+  assert(!shared_base_too_high(shared_base, cds_total) && shared_base_valid(shared_base), "Sanity");
+  return shared_base;
+}
 
 void MetaspaceShared::initialize_dumptime_shared_and_meta_spaces() {
   assert(DumpSharedSpaces, "should be called for dump time only");
 
-#ifdef _LP64
-  check_SharedBaseAddress();
-#endif
-
   const size_t reserve_alignment = MetaspaceShared::reserved_space_alignment();
-  char* shared_base = (char*)align_up((char*)SharedBaseAddress, reserve_alignment);
 
 #ifdef _LP64
-  assert(CompressedKlassPointers::is_valid_base((address)shared_base), "Sanity");
   // On 64-bit VM we reserve a 4G range and, if UseCompressedClassPointers=1,
   //  will use that to house both the archives and the ccs. See below for
   //  details.
@@ -277,6 +299,9 @@ void MetaspaceShared::initialize_dumptime_shared_and_meta_spaces() {
   //  virtual address space.
   size_t cds_total = align_down(256*M, reserve_alignment);
 #endif
+
+  char* shared_base = compute_shared_base(cds_total);
+  _requested_base_address = shared_base;
 
   // Whether to use SharedBaseAddress as attach address.
   bool use_requested_base = true;
@@ -398,6 +423,10 @@ void MetaspaceShared::initialize_dumptime_shared_and_meta_spaces() {
   log_info(cds)("Allocated shared space: " SIZE_FORMAT " bytes at " PTR_FORMAT,
                 _shared_rs.size(), p2i(_shared_rs.base()));
 
+  // We don't want any valid object to be at the very bottom of the archive.
+  // See ArchivePtrMarker::mark_pointer().
+  MetaspaceShared::misc_code_space_alloc(16);
+
   size_t symbol_rs_size = LP64_ONLY(3 * G) NOT_LP64(128 * M);
   _symbol_rs = ReservedSpace(symbol_rs_size);
   if (!_symbol_rs.is_reserved()) {
@@ -427,10 +456,10 @@ void MetaspaceShared::post_initialize(TRAPS) {
   }
 }
 
-static GrowableArray<Handle>* _extra_interned_strings = NULL;
+static GrowableArrayCHeap<Handle, mtClassShared>* _extra_interned_strings = NULL;
 
 void MetaspaceShared::read_extra_data(const char* filename, TRAPS) {
-  _extra_interned_strings = new (ResourceObj::C_HEAP, mtInternal)GrowableArray<Handle>(10000, true);
+  _extra_interned_strings = new GrowableArrayCHeap<Handle, mtClassShared>(10000);
 
   HashtableTextDump reader(filename);
   reader.check_version("VERSION: 1.0");
@@ -633,6 +662,33 @@ class CollectClassesClosure : public KlassClosure {
     }
   }
 };
+
+// Global object for holding symbols that created during class loading. See SymbolTable::new_symbol
+static GrowableArray<Symbol*>* _global_symbol_objects = NULL;
+
+static int compare_symbols_by_address(Symbol** a, Symbol** b) {
+  if (a[0] < b[0]) {
+    return -1;
+  } else if (a[0] == b[0]) {
+    ResourceMark rm;
+    log_warning(cds)("Duplicated symbol %s unexpected", (*a)->as_C_string());
+    return 0;
+  } else {
+    return 1;
+  }
+}
+
+void MetaspaceShared::add_symbol(Symbol* sym) {
+  MutexLocker ml(CDSAddSymbol_lock, Mutex::_no_safepoint_check_flag);
+  if (_global_symbol_objects == NULL) {
+    _global_symbol_objects = new (ResourceObj::C_HEAP, mtSymbol) GrowableArray<Symbol*>(2048, mtSymbol);
+  }
+  _global_symbol_objects->append(sym);
+}
+
+GrowableArray<Symbol*>* MetaspaceShared::collected_symbols() {
+  return _global_symbol_objects;
+}
 
 static void remove_unshareable_in_classes() {
   for (int i = 0; i < _global_klass_objects->length(); i++) {
@@ -1200,7 +1256,7 @@ private:
   void print_bitmap_region_stats(size_t size, size_t total_size);
   void print_heap_region_stats(GrowableArray<MemRegion> *heap_mem,
                                const char *name, size_t total_size);
-  void relocate_to_default_base_address(CHeapBitMap* ptrmap);
+  void relocate_to_requested_base_address(CHeapBitMap* ptrmap);
 
 public:
 
@@ -1208,34 +1264,6 @@ public:
   void doit();   // outline because gdb sucks
   bool allow_nested_vm_operations() const { return true; }
 }; // class VM_PopulateDumpSharedSpace
-
-class SortedSymbolClosure: public SymbolClosure {
-  GrowableArray<Symbol*> _symbols;
-  virtual void do_symbol(Symbol** sym) {
-    assert((*sym)->is_permanent(), "archived symbols must be permanent");
-    _symbols.append(*sym);
-  }
-  static int compare_symbols_by_address(Symbol** a, Symbol** b) {
-    if (a[0] < b[0]) {
-      return -1;
-    } else if (a[0] == b[0]) {
-      ResourceMark rm;
-      log_warning(cds)("Duplicated symbol %s unexpected", (*a)->as_C_string());
-      return 0;
-    } else {
-      return 1;
-    }
-  }
-
-public:
-  SortedSymbolClosure() {
-    SymbolTable::symbols_do(this);
-    _symbols.sort(compare_symbols_by_address);
-  }
-  GrowableArray<Symbol*>* get_sorted_symbols() {
-    return &_symbols;
-  }
-};
 
 // ArchiveCompactor --
 //
@@ -1248,7 +1276,6 @@ class ArchiveCompactor : AllStatic {
   static const int MAX_TABLE_SIZE     = 1000000;
 
   static DumpAllocStats* _alloc_stats;
-  static SortedSymbolClosure* _ssc;
 
   typedef KVHashtable<address, address, mtInternal> RelocationTable;
   static RelocationTable* _new_loc_table;
@@ -1392,8 +1419,6 @@ private:
 public:
   static void copy_and_compact() {
     ResourceMark rm;
-    SortedSymbolClosure the_ssc; // StackObj
-    _ssc = &the_ssc;
 
     log_info(cds)("Scanning all metaspace objects ... ");
     {
@@ -1429,9 +1454,11 @@ public:
     {
       log_info(cds)("Fixing symbol identity hash ... ");
       os::init_random(0x12345678);
-      GrowableArray<Symbol*>* symbols = _ssc->get_sorted_symbols();
-      for (int i=0; i<symbols->length(); i++) {
-        symbols->at(i)->update_identity_hash();
+      GrowableArray<Symbol*>* all_symbols = MetaspaceShared::collected_symbols();
+      all_symbols->sort(compare_symbols_by_address);
+      for (int i = 0; i < all_symbols->length(); i++) {
+        assert(all_symbols->at(i)->is_permanent(), "archived symbols must be permanent");
+        all_symbols->at(i)->update_identity_hash();
       }
     }
 #ifdef ASSERT
@@ -1442,10 +1469,6 @@ public:
       iterate_roots(&checker);
     }
 #endif
-
-
-    // cleanup
-    _ssc = NULL;
   }
 
   // We must relocate the System::_well_known_klasses only after we have copied the
@@ -1481,8 +1504,8 @@ public:
     // (see Symbol::operator new(size_t, int)). So if we iterate the Symbols by
     // ascending address order, we ensure that all Symbols are copied into deterministic
     // locations in the archive.
-    GrowableArray<Symbol*>* symbols = _ssc->get_sorted_symbols();
-    for (int i=0; i<symbols->length(); i++) {
+    GrowableArray<Symbol*>* symbols = _global_symbol_objects;
+    for (int i = 0; i < symbols->length(); i++) {
       it->push(symbols->adr_at(i));
     }
     if (_global_klass_objects != NULL) {
@@ -1512,7 +1535,6 @@ public:
 };
 
 DumpAllocStats* ArchiveCompactor::_alloc_stats;
-SortedSymbolClosure* ArchiveCompactor::_ssc;
 ArchiveCompactor::RelocationTable* ArchiveCompactor::_new_loc_table;
 
 void VM_PopulateDumpSharedSpace::dump_symbols() {
@@ -1568,18 +1590,18 @@ void VM_PopulateDumpSharedSpace::print_class_stats() {
   }
 }
 
-void VM_PopulateDumpSharedSpace::relocate_to_default_base_address(CHeapBitMap* ptrmap) {
+void VM_PopulateDumpSharedSpace::relocate_to_requested_base_address(CHeapBitMap* ptrmap) {
   intx addr_delta = MetaspaceShared::final_delta();
   if (addr_delta == 0) {
     ArchivePtrMarker::compact((address)SharedBaseAddress, (address)_ro_region.top());
   } else {
-    // We are not able to reserve space at Arguments::default_SharedBaseAddress() (due to ASLR).
+    // We are not able to reserve space at MetaspaceShared::requested_base_address() (due to ASLR).
     // This means that the current content of the archive is based on a random
     // address. Let's relocate all the pointers, so that it can be mapped to
-    // Arguments::default_SharedBaseAddress() without runtime relocation.
+    // MetaspaceShared::requested_base_address() without runtime relocation.
     //
     // Note: both the base and dynamic archive are written with
-    // FileMapHeader::_shared_base_address == Arguments::default_SharedBaseAddress()
+    // FileMapHeader::_requested_base_address == MetaspaceShared::requested_base_address()
 
     // Patch all pointers that are marked by ptrmap within this region,
     // where we have just dumped all the metaspace data.
@@ -1594,7 +1616,7 @@ void VM_PopulateDumpSharedSpace::relocate_to_default_base_address(CHeapBitMap* p
 
     // after patching, the pointers must point inside this range
     // (the requested location of the archive, as mapped at runtime).
-    address valid_new_base = (address)Arguments::default_SharedBaseAddress();
+    address valid_new_base = (address)MetaspaceShared::requested_base_address();
     address valid_new_end  = valid_new_base + size;
 
     log_debug(cds)("Relocating archive from [" INTPTR_FORMAT " - " INTPTR_FORMAT " ] to "
@@ -1609,6 +1631,7 @@ void VM_PopulateDumpSharedSpace::relocate_to_default_base_address(CHeapBitMap* p
 }
 
 void VM_PopulateDumpSharedSpace::doit() {
+  HeapShared::run_full_gc_in_vm_thread();
   CHeapBitMap ptrmap;
   MetaspaceShared::initialize_ptr_marker(&ptrmap);
 
@@ -1681,9 +1704,9 @@ void VM_PopulateDumpSharedSpace::doit() {
   memset(MetaspaceShared::i2i_entry_code_buffers(), 0,
          MetaspaceShared::i2i_entry_code_buffers_size());
 
-  // relocate the data so that it can be mapped to Arguments::default_SharedBaseAddress()
+  // relocate the data so that it can be mapped to MetaspaceShared::requested_base_address()
   // without runtime relocation.
-  relocate_to_default_base_address(&ptrmap);
+  relocate_to_requested_base_address(&ptrmap);
 
   // Create and write the archive file that maps the shared spaces.
 
@@ -1706,7 +1729,7 @@ void VM_PopulateDumpSharedSpace::doit() {
                                         MetaspaceShared::first_open_archive_heap_region,
                                         MetaspaceShared::max_open_archive_heap_region);
 
-  mapinfo->set_final_requested_base((char*)Arguments::default_SharedBaseAddress());
+  mapinfo->set_final_requested_base((char*)MetaspaceShared::requested_base_address());
   mapinfo->set_header_crc(mapinfo->compute_header_crc());
   mapinfo->write_header();
   print_region_stats(mapinfo);
@@ -1927,14 +1950,9 @@ void MetaspaceShared::preload_and_dump(TRAPS) {
     link_and_cleanup_shared_classes(CATCH);
     log_info(cds)("Rewriting and linking classes: done");
 
-    if (HeapShared::is_heap_object_archiving_allowed()) {
-      // Avoid fragmentation while archiving heap objects.
-      Universe::heap()->soft_ref_policy()->set_should_clear_all_soft_refs(true);
-      Universe::heap()->collect(GCCause::_archive_time_gc);
-      Universe::heap()->soft_ref_policy()->set_should_clear_all_soft_refs(false);
-    }
-
     VM_PopulateDumpSharedSpace op;
+    MutexLocker ml(THREAD, HeapShared::is_heap_object_archiving_allowed() ?
+                   Heap_lock : NULL);     // needed by HeapShared::run_gc()
     VMThread::execute(&op);
   }
 }
@@ -2162,6 +2180,7 @@ void MetaspaceShared::initialize_runtime_shared_and_meta_spaces() {
     } else {
       FileMapInfo::set_shared_path_table(static_mapinfo);
     }
+    _requested_base_address = static_mapinfo->requested_base_address();
   } else {
     set_shared_metaspace_range(NULL, NULL, NULL);
     UseSharedSpaces = false;
@@ -2209,6 +2228,11 @@ FileMapInfo* MetaspaceShared::open_dynamic_archive() {
 //  false = map at an alternative address picked by OS.
 MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, FileMapInfo* dynamic_mapinfo,
                                                bool use_requested_addr) {
+  if (use_requested_addr && static_mapinfo->requested_base_address() == NULL) {
+    log_info(cds)("Archive(s) were created with -XX:SharedBaseAddress=0. Always map at os-selected address.");
+    return MAP_ARCHIVE_MMAP_FAILURE;
+  }
+
   PRODUCT_ONLY(if (ArchiveRelocationMode == 1 && use_requested_addr) {
       // For product build only -- this is for benchmarking the cost of doing relocation.
       // For debug builds, the check is done below, after reserving the space, for better test coverage
@@ -2235,6 +2259,7 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
                                                                  class_space_rs);
   if (mapped_base_address == NULL) {
     result = MAP_ARCHIVE_MMAP_FAILURE;
+    log_debug(cds)("Failed to reserve spaces (use_requested_addr=%u)", (unsigned)use_requested_addr);
   } else {
 
 #ifdef ASSERT
@@ -2342,6 +2367,7 @@ MapArchiveResult MetaspaceShared::map_archives(FileMapInfo* static_mapinfo, File
           static_mapinfo->map_heap_regions();
         }
       });
+    log_info(cds)("Using optimized module handling %s", MetaspaceShared::use_optimized_module_handling() ? "enabled" : "disabled");
   } else {
     unmap_archive(static_mapinfo);
     unmap_archive(dynamic_mapinfo);
@@ -2437,6 +2463,8 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
     if (archive_space_rs.is_reserved()) {
       assert(base_address == NULL ||
              (address)archive_space_rs.base() == base_address, "Sanity");
+      // Register archive space with NMT.
+      MemTracker::record_virtual_memory_type(archive_space_rs.base(), mtClassShared);
       return archive_space_rs.base();
     }
     return NULL;
@@ -2463,8 +2491,8 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
          "CompressedClassSpaceSize malformed: "
          SIZE_FORMAT, CompressedClassSpaceSize);
 
-  const size_t ccs_begin_offset = align_up(archive_space_size,
-                                           class_space_alignment);
+  const size_t ccs_begin_offset = align_up(base_address + archive_space_size,
+                                           class_space_alignment) - base_address;
   const size_t gap_size = ccs_begin_offset - archive_space_size;
 
   const size_t total_range_size =
@@ -2503,6 +2531,10 @@ char* MetaspaceShared::reserve_address_space_for_archives(FileMapInfo* static_ma
   assert(is_aligned(archive_space_rs.size(), archive_space_alignment), "Sanity");
   assert(is_aligned(class_space_rs.base(), class_space_alignment), "Sanity");
   assert(is_aligned(class_space_rs.size(), class_space_alignment), "Sanity");
+
+  // NMT: fix up the space tags
+  MemTracker::record_virtual_memory_type(archive_space_rs.base(), mtClassShared);
+  MemTracker::record_virtual_memory_type(class_space_rs.base(), mtClass);
 
   return archive_space_rs.base();
 
@@ -2552,16 +2584,9 @@ MapArchiveResult MetaspaceShared::map_archive(FileMapInfo* mapinfo, char* mapped
     return result;
   }
 
-  if (mapinfo->is_static()) {
-    if (!mapinfo->validate_shared_path_table()) {
-      unmap_archive(mapinfo);
-      return MAP_ARCHIVE_OTHER_FAILURE;
-    }
-  } else {
-    if (!DynamicArchive::validate(mapinfo)) {
-      unmap_archive(mapinfo);
-      return MAP_ARCHIVE_OTHER_FAILURE;
-    }
+  if (!mapinfo->validate_shared_path_table()) {
+    unmap_archive(mapinfo);
+    return MAP_ARCHIVE_OTHER_FAILURE;
   }
 
   mapinfo->set_is_mapped(true);
@@ -2660,11 +2685,11 @@ void MetaspaceShared::report_out_of_space(const char* name, size_t needed_bytes)
                                 "Please reduce the number of shared classes.");
 }
 
-// This is used to relocate the pointers so that the archive can be mapped at
-// Arguments::default_SharedBaseAddress() without runtime relocation.
+// This is used to relocate the pointers so that the base archive can be mapped at
+// MetaspaceShared::requested_base_address() without runtime relocation.
 intx MetaspaceShared::final_delta() {
-  return intx(Arguments::default_SharedBaseAddress())  // We want the archive to be mapped to here at runtime
-       - intx(SharedBaseAddress);                      // .. but the archive is mapped at here at dump time
+  return intx(MetaspaceShared::requested_base_address())  // We want the base archive to be mapped to here at runtime
+       - intx(SharedBaseAddress);                         // .. but the base archive is mapped at here at dump time
 }
 
 void MetaspaceShared::print_on(outputStream* st) {

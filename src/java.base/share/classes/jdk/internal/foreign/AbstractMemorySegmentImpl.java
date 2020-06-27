@@ -149,14 +149,19 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
 
         long i = 0;
         if (length > 7) {
-            i = ArraysSupport.vectorizedMismatchLarge(
+            if ((byte) BYTE_HANDLE.get(this.baseAddress(), 0) != (byte) BYTE_HANDLE.get(that.baseAddress(), 0)) {
+                return 0;
+            }
+            i = ArraysSupport.vectorizedMismatchLargeForBytes(
                     this.base(), this.min(),
                     that.base(), that.min(),
-                    length, ArraysSupport.LOG2_ARRAY_BYTE_INDEX_SCALE);
+                    length);
             if (i >= 0) {
                 return i;
             }
-            i = length - ~i;
+            long remaining = ~i;
+            assert remaining < 8 : "remaining greater than 7: " + remaining;
+            i = length - remaining;
         }
         MemoryAddress thisAddress = this.baseAddress();
         MemoryAddress thatAddress = that.baseAddress();
@@ -238,12 +243,16 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         if (scope.ownerThread() == newOwner) {
             throw new IllegalArgumentException("Segment already owned by thread: " + newOwner);
         } else {
-            try {
-                return dup(0L, length, mask, scope.dup(newOwner));
-            } finally {
-                //flush read/writes to segment memory before returning the new segment
-                VarHandle.fullFence();
-            }
+            return dupAndClose(newOwner);
+        }
+    }
+
+    public MemorySegment dupAndClose(Thread newOwner) {
+        try {
+            return dup(0L, length, mask, scope.dup(newOwner));
+        } finally {
+            //flush read/writes to segment memory before returning the new segment
+            VarHandle.fullFence();
         }
     }
 
@@ -486,6 +495,30 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
 
     public static final AbstractMemorySegmentImpl NOTHING = new AbstractMemorySegmentImpl(
         0, 0, MemoryScope.createUnchecked(null, null, null)
+    ) {
+        @Override
+        ByteBuffer makeByteBuffer() {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        long min() {
+            return 0;
+        }
+
+        @Override
+        Object base() {
+            return null;
+        }
+
+        @Override
+        AbstractMemorySegmentImpl dup(long offset, long size, int mask, MemoryScope scope) {
+            throw new UnsupportedOperationException();
+        }
+    };
+
+    public static final AbstractMemorySegmentImpl EVERYTHING = new AbstractMemorySegmentImpl(
+            Long.MAX_VALUE, READ | WRITE, MemoryScope.createUnchecked(null, null, null)
     ) {
         @Override
         ByteBuffer makeByteBuffer() {

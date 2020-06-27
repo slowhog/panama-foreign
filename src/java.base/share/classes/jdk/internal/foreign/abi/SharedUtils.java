@@ -24,10 +24,12 @@
  */
 package jdk.internal.foreign.abi;
 
+import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
@@ -35,13 +37,17 @@ import jdk.incubator.foreign.ValueLayout;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.aarch64.AArch64Linker;
+import jdk.internal.foreign.abi.x64.sysv.SysVVaList;
 import jdk.internal.foreign.abi.x64.sysv.SysVx64Linker;
 import jdk.internal.foreign.abi.x64.windows.Windowsx64Linker;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
+import java.lang.invoke.VarHandle;
+import java.nio.ByteOrder;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.IntStream;
 
 import static java.lang.invoke.MethodHandles.collectArguments;
@@ -49,12 +55,21 @@ import static java.lang.invoke.MethodHandles.identity;
 import static java.lang.invoke.MethodHandles.insertArguments;
 import static java.lang.invoke.MethodHandles.permuteArguments;
 import static java.lang.invoke.MethodType.methodType;
+import static jdk.incubator.foreign.CSupport.*;
 
 public class SharedUtils {
 
     private static final MethodHandle MH_ALLOC_BUFFER;
     private static final MethodHandle MH_BASEADDRESS;
     private static final MethodHandle MH_BUFFER_COPY;
+
+    private static final VarHandle VH_BYTE = MemoryHandles.varHandle(byte.class, ByteOrder.nativeOrder());
+    private static final VarHandle VH_CHAR = MemoryHandles.varHandle(char.class, ByteOrder.nativeOrder());
+    private static final VarHandle VH_SHORT = MemoryHandles.varHandle(short.class, ByteOrder.nativeOrder());
+    private static final VarHandle VH_INT = MemoryHandles.varHandle(int.class, ByteOrder.nativeOrder());
+    private static final VarHandle VH_LONG = MemoryHandles.varHandle(long.class, ByteOrder.nativeOrder());
+    private static final VarHandle VH_FLOAT = MemoryHandles.varHandle(float.class, ByteOrder.nativeOrder());
+    private static final VarHandle VH_DOUBLE = MemoryHandles.varHandle(double.class, ByteOrder.nativeOrder());
 
     static {
         try {
@@ -185,15 +200,15 @@ public class SharedUtils {
         return dest;
     }
 
-    private static void checkCompatibleType(Class<?> carrier, MemoryLayout layout, long addressSize) {
+    public static void checkCompatibleType(Class<?> carrier, MemoryLayout layout, long addressSize) {
         if (carrier.isPrimitive()) {
             Utils.checkPrimitiveCarrierCompat(carrier, layout);
         } else if (carrier == MemoryAddress.class) {
             Utils.checkLayoutType(layout, ValueLayout.class);
             if (layout.bitSize() != addressSize)
                 throw new IllegalArgumentException("Address size mismatch: " + addressSize + " != " + layout.bitSize());
-        } else if(carrier == MemorySegment.class) {
-           Utils.checkLayoutType(layout, GroupLayout.class);
+        } else if (carrier == MemorySegment.class) {
+            Utils.checkLayoutType(layout, GroupLayout.class);
         } else {
             throw new IllegalArgumentException("Unsupported carrier: " + carrier);
         }
@@ -240,5 +255,218 @@ public class SharedUtils {
             return AArch64Linker.getInstance();
         }
         throw new UnsupportedOperationException("Unsupported os or arch: " + os + ", " + arch);
+    }
+
+    public static VaList newVaList(Consumer<VaList.Builder> actions) {
+        String name = CSupport.getSystemLinker().name();
+        return switch(name) {
+            case Win64.NAME -> Windowsx64Linker.newVaList(actions);
+            case SysV.NAME -> SysVx64Linker.newVaList(actions);
+            case AArch64.NAME -> throw new UnsupportedOperationException("Not yet implemented for this platform");
+            default -> throw new IllegalStateException("Unknown linker name: " + name);
+        };
+    }
+
+    public static VarHandle vhPrimitiveOrAddress(Class<?> carrier, MemoryLayout layout) {
+        return carrier == MemoryAddress.class
+            ? MemoryHandles.asAddressVarHandle(layout.varHandle(primitiveCarrierForSize(layout.byteSize())))
+            : layout.varHandle(carrier);
+    }
+
+    public static VaList newVaListOfAddress(MemoryAddress ma) {
+        String name = CSupport.getSystemLinker().name();
+        return switch(name) {
+            case Win64.NAME -> Windowsx64Linker.newVaListOfAddress(ma);
+            case SysV.NAME -> SysVx64Linker.newVaListOfAddress(ma);
+            case AArch64.NAME -> throw new UnsupportedOperationException("Not yet implemented for this platform");
+            default -> throw new IllegalStateException("Unknown linker name: " + name);
+        };
+    }
+
+    public static VaList emptyVaList() {
+        String name = CSupport.getSystemLinker().name();
+        return switch(name) {
+            case Win64.NAME -> Windowsx64Linker.emptyVaList();
+            case SysV.NAME -> SysVx64Linker.emptyVaList();
+            case AArch64.NAME -> throw new UnsupportedOperationException("Not yet implemented for this platform");
+            default -> throw new IllegalStateException("Unknown linker name: " + name);
+        };
+    }
+
+    public static MethodType convertVaListCarriers(MethodType mt, Class<?> carrier) {
+        Class<?>[] params = new Class<?>[mt.parameterCount()];
+        for (int i = 0; i < params.length; i++) {
+            Class<?> pType = mt.parameterType(i);
+            params[i] = ((pType == VaList.class) ? carrier : pType);
+        }
+        return methodType(mt.returnType(), params);
+    }
+
+    public static MethodHandle unboxVaLists(MethodType type, MethodHandle handle, MethodHandle unboxer) {
+        for (int i = 0; i < type.parameterCount(); i++) {
+            if (type.parameterType(i) == VaList.class) {
+               handle = MethodHandles.filterArguments(handle, i, unboxer);
+            }
+        }
+        return handle;
+    }
+
+    public static MethodHandle boxVaLists(MethodHandle handle, MethodHandle boxer) {
+        MethodType type = handle.type();
+        for (int i = 0; i < type.parameterCount(); i++) {
+            if (type.parameterType(i) == VaList.class) {
+               handle = MethodHandles.filterArguments(handle, i, boxer);
+            }
+        }
+        return handle;
+    }
+
+    static void checkType(Class<?> actualType, Class<?> expectedType) {
+        if (expectedType != actualType) {
+            throw new IllegalArgumentException(
+                    String.format("Invalid operand type: %s. %s expected", actualType, expectedType));
+        }
+    }
+
+    public static class SimpleVaArg {
+        public final Class<?> carrier;
+        public final MemoryLayout layout;
+        public final Object value;
+
+        public SimpleVaArg(Class<?> carrier, MemoryLayout layout, Object value) {
+            this.carrier = carrier;
+            this.layout = layout;
+            this.value = value;
+        }
+
+        public VarHandle varHandle() {
+            return carrier == MemoryAddress.class
+                ? MemoryHandles.asAddressVarHandle(layout.varHandle(primitiveCarrierForSize(layout.byteSize())))
+                : layout.varHandle(carrier);
+        }
+    }
+
+    public static class EmptyVaList implements CSupport.VaList {
+
+        private final MemoryAddress address;
+
+        public EmptyVaList(MemoryAddress address) {
+            this.address = address;
+        }
+
+        private static UnsupportedOperationException uoe() {
+            return new UnsupportedOperationException("Empty VaList");
+        }
+
+        @Override
+        public int vargAsInt(MemoryLayout layout) {
+            throw uoe();
+        }
+
+        @Override
+        public long vargAsLong(MemoryLayout layout) {
+            throw uoe();
+        }
+
+        @Override
+        public double vargAsDouble(MemoryLayout layout) {
+            throw uoe();
+        }
+
+        @Override
+        public MemoryAddress vargAsAddress(MemoryLayout layout) {
+            throw uoe();
+        }
+
+        @Override
+        public MemorySegment vargAsSegment(MemoryLayout layout) {
+            throw uoe();
+        }
+
+        @Override
+        public void skip(MemoryLayout... layouts) {
+            throw uoe();
+        }
+
+        @Override
+        public boolean isAlive() {
+            return true;
+        }
+
+        @Override
+        public void close() {
+            throw uoe();
+        }
+
+        @Override
+        public VaList copy() {
+            return this;
+        }
+
+        @Override
+        public MemoryAddress address() {
+            return address;
+        }
+    }
+
+    static void writeOverSized(MemoryAddress ptr, Class<?> type, Object o) {
+        // use VH_LONG for integers to zero out the whole register in the process
+        if (type == long.class) {
+            VH_LONG.set(ptr, (long) o);
+        } else if (type == int.class) {
+            VH_LONG.set(ptr, (long) (int) o);
+        } else if (type == short.class) {
+            VH_LONG.set(ptr, (long) (short) o);
+        } else if (type == char.class) {
+            VH_LONG.set(ptr, (long) (char) o);
+        } else if (type == byte.class) {
+            VH_LONG.set(ptr, (long) (byte) o);
+        } else if (type == float.class) {
+            VH_FLOAT.set(ptr, (float) o);
+        } else if (type == double.class) {
+            VH_DOUBLE.set(ptr, (double) o);
+        } else {
+            throw new IllegalArgumentException("Unsupported carrier: " + type);
+        }
+    }
+
+    static void write(MemoryAddress ptr, Class<?> type, Object o) {
+        if (type == long.class) {
+            VH_LONG.set(ptr, (long) o);
+        } else if (type == int.class) {
+            VH_INT.set(ptr, (int) o);
+        } else if (type == short.class) {
+            VH_SHORT.set(ptr, (short) o);
+        } else if (type == char.class) {
+            VH_CHAR.set(ptr, (char) o);
+        } else if (type == byte.class) {
+            VH_BYTE.set(ptr, (byte) o);
+        } else if (type == float.class) {
+            VH_FLOAT.set(ptr, (float) o);
+        } else if (type == double.class) {
+            VH_DOUBLE.set(ptr, (double) o);
+        } else {
+            throw new IllegalArgumentException("Unsupported carrier: " + type);
+        }
+    }
+
+    static Object read(MemoryAddress ptr, Class<?> type) {
+        if (type == long.class) {
+            return (long) VH_LONG.get(ptr);
+        } else if (type == int.class) {
+            return (int) VH_INT.get(ptr);
+        } else if (type == short.class) {
+            return (short) VH_SHORT.get(ptr);
+        } else if (type == char.class) {
+            return (char) VH_CHAR.get(ptr);
+        } else if (type == byte.class) {
+            return (byte) VH_BYTE.get(ptr);
+        } else if (type == float.class) {
+            return (float) VH_FLOAT.get(ptr);
+        } else if (type == double.class) {
+            return (double) VH_DOUBLE.get(ptr);
+        } else {
+            throw new IllegalArgumentException("Unsupported carrier: " + type);
+        }
     }
 }
