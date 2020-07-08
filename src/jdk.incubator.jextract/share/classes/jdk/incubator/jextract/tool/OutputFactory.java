@@ -81,11 +81,12 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
      * generating unique case-insensitive names for nested classes.
      */
     private String uniqueNestedClassName(String name) {
+        name = Utils.javaSafeIdentifier(name);
         return nestedClassNames.add(name.toLowerCase())? name : (name + "$" + nestedClassNameCount++);
     }
 
     private String structClassName(Declaration decl) {
-        return structClassNames.computeIfAbsent(decl, d -> uniqueNestedClassName("C" + d.name()));
+        return structClassNames.computeIfAbsent(decl, d -> uniqueNestedClassName(d.name()));
     }
 
     private boolean structDefinitionSeen(Declaration decl) {
@@ -105,7 +106,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
     static JavaFileObject[] generateWrapped(Declaration.Scoped decl, String clsName, String pkgName, List<String> libraryNames) {
         String qualName = pkgName.isEmpty() ? clsName : pkgName + "." + clsName;
         ConstantHelper constantHelper = new ConstantHelper(qualName,
-                ClassDesc.of(pkgName, "RuntimeHelper"), ClassDesc.of(pkgName, "Cstring"),
+                ClassDesc.of(pkgName, "RuntimeHelper"), ClassDesc.of("jdk.incubator.foreign", "CSupport"),
                 libraryNames.toArray(String[]::new));
         return new OutputFactory(clsName, pkgName,
                 new HeaderBuilder(clsName, pkgName, constantHelper), constantHelper).generate(decl);
@@ -146,7 +147,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         for (Declaration.Typedef td : unresolvedStructTypedefs) {
             Declaration.Scoped structDef = ((Type.Declared)td.type()).tree();
             if (structDefinitionSeen(structDef)) {
-                builder.emitTypedef(uniqueNestedClassName("C" + td.name()), structClassName(structDef));
+                builder.emitTypedef(uniqueNestedClassName(td.name()), structClassName(structDef));
             }
         }
         builder.classEnd();
@@ -155,9 +156,6 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             files.add(builder.build());
             files.addAll(constantHelper.getClasses());
             files.add(fileFromString(pkgName,"RuntimeHelper", getRuntimeHelperSource()));
-            files.add(getCstringFile(pkgName));
-            files.add(getCpointerFile(pkgName));
-            files.addAll(getPrimitiveTypeFiles(pkgName));
             return files.toArray(new JavaFileObject[0]);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
@@ -180,45 +178,6 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             System.err.println("Troubld declaration: " + tree);
             ex.printStackTrace();
         }
-    }
-
-    private JavaFileObject getCstringFile(String pkgName) throws IOException, URISyntaxException {
-        return getTemplateFile(pkgName, "Cstring", "resources/Cstring.java.template");
-    }
-
-    private JavaFileObject getCpointerFile(String pkgName) throws IOException, URISyntaxException {
-        return getTemplateFile(pkgName, "Cpointer", "resources/Cpointer.java.template");
-    }
-
-    private JavaFileObject getTemplateFile(String pkgName, String className, String path) throws IOException, URISyntaxException {
-        var cstringFile = OutputFactory.class.getResource(path);
-        var lines = Files.readAllLines(Paths.get(cstringFile.toURI()));
-        String pkgPrefix = pkgName.isEmpty()? "" : "package " + pkgName + ";\n";
-        String contents =  pkgPrefix +
-                lines.stream().collect(Collectors.joining("\n"));
-        return fileFromString(pkgName,className, contents);
-    }
-
-    private List<JavaFileObject> getPrimitiveTypeFiles(String pkgName) throws IOException, URISyntaxException {
-        var abi = SharedUtils.getSystemLinker();
-        var cXJavaFile = OutputFactory.class.getResource("resources/C-X.java.template");
-        var lines = Files.readAllLines(Paths.get(cXJavaFile.toURI()));
-
-        List<JavaFileObject> files = new ArrayList<>();
-        String pkgPrefix = pkgName.isEmpty()? "" : "package " + pkgName + ";\n";
-        for (Primitive.Kind type : Primitive.Kind.values()) {
-            if (type.layout().isEmpty()) continue;
-            String typeName = type.typeName().toLowerCase().replace(' ', '_');
-            MemoryLayout layout = type.layout().get();
-            String contents =  pkgPrefix +
-                    lines.stream().collect(Collectors.joining("\n")).
-                            replace("-X", typeName).
-                            replace("${C_LANG}", C_LANG_CONSTANTS_HOLDER).
-                            replace("${LAYOUT}", TypeTranslator.typeToLayoutName(type)).
-                            replace("${CARRIER}", classForType(type, layout).getName());
-            files.add(fileFromString(pkgName,"C" + typeName, contents));
-        }
-        return files;
     }
 
     private static Class<?> classForType(Primitive.Kind type, MemoryLayout layout) {
@@ -359,7 +318,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                              * };
                              */
                             if (structDefinitionSeen(s)) {
-                                builder.emitTypedef(uniqueNestedClassName("C" + tree.name()), structClassName(s));
+                                builder.emitTypedef(uniqueNestedClassName(tree.name()), structClassName(s));
                             } else {
                                 /*
                                  * Definition of typedef'ed struct/union not seen yet. May be the definition comes later.
@@ -375,7 +334,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                 }
             }
         } else if (type instanceof Type.Primitive) {
-             builder.emitPrimitiveTypedef((Type.Primitive)type, uniqueNestedClassName("C" + tree.name()));
+             builder.emitPrimitiveTypedef((Type.Primitive)type, uniqueNestedClassName(tree.name()));
         }
         return null;
     }
@@ -399,7 +358,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             return null;
         }
         Class<?> clazz = typeTranslator.getJavaType(type);
-        if (tree.kind() == Declaration.Variable.Kind.BITFIELD || clazz == MemoryAddress.class ||
+        if (tree.kind() == Declaration.Variable.Kind.BITFIELD ||
                 (layout instanceof ValueLayout && layout.byteSize() > 8)) {
             //skip
             return null;

@@ -22,11 +22,11 @@
  */
 
 
+import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.NativeScope;
 
 import org.testng.annotations.Test;
-import test.jextract.test8244412.Clong_long;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static test.jextract.test8244412.test8244412_h.*;
@@ -44,11 +44,10 @@ public class LibTest8244412Test {
     @Test
     public void test() {
         try (var scope = NativeScope.unboundedScope()) {
-            var addr = Cmysize_t.allocate(0L, scope);
-            assertEquals(Cmysize_t.get(addr), 0L);
-            Cmysize_t.set(addr, 13455566L);
-            assertEquals(Cmysize_t.get(addr), 13455566L);
-            assertTrue(Cmysize_t.sizeof() == Clong_long.sizeof());
+            var addr = scope.allocate(mysize_t, 0L);
+            assertEquals(MemoryAccess.getLong(addr), 0L);
+            MemoryAccess.setLong(addr, 13455566L);
+            assertEquals(MemoryAccess.getLong(addr), 13455566L);
         }
     }
 }
