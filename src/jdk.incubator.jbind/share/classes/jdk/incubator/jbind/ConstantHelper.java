@@ -24,6 +24,7 @@
  */
 package jdk.incubator.jbind;
 
+import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
@@ -32,7 +33,6 @@ import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
-import jdk.incubator.jbind.core.CString;
 import jdk.incubator.jbind.core.RuntimeHelper;
 import jdk.internal.org.objectweb.asm.ClassWriter;
 import jdk.internal.org.objectweb.asm.ConstantDynamic;
@@ -177,7 +177,7 @@ class ConstantHelper {
                         MemoryLayout.class)
         );
         this.MH_makeCString = findRuntimeHelperBootstrap(
-                desc(CString.class),
+                desc(CSupport.class),
                 "toCString",
                 methodType(
                         MemorySegment.class,
