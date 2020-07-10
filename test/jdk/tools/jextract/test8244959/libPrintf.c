@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -20,28 +20,16 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package vm.share.vmcrasher;
 
-import vm.share.UnsafeAccess;
+#include "printf.h"
 
-public class UnsafeJavaCrasher extends Crasher {
+#include <stdio.h>
+#include <stdarg.h>
 
-    private static class C {
-        C next;
-    }
-
-    @SuppressWarnings("restriction")
-    @Override
-    public void run() {
-        try {
-            C a = new C();
-            a.next = new C();
-            a.next.next = new C();
-            UnsafeAccess.unsafe.putInt(a.next, UnsafeAccess.unsafe.objectFieldOffset(C.class.getDeclaredField("next")), 0xDEADCAFE);
-            a.next.next.next = new C();
-        } catch ( Throwable t ) {
-            t.printStackTrace();
-        }
-    }
-
+EXPORT int my_sprintf(char *buf, const char *fmt, int arg_num, ...) {
+    va_list list;
+    va_start(list, arg_num);
+    int result = vsprintf(buf, fmt, list);
+    va_end(list);
+    return result;
 }

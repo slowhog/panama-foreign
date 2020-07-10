@@ -34,7 +34,7 @@ struct Bar {
 };
 
 struct Baz {
-    unsigned long x:1;
-    unsigned long y:63;
+    unsigned long long x:1;
+    unsigned long long y:63;
     struct Bar z[1];
 };
