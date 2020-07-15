@@ -21,27 +21,26 @@
  * questions.
  */
 
-/*
- * @test
- * @build JextractApiTestBase
- * @run testng/othervm -Dforeign.restricted=permit SmokeTest
- */
-
-import jdk.incubator.jextract.Declaration;
-import jdk.incubator.jextract.Type;
 import org.testng.annotations.Test;
 
-public class SmokeTest extends JextractApiTestBase {
+import java.nio.file.Path;
 
+/*
+ * @test
+ * @library .. /test/lib
+ * @modules jdk.incubator.jextract
+ * @build JextractToolRunner
+ * @bug 8249301
+ * @summary jextract fails with CCE when encountering a typedefdecl whose type is FunctionProto
+ * @run testng/othervm -Dforeign.restricted=permit TestTypedefIsFunctionProto
+ */
+public class TestTypedefIsFunctionProto extends JextractToolRunner {
     @Test
-    public void testParser() {
-        Declaration.Scoped d = parse("smoke.h");
-        Declaration.Scoped pointDecl = checkStruct(d, "Point", "x", "y");
-        Type intType = ((Declaration.Variable)pointDecl.members().get(0)).type();
-        checkGlobal(d, "p", Type.declared(pointDecl));
-        checkFunction(d, "distance", intType, Type.declared(pointDecl), Type.declared(pointDecl));
-        Declaration.Variable ch_ptr_ptr = findDecl(d, "ch_ptr_ptr", Declaration.Variable.class);
-        checkFunction(d, "pointers", ch_ptr_ptr.type(), ch_ptr_ptr.type(), ch_ptr_ptr.type());
-        checkConstant(d, "ZERO", intType, 0L);
+    public void testVoidTypedef() {
+        Path outputPath = getOutputFilePath("outputTDIFP");
+        Path headerFile = getInputFilePath("funcproto.h");
+        run("-d", outputPath.toString(), headerFile.toString()).checkSuccess();
+        // nothing is generated that we can check, so we just check that jextract ran successfully
+        deleteDir(outputPath);
     }
 }

@@ -33,8 +33,6 @@ import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.jextract.Type.Primitive;
 import jdk.internal.clang.Cursor;
 import jdk.internal.clang.Type;
-import jdk.internal.foreign.abi.SharedUtils;
-
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -42,7 +40,7 @@ import java.util.function.Supplier;
  * General Layout utility functions
  */
 public final class LayoutUtils {
-    private static ForeignLinker abi = SharedUtils.getSystemLinker();
+    private static ForeignLinker abi = CSupport.getSystemLinker();
     private LayoutUtils() {}
 
     public static String getName(Type type) {
@@ -176,16 +174,27 @@ public final class LayoutUtils {
         return RecordLayoutComputer.compute(0, type, type);
     }
 
+    private static boolean isVoidType(jdk.incubator.jextract.Type type) {
+        if (type instanceof jdk.incubator.jextract.Type.Primitive) {
+            jdk.incubator.jextract.Type.Primitive pt = (jdk.incubator.jextract.Type.Primitive)type;
+            return pt.kind() == jdk.incubator.jextract.Type.Primitive.Kind.Void;
+        } else if (type instanceof jdk.incubator.jextract.Type.Delegated) {
+            jdk.incubator.jextract.Type.Delegated dt = (jdk.incubator.jextract.Type.Delegated)type;
+            return dt.kind() == jdk.incubator.jextract.Type.Delegated.Kind.TYPEDEF? isVoidType(dt.type()) : false;
+        }
+        return false;
+    }
+
     public static Optional<FunctionDescriptor> getDescriptor(jdk.incubator.jextract.Type.Function t) {
         try {
             MemoryLayout[] args = t.argumentTypes().stream()
                     .map(LayoutUtils::getLayoutInternal)
                     .toArray(MemoryLayout[]::new);
-            if (t.returnType() instanceof jdk.incubator.jextract.Type.Primitive &&
-                    ((jdk.incubator.jextract.Type.Primitive) t.returnType()).kind() == jdk.incubator.jextract.Type.Primitive.Kind.Void) {
+            jdk.incubator.jextract.Type retType = t.returnType();
+            if (isVoidType(retType)) {
                 return Optional.of(FunctionDescriptor.ofVoid(args));
             } else {
-                return Optional.of(FunctionDescriptor.of(getLayoutInternal(t.returnType()), args));
+                return Optional.of(FunctionDescriptor.of(getLayoutInternal(retType), args));
             }
         } catch (Throwable ex) {
             return Optional.empty();

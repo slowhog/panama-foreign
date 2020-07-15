@@ -28,8 +28,6 @@ import jdk.incubator.foreign.*;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Type;
 import jdk.incubator.jextract.Type.Primitive;
-import jdk.internal.foreign.abi.SharedUtils;
-
 import javax.tools.JavaFileObject;
 import javax.tools.SimpleJavaFileObject;
 import java.io.IOException;
@@ -121,7 +119,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
 
     private static String getCLangConstantsHolder() {
         String prefix = "jdk.incubator.foreign.CSupport.";
-        String abi = SharedUtils.getSystemLinker().name();
+        String abi = CSupport.getSystemLinker().name();
         switch (abi) {
             case CSupport.SysV.NAME:
                 return prefix + "SysV";
@@ -270,7 +268,10 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                 String name = funcTree.name() + "$" + (param.name().isEmpty() ? "x" + i : param.name());
                 name = Utils.javaSafeIdentifier(name);
                 //generate functional interface
-                MethodType fitype = typeTranslator.getMethodType(f);
+                if (f.varargs()) {
+                    System.err.println("WARNING: varargs in callbacks is not supported");
+                }
+                MethodType fitype = typeTranslator.getMethodType(f, false);
                 builder.addFunctionalInterface(name, fitype, Type.descriptorFor(f).orElseThrow());
                 i++;
             }

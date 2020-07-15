@@ -21,27 +21,32 @@
  * questions.
  */
 
-/*
- * @test
- * @build JextractApiTestBase
- * @run testng/othervm -Dforeign.restricted=permit SmokeTest
- */
-
-import jdk.incubator.jextract.Declaration;
-import jdk.incubator.jextract.Type;
+import java.nio.file.Path;
+import jdk.incubator.foreign.MemoryAddress;
 import org.testng.annotations.Test;
 
-public class SmokeTest extends JextractApiTestBase {
-
+/*
+ * @test
+ * @library /test/lib
+ * @modules jdk.incubator.jextract
+ * @build JextractToolRunner
+ * @bug 8249300
+ * @summary jextract does not handle empty parameter list of a function pointer parameters
+ * @run testng/othervm -Dforeign.restricted=permit Test8249300
+ */
+public class Test8249300 extends JextractToolRunner {
     @Test
-    public void testParser() {
-        Declaration.Scoped d = parse("smoke.h");
-        Declaration.Scoped pointDecl = checkStruct(d, "Point", "x", "y");
-        Type intType = ((Declaration.Variable)pointDecl.members().get(0)).type();
-        checkGlobal(d, "p", Type.declared(pointDecl));
-        checkFunction(d, "distance", intType, Type.declared(pointDecl), Type.declared(pointDecl));
-        Declaration.Variable ch_ptr_ptr = findDecl(d, "ch_ptr_ptr", Declaration.Variable.class);
-        checkFunction(d, "pointers", ch_ptr_ptr.type(), ch_ptr_ptr.type(), ch_ptr_ptr.type());
-        checkConstant(d, "ZERO", intType, 0L);
+    public void testVoidTypedef() {
+        Path outputPath = getOutputFilePath("output8249300");
+        Path headerFile = getInputFilePath("test8249300.h");
+        run("-d", outputPath.toString(), headerFile.toString()).checkSuccess();
+        try(Loader loader = classLoader(outputPath)) {
+            Class<?> headerClass = loader.loadClass("test8249300_h");
+            checkMethod(headerClass, "func", void.class, MemoryAddress.class);
+            Class<?> fiClass = loader.loadClass("test8249300_h$func$f");
+            checkMethod(fiClass, "apply", void.class);
+        } finally {
+            deleteDir(outputPath);
+        }
     }
 }
