@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, 2016, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -21,30 +21,24 @@
  * questions.
  */
 
+import org.testng.annotations.Test;
+import static org.testng.Assert.assertEquals;
+import static test.jextract.test8249757.test8249757_h.*;
+
 /*
  * @test
- * @bug 6398614 6705893
- * @summary Create a user defined ScriptContext and check
- * that script can access variables from non-standard scopes
- * @modules jdk.scripting.nashorn
+ * @library ..
+ * @modules jdk.incubator.jextract
+ * @bug 8249757
+ * @summary jextract should expose a way to load library from a given absolute path
+ * @run driver JtregJextract -libpath Test8249757 -t test.jextract.test8249757 -- test8249757.h
+ * @run testng/othervm -Dforeign.restricted=permit LibTest8249757Test
  */
-
-import javax.script.ScriptContext;
-import javax.script.ScriptEngine;
-import javax.script.ScriptEngineManager;
-
-public class PluggableContextTest {
-    public static void main(String[] args) throws Exception {
-        ScriptEngineManager m = new ScriptEngineManager();
-        ScriptContext ctx = new MyContext();
-        ctx.setAttribute("x", "hello", MyContext.APP_SCOPE);
-        ScriptEngine e = Helper.getJsEngine(m);
-        if (e == null) {
-            System.out.println("Warning: No js engine found; test vacuously passes.");
-            return;
-        }
-        // the following reference to 'x' throws exception
-        // if APP_SCOPE is not searched.
-        e.eval("x", ctx);
+public class LibTest8249757Test {
+    @Test
+    public void testSquare() {
+        assertEquals(square(5), 25);
+        assertEquals(square(16), 256);
+        assertEquals(square(20), 400);
     }
 }
