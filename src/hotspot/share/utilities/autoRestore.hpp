@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -22,23 +22,35 @@
  *
  */
 
-#include "precompiled.hpp"
+#ifndef SHARE_UTILITIES_AUTORESTORE_HPP
+#define SHARE_UTILITIES_AUTORESTORE_HPP
+
 #include "memory/allocation.hpp"
-#include "metaprogramming/integralConstant.hpp"
-#include "metaprogramming/isRegisteredEnum.hpp"
 
-#include "unittest.hpp"
-
-struct IsRegisteredEnumTest : AllStatic {
-  enum A { A_x, A_y, A_z };
-  enum B { B_x, B_y, B_z };
+// A simplistic template providing a general save-restore pattern through a
+// local auto/stack object (scope).
+//
+template<typename T> class AutoSaveRestore : public StackObj {
+public:
+  AutoSaveRestore(T &loc) : _loc(loc) {
+    _value = loc;
+  }
+  ~AutoSaveRestore() {
+    _loc = _value;
+  }
+private:
+  T &_loc;
+  T _value;
 };
 
-typedef IsRegisteredEnumTest::A A;
-typedef IsRegisteredEnumTest::B B;
+// A simplistic template providing a general modify-restore pattern through a
+// local auto/stack object (scope).
+//
+template<typename T> class AutoModifyRestore : private AutoSaveRestore<T> {
+public:
+  AutoModifyRestore(T &loc, T value) : AutoSaveRestore<T>(loc) {
+    loc = value;
+  }
+};
 
-template<> struct IsRegisteredEnum<A> : public TrueType {};
-
-STATIC_ASSERT(!IsRegisteredEnum<int>::value);
-STATIC_ASSERT(IsRegisteredEnum<A>::value);
-STATIC_ASSERT(!IsRegisteredEnum<B>::value);
+#endif // SHARE_UTILITIES_AUTORESTORE_HPP

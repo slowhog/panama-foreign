@@ -158,7 +158,7 @@ MemorySegment segment = ...
 SequenceLayout SEQUENCE_LAYOUT = MemoryLayout.ofSequence(1024, MemoryLayouts.JAVA_INT);
 VarHandle VH_int = SEQUENCE_LAYOUT.elementLayout().varHandle(int.class);
 int sum = StreamSupport.stream(MemorySegment.spliterator(segment, SEQUENCE_LAYOUT), true)
-                       .mapToInt(s -> (int)VH_int.get(s.baseAddress()))
+                       .mapToInt(s -> (int)VH_int.get(s.address()))
                        .sum();
  * }</pre></blockquote>
  *
@@ -169,15 +169,16 @@ int sum = StreamSupport.stream(MemorySegment.spliterator(segment, SEQUENCE_LAYOU
  * @implSpec
  * Implementations of this interface are immutable, thread-safe and <a href="{@docRoot}/java.base/java/lang/doc-files/ValueBased.html">value-based</a>.
  */
-public interface MemorySegment extends AutoCloseable {
+public interface MemorySegment extends Addressable, AutoCloseable {
 
     /**
      * The base memory address associated with this memory segment. The returned address is
-     * a <em>checked</em> memory address and can therefore be used in derefrence operations
+     * a <em>checked</em> memory address and can therefore be used in dereference operations
      * (see {@link MemoryAddress}).
      * @return The base memory address.
      */
-    MemoryAddress baseAddress();
+    @Override
+    MemoryAddress address();
 
     /**
      * Returns a spliterator for the given memory segment. The returned spliterator reports {@link Spliterator#SIZED},
@@ -306,7 +307,7 @@ public interface MemorySegment extends AutoCloseable {
 byteHandle = MemoryLayout.ofSequence(MemoryLayouts.JAVA_BYTE)
          .varHandle(byte.class, MemoryLayout.PathElement.sequenceElement());
 for (long l = 0; l < segment.byteSize(); l++) {
-     byteHandle.set(segment.baseAddress(), l, value);
+     byteHandle.set(segment.address(), l, value);
 }
      * }</pre>
      *
@@ -349,7 +350,7 @@ for (long l = 0; l < segment.byteSize(); l++) {
     /**
      * Finds and returns the offset, in bytes, of the first mismatch between
      * this segment and a given other segment. The offset is relative to the
-     * {@link #baseAddress() base address} of each segment and will be in the
+     * {@link #address() base address} of each segment and will be in the
      * range of 0 (inclusive) up to the {@link #byteSize() size} (in bytes) of
      * the smaller memory segment (exclusive).
      * <p>
@@ -676,6 +677,29 @@ allocateNative(bytesSize, 1);
         }
 
         return NativeMemorySegmentImpl.makeNativeSegment(bytesSize, alignmentBytes);
+    }
+
+    /**
+     * Returns a native memory segment whose base address is {@link MemoryAddress#NULL} and whose size is {@link Long#MAX_VALUE}.
+     * This method can be very useful when dereferencing memory addresses obtained when interacting with native libraries.
+     * The segment will feature the {@link #READ} and {@link #WRITE} <a href="#access-modes">access modes</a>.
+     * Equivalent to (but likely more efficient than) the following code:
+     * <pre>{@code
+    MemorySegment.ofNativeRestricted(MemoryAddress.NULL, Long.MAX_VALUE, null, null, null)
+                 .withAccessModes(READ | WRITE);
+     * }</pre>
+     * <p>
+     * This method is <em>restricted</em>. Restricted methods are unsafe, and, if used incorrectly, their use might crash
+     * the JVM or, worse, silently result in memory corruption. Thus, clients should refrain from depending on
+     * restricted methods, and use safe and supported functionalities, where possible.
+     *
+     * @return a memory segment whose base address is {@link MemoryAddress#NULL} and whose size is {@link Long#MAX_VALUE}.
+     * @throws IllegalAccessError if the runtime property {@code foreign.restricted} is not set to either
+     * {@code permit}, {@code warn} or {@code debug} (the default value is set to {@code deny}).
+     */
+    static MemorySegment ofNativeRestricted() {
+        Utils.checkRestrictedAccess("MemorySegment.ofNativeRestricted");
+        return NativeMemorySegmentImpl.EVERYTHING;
     }
 
     /**

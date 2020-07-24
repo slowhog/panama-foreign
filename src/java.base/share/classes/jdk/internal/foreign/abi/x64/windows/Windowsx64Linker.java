@@ -24,6 +24,7 @@
  */
 package jdk.internal.foreign.abi.x64.windows;
 
+import jdk.incubator.foreign.Addressable;
 import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
@@ -78,14 +79,14 @@ public class Windowsx64Linker implements ForeignLinker {
         return instance;
     }
 
-    public static VaList newVaList(Consumer<VaList.Builder> actions) {
-        WinVaList.Builder builder = WinVaList.builder();
+    public static VaList newVaList(Consumer<VaList.Builder> actions, SharedUtils.Allocator allocator) {
+        WinVaList.Builder builder = WinVaList.builder(allocator);
         actions.accept(builder);
         return builder.build();
     }
 
     @Override
-    public MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
+    public MethodHandle downcallHandle(Addressable symbol, MethodType type, FunctionDescriptor function) {
         MethodType llMt = SharedUtils.convertVaListCarriers(type, WinVaList.CARRIER);
         MethodHandle handle = CallArranger.arrangeDowncall(symbol, llMt, function);
         handle = SharedUtils.unboxVaLists(type, handle, MH_unboxVaList);

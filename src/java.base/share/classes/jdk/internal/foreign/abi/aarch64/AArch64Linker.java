@@ -25,6 +25,7 @@
  */
 package jdk.internal.foreign.abi.aarch64;
 
+import jdk.incubator.foreign.Addressable;
 import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
@@ -73,7 +74,7 @@ public class AArch64Linker implements ForeignLinker {
     }
 
     @Override
-    public MethodHandle downcallHandle(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
+    public MethodHandle downcallHandle(Addressable symbol, MethodType type, FunctionDescriptor function) {
         MethodType llMt = SharedUtils.convertVaListCarriers(type, AArch64VaList.CARRIER);
         MethodHandle handle = CallArranger.arrangeDowncall(symbol, llMt, function);
         handle = SharedUtils.unboxVaLists(type, handle, MH_unboxVaList);
@@ -95,8 +96,8 @@ public class AArch64Linker implements ForeignLinker {
         return (AArch64.ArgumentClass)layout.attribute(AArch64.CLASS_ATTRIBUTE_NAME).get();
     }
 
-    public static VaList newVaList(Consumer<VaList.Builder> actions) {
-        AArch64VaList.Builder builder = AArch64VaList.builder();
+    public static VaList newVaList(Consumer<VaList.Builder> actions, SharedUtils.Allocator allocator) {
+        AArch64VaList.Builder builder = AArch64VaList.builder(allocator);
         actions.accept(builder);
         return builder.build();
     }

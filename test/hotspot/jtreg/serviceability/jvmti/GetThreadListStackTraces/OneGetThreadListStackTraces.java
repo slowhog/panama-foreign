@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, NTT DATA.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,22 +20,23 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
+ */
+
+/**
+ * @test
+ * @bug 8242428
+ * @summary Verifies JVMTI GetThreadListStackTraces API with thread_count = 1
+ * @library /test/lib
+ * @run main/othervm/native -agentlib:OneGetThreadListStackTraces OneGetThreadListStackTraces
  *
  */
 
-#ifndef SHARE_METAPROGRAMMING_ISREGISTEREDENUM_HPP
-#define SHARE_METAPROGRAMMING_ISREGISTEREDENUM_HPP
+public class OneGetThreadListStackTraces {
 
-#include "metaprogramming/integralConstant.hpp"
+    private static native void checkCallStacks(Thread thread);
 
-// Recognize registered enum types.
-// Registration is by specializing this trait.
-//
-// This is a manual stand-in for the C++11 std::is_enum<T> type trait.
-// It's a lot of work to implement is_enum portably in C++98, so this
-// manual approach is being taken for those enum types we need to
-// distinguish.
-template<typename T>
-struct IsRegisteredEnum : public FalseType {};
-
-#endif // SHARE_METAPROGRAMMING_ISREGISTEREDENUM_HPP
+    public static void main(String[] args) throws Exception {
+        /* Check call stack native */
+        checkCallStacks(Thread.currentThread());
+    }
+}

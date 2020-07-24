@@ -413,6 +413,7 @@ void TemplateTable::fast_aldc(bool wide)
     // Stash null_sentinel address to get its value later
     __ movptr(rarg, (uintptr_t)Universe::the_null_sentinel_addr());
     __ ldr(tmp, Address(rarg));
+    __ resolve_oop_handle(tmp);
     __ cmpoop(result, tmp);
     __ br(Assembler::NE, notNull);
     __ mov(result, 0);  // NULL object reference
@@ -1706,7 +1707,7 @@ void TemplateTable::lcmp()
   Label done;
   __ pop_l(r1);
   __ cmp(r1, r0);
-  __ mov(r0, (u_int64_t)-1L);
+  __ mov(r0, (uint64_t)-1L);
   __ br(Assembler::LT, done);
   // __ mov(r0, 1UL);
   // __ csel(r0, r0, zr, Assembler::NE);
@@ -1730,7 +1731,7 @@ void TemplateTable::float_cmp(bool is_float, int unordered_result)
   if (unordered_result < 0) {
     // we want -1 for unordered or less than, 0 for equal and 1 for
     // greater than.
-    __ mov(r0, (u_int64_t)-1L);
+    __ mov(r0, (uint64_t)-1L);
     // for FP LT tests less than or unordered
     __ br(Assembler::LT, done);
     // install 0 for EQ otherwise 1
@@ -2975,6 +2976,9 @@ void TemplateTable::fast_storefield(TosState state)
   // access constant pool cache
   __ get_cache_and_index_at_bcp(r2, r1, 1);
 
+  // Must prevent reordering of the following cp cache loads with bytecode load
+  __ membar(MacroAssembler::LoadLoad);
+
   // test for volatile with r3
   __ ldrw(r3, Address(r2, in_bytes(base +
                                    ConstantPoolCacheEntry::flags_offset())));
@@ -3067,6 +3071,10 @@ void TemplateTable::fast_accessfield(TosState state)
 
   // access constant pool cache
   __ get_cache_and_index_at_bcp(r2, r1, 1);
+
+  // Must prevent reordering of the following cp cache loads with bytecode load
+  __ membar(MacroAssembler::LoadLoad);
+
   __ ldr(r1, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
                                   ConstantPoolCacheEntry::f2_offset())));
   __ ldrw(r3, Address(r2, in_bytes(ConstantPoolCache::base_offset() +
