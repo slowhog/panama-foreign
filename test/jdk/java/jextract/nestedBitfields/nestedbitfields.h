@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -19,26 +19,21 @@
  * Please contact Oracle, 500 Oracle Parkway, Redwood Shores, CA 94065 USA
  * or visit www.oracle.com if you need additional information or have any
  * questions.
- *
  */
 
-#include "precompiled.hpp"
-#include "memory/allocation.hpp"
-#include "metaprogramming/integralConstant.hpp"
-#include "metaprogramming/isRegisteredEnum.hpp"
-
-#include "unittest.hpp"
-
-struct IsRegisteredEnumTest : AllStatic {
-  enum A { A_x, A_y, A_z };
-  enum B { B_x, B_y, B_z };
+struct Foo {
+    struct {
+        int a : 7;
+        int b : 25;
+    };
 };
 
-typedef IsRegisteredEnumTest::A A;
-typedef IsRegisteredEnumTest::B B;
+struct Bar {
+    struct {
+        struct {
+            int a : 7;
+            int b : 25;
+        };
+    };
+};
 
-template<> struct IsRegisteredEnum<A> : public TrueType {};
-
-STATIC_ASSERT(!IsRegisteredEnum<int>::value);
-STATIC_ASSERT(IsRegisteredEnum<A>::value);
-STATIC_ASSERT(!IsRegisteredEnum<B>::value);

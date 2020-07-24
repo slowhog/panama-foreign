@@ -72,7 +72,7 @@ public class RuntimeHelper {
                 filter(Files::isRegularFile).map(Path::toAbsolutePath).findFirst();
     }
 
-    private static final Optional<MemoryAddress> lookup(LibraryLookup[] LIBRARIES, String sym) {
+    private static final Optional<LibraryLookup.Symbol> lookup(LibraryLookup[] LIBRARIES, String sym) {
         for (LibraryLookup l : LIBRARIES) {
             try {
                 return Optional.of(l.lookup(sym));
@@ -89,8 +89,8 @@ public class RuntimeHelper {
     public static final MemoryAddress lookupGlobalVariable(LibraryLookup[] LIBRARIES, String name, MemoryLayout layout) {
         return lookup(LIBRARIES, name).map(a ->
             MemorySegment.ofNativeRestricted(
-                a, layout.byteSize(), null, null, a
-            ).withAccessModes(MemorySegment.READ | MemorySegment.WRITE).baseAddress()).orElse(null);
+                a.address(), layout.byteSize(), null, null, a
+            ).withAccessModes(MemorySegment.READ | MemorySegment.WRITE).address()).orElse(null);
     }
 
     public static final MethodHandle downcallHandle(LibraryLookup[] LIBRARIES, String name, String desc, FunctionDescriptor fdesc) {
@@ -101,7 +101,7 @@ public class RuntimeHelper {
     }
 
     public static final MemoryAddress upcallStub(MethodHandle handle, FunctionDescriptor fdesc) {
-        return ABI.upcallStub(handle, fdesc).baseAddress();
+        return ABI.upcallStub(handle, fdesc).address();
     }
 
     public static final <Z> MemoryAddress upcallStub(Class<Z> fi, Z z, FunctionDescriptor fdesc, String mtypeDesc) {

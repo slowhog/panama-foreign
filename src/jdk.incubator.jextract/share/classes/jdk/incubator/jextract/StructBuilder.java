@@ -22,18 +22,16 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.incubator.jextract.tool;
+package jdk.incubator.jextract;
 
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 
-import java.lang.constant.DirectMethodHandleDesc;
-
 /**
  * This class generates static utilities class for C structs, unions.
  */
-class StructBuilder extends JavaSourceBuilder {
-    StructBuilder(String className, String pkgName, ConstantHelper constantHelper) {
+public class StructBuilder extends JavaSourceBuilder {
+    public StructBuilder(String className, String pkgName, ConstantHelper constantHelper) {
         super(className, pkgName, constantHelper);
     }
 
@@ -122,7 +120,7 @@ class StructBuilder extends JavaSourceBuilder {
         sb.append(parentLayout.byteOffset(MemoryLayout.PathElement.groupElement(nativeName)));
         sb.append(", ");
         sb.append(layout.byteSize());
-        sb.append(").baseAddress();\n");
+        sb.append(").address();\n");
         decrAlign();
         indent();
         sb.append("}\n");

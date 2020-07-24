@@ -29,15 +29,15 @@ import java.lang.constant.Constable;
 import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.function.Supplier;
+import java.util.Set;
 import java.util.stream.Collectors;
+
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.jextract.Declaration;
@@ -48,29 +48,12 @@ import jdk.internal.clang.CursorKind;
 import jdk.internal.clang.SourceLocation;
 
 class TreeMaker {
-    private final Map<Cursor, Declaration> treeCache = new HashMap<>();
-
     public TreeMaker() {}
 
     TypeMaker typeMaker = new TypeMaker(this);
 
     public void freeze() {
         typeMaker.resolveTypeReferences();
-    }
-
-    private Declaration checkCache(Cursor c, Supplier<Declaration> factory) {
-        // The supplier function may lead to adding some other type, which will cause CME using computeIfAbsent.
-        // This implementation relax the constraint a bit only check for same key
-        Declaration rv;
-        if (treeCache.containsKey(c)) {
-            rv = treeCache.get(c);
-        } else {
-            rv = factory.get();
-            if (null != rv && treeCache.put(c, rv) != null) {
-                throw new ConcurrentModificationException();
-            }
-        }
-        return rv;
     }
 
     interface ScopedFactoryLayout {
@@ -95,10 +78,8 @@ class TreeMaker {
 
     public Declaration createTree(Cursor c) {
         Objects.requireNonNull(c);
-        return checkCache(c, () -> {
-            var rv = (DeclarationImpl) createTreeInternal(c);
-            return (rv == null) ? null : rv.withAttributes(collectAttributes(c));
-        });
+        var rv = (DeclarationImpl) createTreeInternal(c);
+        return (rv == null) ? null : rv.withAttributes(collectAttributes(c));
     }
 
     private Declaration createTreeInternal(Cursor c) {
@@ -243,10 +224,14 @@ class TreeMaker {
         return d instanceof Declaration.Scoped && ((Declaration.Scoped)d).kind() == Declaration.Scoped.Kind.ENUM;
     }
 
+    private static boolean isAnonymousStruct(Declaration declaration) {
+        return ((CursorPosition)declaration.pos()).cursor.isAnonymousStruct();
+    }
+
     private List<Declaration> filterNestedDeclarations(List<Declaration> declarations) {
         return declarations.stream()
                 .filter(Objects::nonNull)
-                .filter(d -> isEnum(d) || !d.name().isEmpty() || ((CursorPosition)d.pos()).cursor.isAnonymousStruct())
+                .filter(d -> isEnum(d) || !d.name().isEmpty() || isAnonymousStruct(d))
                 .collect(Collectors.toList());
     }
 
@@ -283,14 +268,38 @@ class TreeMaker {
         }
     }
 
+    private static void collectNestedBitFields(Set<Declaration> out, Declaration.Scoped anonymousStruct) {
+        for  (Declaration field : anonymousStruct.members()) {
+            if (isAnonymousStruct(field)) {
+                collectNestedBitFields(out, (Declaration.Scoped) field);
+            } else if (field instanceof Declaration.Scoped
+                       && ((Declaration.Scoped) field).kind() == Declaration.Scoped.Kind.BITFIELDS) {
+                out.addAll(((Declaration.Scoped) field).members());
+            }
+        }
+    }
+
+    private static Set<Declaration> nestedBitFields(List<Declaration> members) {
+        Set<Declaration> res = new HashSet<>();
+        for (Declaration member : members) {
+            if (isAnonymousStruct(member)) {
+                collectNestedBitFields(res, (Declaration.Scoped) member);
+            }
+        }
+        return res;
+    }
+
     private List<Declaration> collectBitfields(MemoryLayout layout, List<Declaration> declarations) {
+        Set<String> nestedBitfieldNames = nestedBitFields(declarations).stream()
+                                                                       .map(Declaration::name)
+                                                                       .collect(Collectors.toSet());
         List<Declaration> newDecls = new ArrayList<>();
         for (MemoryLayout e : ((GroupLayout)layout).memberLayouts()) {
             Optional<GroupLayout> contents = Utils.getContents(e);
             if (contents.isPresent()) {
                 List<Declaration.Variable> bfDecls = new ArrayList<>();
                 outer: for (MemoryLayout bitfield : contents.get().memberLayouts()) {
-                    if (bitfield.name().isPresent()) {
+                    if (bitfield.name().isPresent() && !nestedBitfieldNames.contains(bitfield.name().get())) {
                         Iterator<Declaration> declIt = declarations.iterator();
                         while (declIt.hasNext()) {
                             Declaration d = declIt.next();
@@ -303,7 +312,9 @@ class TreeMaker {
                         throw new IllegalStateException("No matching declaration found for bitfield: " + bitfield);
                     }
                 }
-                newDecls.add(Declaration.bitfields(bfDecls.get(0).pos(), "", contents.get(), bfDecls.toArray(new Declaration.Variable[0])));
+                if (!bfDecls.isEmpty()) {
+                    newDecls.add(Declaration.bitfields(bfDecls.get(0).pos(), "", contents.get(), bfDecls.toArray(new Declaration.Variable[0])));
+                }
             }
         }
         newDecls.addAll(declarations);

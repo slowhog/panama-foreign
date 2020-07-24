@@ -4,9 +4,7 @@
  *
  * This code is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 only, as
- * published by the Free Software Foundation.  Oracle designates this
- * particular file as subject to the "Classpath" exception as provided
- * by Oracle in the LICENSE file that accompanied this code.
+ * published by the Free Software Foundation.
  *
  * This code is distributed in the hope that it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
@@ -23,31 +21,31 @@
  * questions.
  */
 
-package jdk.incubator.jextract.tool;
-
 import jdk.incubator.jextract.Declaration;
-import jdk.incubator.jextract.Position;
+import org.testng.annotations.Test;
 
-public class Filter {
+/*
+ * @test
+ * @library .. /test/lib
+ * @modules jdk.incubator.jextract
+ * @build JextractApiTestBase
+ * @bug 8249536
+ * @summary jextract throw IllegalStateException for bitfields in nested anonymous structs
+ * @run testng/othervm -Dforeign.restricted=permit TestNestedBitfields
+ */
+public class TestNestedBitfields extends JextractApiTestBase {
 
-    public static Declaration.Scoped filter(Declaration.Scoped decl, String... validNames) {
-        Declaration[] newMembers = decl.members().stream()
-                .filter(d -> filterDecl(d, validNames))
-                .toArray(Declaration[]::new);
-        return Declaration.toplevel(decl.pos(), newMembers);
-    }
+    @Test
+    public void testNestedBitfields() {
+        Declaration.Scoped d = parse("nestedbitfields.h");
+        Declaration.Scoped foo = checkStruct(d, "Foo", "");
+        Declaration.Scoped foo$anon = checkStruct(foo, "", "");
+        checkBitfields(foo$anon, "", "a", "b");
 
-    static boolean filterDecl(Declaration d, String... validNames) {
-        if (d.pos() == Position.NO_POSITION) {
-            return false;
-        } else {
-            for (String s : validNames) {
-                String pathName = d.pos().path().toString();
-                if (pathName.contains(s)) {
-                    return true;
-                }
-            }
-            return false;
-        }
+        Declaration.Scoped bar = checkStruct(d, "Bar", "");
+        Declaration.Scoped bar$anon = checkStruct(bar, "", "");
+        Declaration.Scoped bar$anon$anon = checkStruct(bar$anon, "", "");
+        checkBitfields(bar$anon$anon, "", "a", "b");
     }
 }
+

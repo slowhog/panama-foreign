@@ -22,21 +22,23 @@
  * or visit www.oracle.com if you need additional information or have any
  * questions.
  */
-package jdk.incubator.jextract.tool;
+package jdk.incubator.jextract;
 
+import jdk.incubator.foreign.Addressable;
 import jdk.incubator.foreign.FunctionDescriptor;
+import jdk.incubator.foreign.MemoryAddress;
+
 import java.lang.invoke.MethodType;
 import java.util.ArrayList;
 import java.util.List;
-import jdk.incubator.jextract.Type;
 
 /**
  * A helper class to generate header interface class in source form.
  * After aggregating various constituents of a .java source, build
  * method is called to get overall generated source string.
  */
-class HeaderBuilder extends JavaSourceBuilder {
-    HeaderBuilder(String className, String pkgName, ConstantHelper constantHelper) {
+public class HeaderBuilder extends JavaSourceBuilder {
+    public HeaderBuilder(String className, String pkgName, ConstantHelper constantHelper) {
         super(className, pkgName, constantHelper);
     }
 
@@ -66,15 +68,23 @@ class HeaderBuilder extends JavaSourceBuilder {
         indent();
         sb.append(PUB_MODS + mtype.returnType().getName() + " " + javaName + " (");
         String delim = "";
-        List<String> pNames = new ArrayList<>();
+        List<String> pExprs = new ArrayList<>();
         final int numParams = paramNames.size();
         for (int i = 0 ; i < numParams; i++) {
             String pName = paramNames.get(i);
             if (pName.isEmpty()) {
                 pName = "x" + i;
             }
-            pNames.add(pName);
-            sb.append(delim + mtype.parameterType(i).getName() + " " + pName);
+            if (mtype.parameterType(i).equals(MemoryAddress.class)) {
+                pExprs.add(pName + ".address()");
+            } else {
+                pExprs.add(pName);
+            }
+            Class<?> pType = mtype.parameterType(i);
+            if (pType.equals(MemoryAddress.class)) {
+                pType = Addressable.class;
+            }
+            sb.append(delim + pType.getName() + " " + pName);
             delim = ", ";
         }
         if (varargs) {
@@ -83,7 +93,7 @@ class HeaderBuilder extends JavaSourceBuilder {
                 sb.append(", ");
             }
             sb.append("Object... " + lastArg);
-            pNames.add(lastArg);
+            pExprs.add(lastArg);
         }
         sb.append(") {\n");
         incrAlign();
@@ -94,7 +104,7 @@ class HeaderBuilder extends JavaSourceBuilder {
         if (!mtype.returnType().equals(void.class)) {
             sb.append("return (" + mtype.returnType().getName() + ")");
         }
-        sb.append(methodHandleGetCallString(javaName, nativeName, mtype, desc, varargs) + ".invokeExact(" + String.join(", ", pNames) + ");\n");
+        sb.append(methodHandleGetCallString(javaName, nativeName, mtype, desc, varargs) + ".invokeExact(" + String.join(", ", pExprs) + ");\n");
         decrAlign();
         indent();
         sb.append("} catch (Throwable ex) {\n");
@@ -168,7 +178,7 @@ class HeaderBuilder extends JavaSourceBuilder {
         sb.append(PUB_MODS + "MemoryAddress allocate(" + className + " fi, NativeScope scope) {\n");
         incrAlign();
         indent();
-        sb.append("return scope.register(allocate(fi)).baseAddress();\n");
+        sb.append("return scope.register(allocate(fi)).address();\n");
         decrAlign();
         indent();
         sb.append("}\n");
