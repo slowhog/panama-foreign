@@ -28,6 +28,7 @@
  * @run testng/othervm -Dforeign.restricted=permit TestNative
  */
 
+import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemoryLayout.PathElement;
@@ -146,7 +147,7 @@ public class TestNative {
     @Test(dataProvider="nativeAccessOps")
     public void testNativeAccess(Consumer<MemoryAddress> checker, Consumer<MemoryAddress> initializer, SequenceLayout seq) {
         try (MemorySegment segment = MemorySegment.allocateNative(seq)) {
-            MemoryAddress address = segment.baseAddress();
+            MemoryAddress address = segment.address();
             initializer.accept(address);
             checker.accept(address);
         }
@@ -176,6 +177,13 @@ public class TestNative {
     }
 
     @Test
+    public void testDefaultAccessModesEverthing() {
+        MemorySegment everything = MemorySegment.ofNativeRestricted();
+        assertTrue(everything.hasAccessModes(READ | WRITE));
+        assertEquals(everything.accessModes(), READ | WRITE);
+    }
+
+    @Test
     public void testMallocSegment() {
         MemoryAddress addr = MemoryAddress.ofLong(allocate(12));
         assertNull(addr.segment());
@@ -186,10 +194,21 @@ public class TestNative {
         assertTrue(!mallocSegment.isAlive());
     }
 
+    @Test
+    public void testEverythingSegment() {
+        MemoryAddress addr = MemoryAddress.ofLong(allocate(4));
+        assertNull(addr.segment());
+        MemorySegment everything = MemorySegment.ofNativeRestricted();
+        MemoryAddress ptr = addr.rebase(everything);
+        MemoryAccess.setInt(ptr, 42);
+        assertEquals(MemoryAccess.getInt(ptr), 42);
+        free(addr.toRawLongValue());
+    }
+
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testBadResize() {
         try (MemorySegment segment = MemorySegment.allocateNative(4)) {
-            MemorySegment.ofNativeRestricted(segment.baseAddress(), 0, null, null, null);
+            MemorySegment.ofNativeRestricted(segment.address(), 0, null, null, null);
         }
     }
 
