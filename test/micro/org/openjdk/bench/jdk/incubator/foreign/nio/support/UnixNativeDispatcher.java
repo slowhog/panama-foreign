@@ -105,7 +105,7 @@ public abstract class UnixNativeDispatcher {
 
     public static MemoryAddress resizePointer(MemoryAddress addr, long size) {
         if (addr.segment() == null) {
-            return MemorySegment.ofNativeRestricted(addr, size, null, null, null).baseAddress();
+            return MemorySegment.ofNativeRestricted(addr, size, null, null, null).address();
         } else {
             return addr;
         }

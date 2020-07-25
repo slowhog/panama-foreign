@@ -27,6 +27,7 @@ package sun.nio.fs;
 
 import java.nio.ByteOrder;
 import java.util.function.Supplier;
+import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemorySegment;
@@ -86,9 +87,8 @@ class UnixNativeDispatcher {
     static MemorySegment copyToNativeBytes(byte[] ar) {
         long len = (ar[ar.length - 1] == '\0') ? ar.length : ar.length + 1;
         MemorySegment buf = MemorySegment.allocateNative(len);
-        MemoryAddress ptr = buf.baseAddress();
         buf.copyFrom(MemorySegment.ofArray(ar));
-        MemoryHandles.varHandle(byte.class, ByteOrder.nativeOrder()).set(ptr.addOffset(len - 1), (byte) 0);
+        MemoryAccess.setByteAtOffset(buf.address(), len - 1, (byte) 0);
         return buf;
     }
 
@@ -106,7 +106,7 @@ class UnixNativeDispatcher {
      */
     static byte[] getcwd() throws UnixException {
         try (MemorySegment buf = MemorySegment.allocateNative(PATH_MAX + 1)) {
-             MemoryAddress cwd = LibC.getcwd(buf.baseAddress(), PATH_MAX);
+             MemoryAddress cwd = LibC.getcwd(buf, PATH_MAX);
             if (FFIUtils.isNull(cwd)) {
                 throw new UnixException(errno());
             }
@@ -138,7 +138,7 @@ class UnixNativeDispatcher {
     static int open(UnixPath path, int flags, int mode) throws UnixException {
         try (MemorySegment buf = copyToNativeBytes(path)) {
             FFIUtils.setErrno(0);
-            int fd = restartable(() -> LibC.open(buf.baseAddress(), flags, mode));
+            int fd = restartable(() -> LibC.open(buf, flags, mode));
             return fd;
         } catch (UnixException ue) {
             throw ue;
@@ -151,7 +151,7 @@ class UnixNativeDispatcher {
     static int openat(int dfd, byte[] path, int flags, int mode) throws UnixException {
         try (MemorySegment buf = copyToNativeBytes(path)) {
             return restartable(() -> LibC.openat(dfd,
-                    buf.baseAddress(), flags, mode));
+                    buf, flags, mode));
         }
     }
 
@@ -273,7 +273,7 @@ class UnixNativeDispatcher {
      */
     static void unlinkat(int dfd, byte[] path, int flag) throws UnixException {
         try (MemorySegment file = copyToNativeBytes(path)) {
-            throwUnixExceptionIf(LibC.unlinkat(dfd, file.baseAddress(), flag) == -1);
+            throwUnixExceptionIf(LibC.unlinkat(dfd, file, flag) == -1);
         }
     }
 
@@ -282,7 +282,7 @@ class UnixNativeDispatcher {
      */
     static void mknod(UnixPath path, int mode, long dev) throws UnixException {
         try (MemorySegment file = copyToNativeBytes(path)) {
-            restartable(() -> LibC.mknod(file.baseAddress(), (short) mode, (int) dev));
+            restartable(() -> LibC.mknod(file, (short) mode, (int) dev));
         }
     }
 

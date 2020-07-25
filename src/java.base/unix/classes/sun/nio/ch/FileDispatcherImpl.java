@@ -366,12 +366,12 @@ class FileDispatcherImpl extends FileDispatcher {
         MemoryLayout layout = MemoryLayout.ofSequence(2, C_INT);
         VarHandle reader = layout.varHandle(int.class, MemoryLayout.PathElement.sequenceElement());
         try (MemorySegment sp = MemorySegment.allocateNative(layout)) {
-            if (LibC.socketpair(AF_UNIX, SOCK_STREAM, 0, sp.baseAddress()) < 0) {
+            if (LibC.socketpair(AF_UNIX, SOCK_STREAM, 0, sp) < 0) {
                 throw new UncheckedIOException(new IOException(
                         FFIUtils.getLastErrorMsg("socketpair failed")));
             }
-            int rv = (int) reader.get(sp.baseAddress(), 0);
-            LibC.close((int) reader.get(sp.baseAddress(), 1));
+            int rv = (int) reader.get(sp.address(), 0);
+            LibC.close((int) reader.get(sp.address(), 1));
             return rv;
         }
     }

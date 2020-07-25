@@ -55,8 +55,7 @@ class UTIFileTypeDetector extends AbstractFileTypeDetector {
         MemoryAddress src = LibMacOS.CFStringGetCharactersPtr(cfStr);
         if (src == MemoryAddress.NULL) {
             try (MemorySegment buf = MemorySegment.allocateNative(byteCounts)) {
-                src = buf.baseAddress();
-                LibMacOS.CFStringGetCharacters(cfStr, LibMacOS.__CFRangeMake(0, strLength), src);
+                LibMacOS.CFStringGetCharacters(cfStr, LibMacOS.__CFRangeMake(0, strLength), buf);
             }
         }
         return new String(FFIUtils.toByteArray(src, byteCounts));
@@ -68,7 +67,7 @@ class UTIFileTypeDetector extends AbstractFileTypeDetector {
         try (MemorySegment buf = MemorySegment.allocateNative(bytes)) {
             buf.copyFrom(MemorySegment.ofArray(tmp));
             var ext = LibMacOS.CFStringCreateWithCharacters(MemoryAddress.NULL,
-                    buf.baseAddress(), bytes);
+                    buf, bytes);
             if (FFIUtils.isNull(ext)) {
                 return null;
             }

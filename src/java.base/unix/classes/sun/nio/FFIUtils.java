@@ -31,6 +31,7 @@ import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.function.Supplier;
+import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
@@ -62,10 +63,11 @@ public class FFIUtils {
             long len = (ar[ar.length - 1] == '\0') ? ar.length : ar.length + 1;
             MemorySegment buf = MemorySegment.allocateNative(len);
             used.add(buf);
-            MemoryAddress ptr = buf.baseAddress();
+            MemoryAddress ptr = buf.address();
             buf.copyFrom(MemorySegment.ofArray(ar));
+            MemoryAccess.setByteAtOffset(ptr, len - 1, (byte) 0);
             MemoryHandles.varHandle(byte.class, ByteOrder.nativeOrder()).set(ptr.addOffset(len - 1), (byte) 0);
-            return buf.baseAddress();
+            return buf.address();
         }
 
         public MemoryAddress allocateCString(String str) {
@@ -76,7 +78,7 @@ public class FFIUtils {
         public MemoryAddress allocate(long bytes) {
             MemorySegment seg = MemorySegment.allocateNative(bytes);
             used.add(seg);
-            return seg.baseAddress();
+            return seg.address();
         }
 
         public MemoryAddress allocateArray(MemoryLayout elementLayout, long count) {
@@ -197,8 +199,8 @@ public class FFIUtils {
     public static String getErrorMsg(int errno, String defaultDetail) {
         try (MemorySegment buf = MemorySegment.allocateNative(
                 MemoryLayout.ofSequence(1024, C_CHAR))) {
-            int len = LibC.strerror_r(errno, buf.baseAddress(), buf.byteSize());
-            return (len > 0) ? toString(buf.baseAddress()) : defaultDetail;
+            int len = LibC.strerror_r(errno, buf, buf.byteSize());
+            return (len > 0) ? toString(buf.address()) : defaultDetail;
         }
     }
 
