@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.incubator.foreign.Addressable;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
@@ -181,22 +182,28 @@ abstract class JavaSourceBuilder {
         indent();
         sb.append(PUB_MODS + mtype.returnType().getName() + " " + javaName + "(");
         String delim = "";
-        List<String> pNames = new ArrayList<>();
+        List<String> pExprs = new ArrayList<>();
         for (int i = 0 ; i < f.parameters().size() ; i++) {
+            Class<?> pType = mtype.parameterType(i);
             String pName = f.parameters().get(i).name();
             if (pName.isEmpty()) {
                 pName = "x" + i;
             } else {
                 pName = NamingUtils.toSafeName(pName);
             }
-            pNames.add(pName);
-            sb.append(delim + mtype.parameterType(i).getName() + " " + pName);
+            if (pType == MemoryAddress.class) {
+                pType = Addressable.class;
+                pExprs.add(pName + ".address()");
+            } else {
+                pExprs.add(pName);
+            }
+            sb.append(delim + pType.getName() + " " + pName);
             delim = ", ";
         }
         if (varargs) {
             String lastArg = "x" + f.parameters().size();
             sb.append(", Object... " + lastArg);
-            pNames.add(lastArg);
+            pExprs.add(lastArg);
         }
         sb.append(") {\n");
         incrAlign();
@@ -207,7 +214,7 @@ abstract class JavaSourceBuilder {
         if (!mtype.returnType().equals(void.class)) {
             sb.append("return (" + mtype.returnType().getName() + ") ");
         }
-        sb.append(mh).append(".invokeExact(").append(String.join(", ", pNames)).append(");\n");
+        sb.append(mh).append(".invokeExact(").append(String.join(", ", pExprs)).append(");\n");
         decrAlign();
         indent();
         sb.append("} catch (Throwable ex) {\n");
