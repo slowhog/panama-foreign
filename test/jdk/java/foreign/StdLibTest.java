@@ -23,10 +23,6 @@
 
 /*
  * @test
-  * @modules jdk.incubator.foreign/jdk.incubator.foreign.unsafe
- *          jdk.incubator.foreign/jdk.internal.foreign
- *          jdk.incubator.foreign/jdk.internal.foreign.abi
- *          java.base/sun.security.action
  * @build NativeTestHelper StdLibTest
  * @run testng/othervm -Dforeign.restricted=permit StdLibTest
  */
@@ -233,9 +229,9 @@ public class StdLibTest extends NativeTestHelper {
                  MemorySegment other = toCString(s2)) {
                 char[] chars = s1.toCharArray();
                 for (long i = 0 ; i < chars.length ; i++) {
-                    setByteAtOffset(buf.address(), i, (byte)chars[(int)i]);
+                    setByteAtOffset(buf, i, (byte)chars[(int)i]);
                 }
-                setByteAtOffset(buf.address(), chars.length, (byte)'\0');
+                setByteAtOffset(buf, chars.length, (byte)'\0');
                 return toJavaStringRestricted(((MemoryAddress)strcat.invokeExact(buf.address(), other.address())));
             }
         }
@@ -261,7 +257,7 @@ public class StdLibTest extends NativeTestHelper {
 
         Tm gmtime(long arg) throws Throwable {
             try (MemorySegment time = MemorySegment.allocateNative(8)) {
-                setLong(time.address(), arg);
+                setLong(time, arg);
                 return new Tm((MemoryAddress)gmtime.invokeExact(time.address()));
             }
         }
@@ -269,13 +265,13 @@ public class StdLibTest extends NativeTestHelper {
         static class Tm {
 
             //Tm pointer should never be freed directly, as it points to shared memory
-            private final MemoryAddress base;
+            private final MemorySegment base;
 
             static final long SIZE = 56;
 
-            Tm(MemoryAddress base) {
-                this.base = MemorySegment.ofNativeRestricted(base, SIZE, Thread.currentThread(),
-                        null, null).address();
+            Tm(MemoryAddress addr) {
+                this.base = MemorySegment.ofNativeRestricted(addr, SIZE, Thread.currentThread(),
+                        null, null);
             }
 
             int sec() {
@@ -312,11 +308,11 @@ public class StdLibTest extends NativeTestHelper {
             //init native array
             try (NativeScope scope = NativeScope.unboundedScope()) {
 
-                MemorySegment nativeArr = scope.allocateArray(C_INT, arr).segment();
+                MemorySegment nativeArr = scope.allocateArray(C_INT, arr);
 
                 //call qsort
                 MemorySegment qsortUpcallStub = abi.upcallStub(qsortCompar.bindTo(nativeArr), qsortComparFunction);
-                scope.register(qsortUpcallStub);
+                qsortUpcallStub = scope.register(qsortUpcallStub);
 
                 qsort.invokeExact(nativeArr.address(), (long)arr.length, C_INT.byteSize(), qsortUpcallStub.address());
 
@@ -326,8 +322,8 @@ public class StdLibTest extends NativeTestHelper {
         }
 
         static int qsortCompare(MemorySegment base, MemoryAddress addr1, MemoryAddress addr2) {
-            return getIntAtOffset(base.address(), addr1.rebase(base).segmentOffset()) -
-                   getIntAtOffset(base.address(), addr2.rebase(base).segmentOffset());
+            return getIntAtOffset(base, addr1.segmentOffset(base)) -
+                   getIntAtOffset(base, addr2.segmentOffset(base));
         }
 
         int rand() throws Throwable {

@@ -24,11 +24,9 @@
 
 /*
  * @test
- * @modules java.base/sun.nio.ch
- *          jdk.incubator.foreign/jdk.internal.foreign
- *          jdk.incubator.foreign/jdk.internal.foreign.abi
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.x64
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.x64.sysv
+ * @modules java.base/jdk.internal.foreign.abi
+ *          java.base/jdk.internal.foreign.abi.x64
+ *          java.base/jdk.internal.foreign.abi.x64.sysv
  * @build CallArrangerTestBase
  * @run testng TestSysVCallArranger
  */
