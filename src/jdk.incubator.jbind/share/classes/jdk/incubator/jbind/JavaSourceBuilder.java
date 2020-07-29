@@ -304,11 +304,11 @@ abstract class JavaSourceBuilder {
 
     protected void addStructConstructor(String name) {
         indent();
-        sb.append("protected " + name + "(MemoryAddress addr) { super(addr); }\n");
+        sb.append("protected " + name + "(MemorySegment ms) { super(ms); }\n");
         indent();
-        sb.append(PUB_MODS + name + " at(MemoryAddress addr) { return new " + name + "(addr); }\n");
+        sb.append(PUB_MODS + name + " at(MemorySegment ms) { return new " + name + "(ms); }\n");
         indent();
-        sb.append(PUB_MODS + name + " allocate(LongFunction<MemoryAddress> allocator, int count) {\n");
+        sb.append(PUB_MODS + name + " allocate(LongFunction<MemorySegment> allocator, int count) {\n");
         incrAlign();
         indent();
         sb.append("return new " + name + "(allocator.apply(sizeof() * count));\n");
@@ -316,9 +316,9 @@ abstract class JavaSourceBuilder {
         indent();
         sb.append("}\n");
         indent();
-        sb.append(PUB_MODS + name + " allocate(LongFunction<MemoryAddress> allocator) { return allocate(allocator, 1); }\n");
+        sb.append(PUB_MODS + name + " allocate(LongFunction<MemorySegment> allocator) { return allocate(allocator, 1); }\n");
         indent();
-        sb.append(PUB_CLS_MODS + name + " offset(int count) { return at(ptr().addOffset(sizeof() * count)); }\n");
+        sb.append(PUB_CLS_MODS + name + " offset(int count) { return at(segment().asSlice(sizeof() * count)); }\n");
     }
 
     protected void addLayoutHelperMethods(String elementName, GroupLayout layout) {
@@ -364,22 +364,22 @@ abstract class JavaSourceBuilder {
 
     protected void emitCarrierAddr(String addrStmt, String layoutStmt, int dimensions) {
         indent();
-        sb.append("MemoryAddress addr = ").append(addrStmt).append(";\n");
+        sb.append("MemorySegment addr = ").append(addrStmt).append(";\n");
         if (dimensions > 0) {
             indent();
-            sb.append("long offset = ").append(layoutStmt).append(".byteOffsets(\n");
+            sb.append("long offset = ").append(layoutStmt).append(".byteOffset(\n");
             incrAlign();
             for (int i = 0; i < dimensions; i++) {
                 if (i != 0) {
                     sb.append(",\n");
                 }
                 indent();
-                sb.append("MemoryLayout.PathElement.sqeuqnceElement(idx" + i).append(")");
+                sb.append("MemoryLayout.PathElement.sequenceElement(idx" + i).append(")");
             }
             sb.append(");\n");
             decrAlign();
             indent();
-            sb.append("addr = addr.addOffset(offset);\n");
+            sb.append("addr = addr.asSlice(offset);\n");
         }
     }
 
@@ -406,10 +406,10 @@ abstract class JavaSourceBuilder {
         indent();
         sb.append(PUB_MODS).append("long ").append(fieldName).append("$OFFSET = ").append(offset).append("L;\n");
         indent();
-        sb.append(PUB_CLS_MODS).append("MemoryAddress ").append(fieldName).append("$ptr() {\n");
+        sb.append(PUB_CLS_MODS).append("MemorySegment ").append(fieldName).append("$ptr() {\n");
         incrAlign();
         indent();
-        sb.append("return ptr().addOffset(").append(offset).append("L);\n");
+        sb.append("return segment().asSlice(").append(offset).append("L);\n");
         decrAlign();
         indent();
         sb.append("}\n");

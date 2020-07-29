@@ -110,7 +110,7 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         addVarHandle(javaName, type, dimensions);
 
         String addrStmt = javaName + "$ADDR";
-        boolean isAddr = MemoryAddress.class.isAssignableFrom(type);
+        boolean isAddr = type == MemoryAddress.class;
         String typeName = isAddr ? "MemoryAddress" : type.getName();
         String vhStmt = getVarHandleName(javaName, null);
 
@@ -142,17 +142,21 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         closeBracket();
     }
 
+    private String fieldLayoutStmt(String fieldName) {
+        return "$LAYOUT.select(MemoryLayout.PathElement.groupElement(\"" + fieldName + "\"))";
+    }
+
     @Override
     public void addPrimitiveField(String fieldName, Declaration parent, Class<?> type, int dimensions) {
         String javaName = NamingUtils.toSafeName(fieldName);
         String typeName = type.getName();
         String vhStmt = javaName + "$VH";
-        String addrStmt = "ptr()";
+        String addrStmt = javaName + "$ptr()";
 
         // Field handle
         indent();
-        sb.append(PUB_MODS).append("VarHandle ").append(vhStmt).append(" = RuntimeHelper.fieldHandle(")
-                .append(typeName).append(".class, $LAYOUT, \"").append(fieldName).append("\");\n");
+        sb.append(PUB_MODS).append("VarHandle ").append(vhStmt).append(" = RuntimeHelper.varHandle(")
+                .append(typeName).append(".class, ").append(fieldLayoutStmt(fieldName)).append(");\n");
         // Field address
         emitFieldAddr(javaName);
         // Getter
@@ -170,7 +174,7 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         String javaName = NamingUtils.toSafeName(fieldName);
         String typeName = simpleName(CD_type);
         String addrStmt = javaName + "$ptr()";
-        String layoutStmt = "$LAYOUT.select(MemoryLayout.PathElement.groupElement(\"" + fieldName + "\"))";
+        String layoutStmt = fieldLayoutStmt(fieldName);
 
         // Field address
         emitFieldAddr(javaName);
@@ -372,7 +376,7 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
 
     protected void addAddress(String name, String symbol) {
         indent();
-        sb.append(PUB_MODS + "MemoryAddress " + name + "$ADDR" + " = ");
+        sb.append(PUB_MODS + "MemorySegment " + name + "$ADDR" + " = ");
         addAddressLookup(name, symbol);
         sb.append(";\n");
     }
