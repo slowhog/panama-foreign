@@ -24,10 +24,10 @@
 
 /*
  * @test
- * @modules jdk.incubator.foreign/jdk.internal.foreign.abi
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.aarch64
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.x64.windows
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.x64.sysv
+ * @modules java.base/jdk.internal.foreign.abi
+ *          java.base/jdk.internal.foreign.abi.aarch64
+ *          java.base/jdk.internal.foreign.abi.x64.windows
+ *          java.base/jdk.internal.foreign.abi.x64.sysv
  * @run testng/othervm -Dforeign.restricted=permit VaListTest
  */
 

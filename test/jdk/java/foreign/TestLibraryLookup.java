@@ -23,7 +23,7 @@
 
 /*
  * @test
- * @modules jdk.incubator.foreign/jdk.internal.foreign
+ * @modules java.base/jdk.internal.foreign
  * @run testng/othervm -Dforeign.restricted=permit TestLibraryLookup
  */
 

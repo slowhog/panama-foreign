@@ -24,7 +24,7 @@
 /*
  * @test
  * @modules java.base/sun.nio.ch
- *          jdk.incubator.foreign/jdk.internal.foreign
+ *          java.base/jdk.internal.foreign
  * @run testng TestByteBuffer
  */
 
