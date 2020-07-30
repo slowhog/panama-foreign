@@ -35,15 +35,16 @@ import java.nio.file.LinkPermission;
 import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+
+import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.NativeScope;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.CSupport.C_INT;
 import static jdk.incubator.foreign.CSupport.C_CHAR;
+import static jdk.internal.foreign.NativeMemorySegmentImpl.EVERYTHING;
 import static jdk.internal.panama.sys.errno_h.ECANCELED;
-import static sun.nio.FFIUtils.Scope;
 import static sun.nio.FFIUtils.errno;
-import static sun.nio.FFIUtils.localScope;
 import static sun.nio.fs.UnixConstants.EEXIST;
 import static sun.nio.fs.UnixConstants.EISDIR;
 import static sun.nio.fs.UnixConstants.ENOTEMPTY;
@@ -638,9 +639,8 @@ class UnixCopyFile {
     // -- native methods --
 
     static void transfer(int dst, int src, long addressToPollForCancel) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress buf = s.allocateArray(C_CHAR, 8192);
-            MemoryAddress cancel = FFIUtils.resizePointer(MemoryAddress.ofLong(addressToPollForCancel), C_INT.byteSize());
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var buf = s.allocateArray(C_CHAR, 8192);
             while (true) {
                 int n = UnixNativeDispatcher.read(src, buf, 8192);
                 if (n <= 0) {
@@ -650,13 +650,14 @@ class UnixCopyFile {
                     }
                     return;
                 }
-                if ((addressToPollForCancel != 0) && FFIUtils.CTypeAccess.readInt(cancel) != 0) {
+                if ((addressToPollForCancel != 0) &&
+                        MemoryAccess.getIntAtOffset(EVERYTHING, addressToPollForCancel) != 0) {
                     throw new UnixException(ECANCELED);
                 }
                 int pos = 0;
                 int len = n;
                 do {
-                    n = UnixNativeDispatcher.write(dst, buf.addOffset(pos), len);
+                    n = UnixNativeDispatcher.write(dst, buf.asSlice(pos), len);
                     if (n == -1) {
                         // Should never reach here as read would have thrown already
                         throw new UnixException(errno());

@@ -34,6 +34,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Optional;
+import jdk.incubator.foreign.Addressable;
 import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
@@ -44,7 +45,7 @@ import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
-import jdk.internal.foreign.MemoryAddressImpl;
+import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.abi.SharedUtils;
 
 public class RuntimeHelper {
@@ -97,18 +98,11 @@ public class RuntimeHelper {
         }
     }
 
-    private static MemoryAddress uncheck(MemoryAddress addr, MemoryLayout layout) {
-        try {
-            return MemoryAddressImpl.ofLongUnchecked(addr.toRawLongValue(), layout.byteSize());
-        } catch (Exception e) {
-            return addr;
-        }
-    }
-
-    public static final MemoryAddress lookupGlobalVariable(LibraryLookup[] LIBRARIES, String name, MemoryLayout layout) {
-        return lookup(LIBRARIES, name)
-                .map(sym -> uncheck(sym.address(), layout))
-                .orElse(null);
+    public static final MemorySegment lookupGlobalVariable(LibraryLookup[] LIBRARIES, String name, MemoryLayout layout) {
+        return lookup(LIBRARIES, name).map(s ->
+            NativeMemorySegmentImpl.makeNativeSegmentUnchecked(
+                 s.address(), layout.byteSize(), null, null, s
+            ).withAccessModes(MemorySegment.READ | MemorySegment.WRITE)).orElse(null);
     }
 
     public static final MethodHandle downcallHandle(LibraryLookup[] LIBRARIES, String name, String desc, FunctionDescriptor fdesc, boolean isVariadic) {
@@ -139,7 +133,7 @@ public class RuntimeHelper {
     }
 
     public static VarHandle varHandle(Class<?> carrier, MemoryLayout layout) {
-        boolean isAddr = MemoryAddress.class.isAssignableFrom(carrier);
+        boolean isAddr = carrier == MemoryAddress.class;
         int dims = 0;
         MemoryLayout tmp = layout;
         while (tmp instanceof SequenceLayout) {
@@ -153,11 +147,5 @@ public class RuntimeHelper {
             vh = MemoryHandles.asAddressVarHandle(vh);
         }
         return vh;
-    }
-
-    public static VarHandle fieldHandle(Class<?> carrier, GroupLayout layout, String fieldName) {
-        MemoryLayout fieldLayout = layout.select(MemoryLayout.PathElement.groupElement(fieldName));
-        long offset = layout.byteOffset(MemoryLayout.PathElement.groupElement(fieldName));
-        return MemoryHandles.withOffset(varHandle(carrier, fieldLayout), offset);
     }
 }

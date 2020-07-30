@@ -29,15 +29,14 @@ import java.io.IOException;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.foreign.NativeScope;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.panama.LibC;
 import jdk.internal.panama.LibC.kevent;
 import jdk.internal.panama.LibC.timespec;
 import sun.nio.FFIUtils;
-import sun.nio.FFIUtils.Scope;
 
 import static jdk.internal.panama.sys.errno_h.EINTR;
-import static sun.nio.FFIUtils.localScope;
 
 /**
  * Provides access to the BSD kqueue facility.
@@ -119,7 +118,7 @@ class KQueue {
     }
 
     static int register(int kqfd, int fd, int filter, int flags) {
-        try (FFIUtils.Scope s = FFIUtils.localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             kevent ev = kevent.allocate(s::allocate);
             ev.ident$set(fd);
             ev.filter$set((short) filter);
@@ -130,7 +129,7 @@ class KQueue {
 
             int rv, errno;
             do {
-                rv = LibC.kevent(kqfd, ev.ptr(), 1, nullPtr, 0, nullPtr);
+                rv = LibC.kevent(kqfd, ev, 1, nullPtr, 0, nullPtr);
                 if (rv == -1) {
                     errno = FFIUtils.errno();
                     if (errno != EINTR) {
@@ -144,13 +143,13 @@ class KQueue {
 
     static int poll(int kqfd, long pollAddress, int nevents, long timeout)
         throws IOException {
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             MemoryAddress tsp;
             if (timeout >= 0) {
                 timespec ts = timespec.allocate(s::allocate);
                 ts.tv_sec$set(timeout / 1000);
                 ts.tv_nsec$set((timeout % 1000) * 1000_000);
-                tsp = ts.ptr();
+                tsp = ts.address();
             } else {
                 tsp = nullPtr;
             }

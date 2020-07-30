@@ -27,10 +27,14 @@ package sun.nio.fs;
 
 import java.nio.ByteOrder;
 import java.util.function.Supplier;
+
+import jdk.incubator.foreign.Addressable;
+import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.NativeScope;
 import jdk.internal.panama.LibC;
 import jdk.internal.panama.unistd_h;
 import sun.nio.FFIUtils;
@@ -38,6 +42,7 @@ import sun.nio.FFIUtils;
 import static jdk.incubator.foreign.CSupport.C_CHAR;
 import static jdk.incubator.foreign.CSupport.C_POINTER;
 import static jdk.incubator.foreign.CSupport.C_LONG;
+import static jdk.internal.foreign.NativeMemorySegmentImpl.EVERYTHING;
 import static jdk.internal.panama.LibC.dirent;
 import static jdk.internal.panama.LibC.group;
 import static jdk.internal.panama.LibC.passwd;
@@ -57,9 +62,7 @@ import static jdk.internal.panama.sys.errno_h.EPERM;
 import static jdk.internal.panama.sys.errno_h.ERANGE;
 import static jdk.internal.panama.sys.errno_h.ESRCH;
 import static jdk.internal.panama.sys.unistd_h.F_OK;
-import static sun.nio.FFIUtils.Scope;
 import static sun.nio.FFIUtils.errno;
-import static sun.nio.FFIUtils.localScope;
 import static sun.nio.FFIUtils.setErrno;
 
 /**
@@ -85,20 +88,20 @@ class UnixNativeDispatcher {
     protected UnixNativeDispatcher() { }
 
     static MemorySegment copyToNativeBytes(byte[] ar) {
-        long len = (ar[ar.length - 1] == '\0') ? ar.length : ar.length + 1;
-        MemorySegment buf = MemorySegment.allocateNative(len);
-        buf.copyFrom(MemorySegment.ofArray(ar));
-        MemoryAccess.setByteAtOffset(buf.address(), len - 1, (byte) 0);
-        return buf;
+        return FFIUtils.copyToNativeBytes(ar, MemorySegment::allocateNative);
+    }
+
+    static MemorySegment copyToNativeBytes(byte[] ar, NativeScope s) {
+        return FFIUtils.copyToNativeBytes(ar, s::allocate);
     }
 
     static MemorySegment copyToNativeBytes(UnixPath path) {
         return copyToNativeBytes(path.getByteArrayForSysCalls());
     }
 
-    static MemoryAddress copyToNativeBytes(UnixPath path, FFIUtils.Scope s) {
+    static MemorySegment copyToNativeBytes(UnixPath path, NativeScope s) {
         byte[] buf = path.getByteArrayForSysCalls();
-        return s.copyToNativeBytes(buf);
+        return FFIUtils.copyToNativeBytes(buf, s::allocate);
     }
 
     /**
@@ -110,7 +113,8 @@ class UnixNativeDispatcher {
             if (FFIUtils.isNull(cwd)) {
                 throw new UnixException(errno());
             }
-            return FFIUtils.toByteArray(cwd.rebase(buf));
+            assert buf.address().equals(cwd);
+            return FFIUtils.toByteArray(buf);
         }
     }
 
@@ -173,11 +177,11 @@ class UnixNativeDispatcher {
      * FILE* fopen(const char *filename, const char* mode);
      */
     static long fopen(UnixPath filename, String mode) throws UnixException {
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             MemoryAddress file;
             do {
-                file = LibC.fopen(copyToNativeBytes(filename, s), s.allocateCString(mode));
-                if (FFIUtils.isNull(file)) {
+                file = LibC.fopen(copyToNativeBytes(filename, s), CSupport.toCString(mode, s));
+                if (file == MemoryAddress.NULL) {
                     checkErrno(EINTR);
                 }
             } while (FFIUtils.isNull(file));
@@ -216,19 +220,19 @@ class UnixNativeDispatcher {
     static int getlinelen(long stream) throws UnixException {
         MemoryAddress fp = MemoryAddress.ofLong(stream);
         long lineSize = 0;
-        try (Scope s = localScope()) {
-            MemoryAddress ptrBuf = s.allocate(C_POINTER.byteSize());
-            MemoryAddress ptrSize = s.allocate(C_LONG.byteSize());
-            FFIUtils.CTypeAccess.writeLong(ptrBuf, 0);
-            FFIUtils.CTypeAccess.writeLong(ptrSize, 0);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            MemorySegment ptrBuf = s.allocate(C_POINTER);
+            MemorySegment ptrSize = s.allocate(C_LONG);
+            MemoryAccess.setAddress(ptrBuf, MemoryAddress.NULL);
+            MemoryAccess.setLong(ptrSize, 0);
             int saved_errno;
 
             long res = LibC.getline(ptrBuf, ptrSize, fp);
             saved_errno = errno();
 
             /* Should free lineBuffer no matter result, according to man page */
-            MemoryAddress buf = FFIUtils.CTypeAccess.readPointer(ptrBuf);
-            if (! FFIUtils.isNull(buf)) {
+            MemoryAddress buf = MemoryAccess.getAddress(ptrBuf);
+            if (buf != MemoryAddress.NULL) {
                 LibC.free(buf);
             }
 
@@ -250,9 +254,9 @@ class UnixNativeDispatcher {
      * link(const char* existing, const char* new)
      */
     static void link(UnixPath existing, UnixPath newfile) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress existingFile = copyToNativeBytes(existing, s);
-            MemoryAddress newFile = copyToNativeBytes(newfile, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var existingFile = copyToNativeBytes(existing, s);
+            var newFile = copyToNativeBytes(newfile, s);
 
             restartable(() -> LibC.link(existingFile, newFile));
         }
@@ -262,8 +266,8 @@ class UnixNativeDispatcher {
      * unlink(const char* path)
      */
     static void unlink(UnixPath path) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             throwUnixExceptionIf(LibC.unlink(file) == -1);
         }
     }
@@ -290,9 +294,9 @@ class UnixNativeDispatcher {
      *  rename(const char* old, const char* new)
      */
     static void rename(UnixPath from, UnixPath to) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress fromFile = copyToNativeBytes(from, s);
-            MemoryAddress toFile = copyToNativeBytes(to, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var fromFile = copyToNativeBytes(from, s);
+            var toFile = copyToNativeBytes(to, s);
             throwUnixExceptionIf(LibC.rename(fromFile, toFile) == -1);
         }
     }
@@ -301,9 +305,9 @@ class UnixNativeDispatcher {
      *  renameat(int fromfd, const char* old, int tofd, const char* new)
      */
     static void renameat(int fromfd, byte[] from, int tofd, byte[] to) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress fromFile = s.copyToNativeBytes(from);
-            MemoryAddress toFile = s.copyToNativeBytes(to);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var fromFile = FFIUtils.copyToNativeBytes(from, s::allocate);
+            var toFile = FFIUtils.copyToNativeBytes(to, s::allocate);
             throwUnixExceptionIf(LibC.renameat(fromfd, fromFile, tofd, toFile) == -1);
         }
     }
@@ -312,8 +316,8 @@ class UnixNativeDispatcher {
      * mkdir(const char* path, mode_t mode)
      */
     static void mkdir(UnixPath path, int mode) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress p = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var p = copyToNativeBytes(path, s);
             throwUnixExceptionIf(LibC.mkdir(p, (short) mode) == -1);
         }
     }
@@ -322,8 +326,8 @@ class UnixNativeDispatcher {
      * rmdir(const char* path)
      */
     static void rmdir(UnixPath path) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress p = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var p = copyToNativeBytes(path, s);
             throwUnixExceptionIf(LibC.rmdir(p) == -1);
         }
     }
@@ -334,16 +338,16 @@ class UnixNativeDispatcher {
      * @return  link target
      */
     static byte[] readlink(UnixPath path) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress p = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var p = copyToNativeBytes(path, s);
             long size = PATH_MAX + 1;
-            MemoryAddress buf = s.allocateArray(C_CHAR, size);
+            var buf = s.allocateArray(C_CHAR, size);
             long len = LibC.readlink(p, buf, size);
             throwUnixExceptionIf(len == -1);
             if (len == size) {
                 throw new UnixException(ENAMETOOLONG);
             } else {
-                return FFIUtils.toByteArray(buf, len);
+                return buf.asSlice(0, len).toByteArray();
             }
         }
     }
@@ -354,9 +358,9 @@ class UnixNativeDispatcher {
      * @return  resolved path
      */
     static byte[] realpath(UnixPath path) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress p = copyToNativeBytes(path, s);
-            MemoryAddress buf = s.allocateArray(C_CHAR, PATH_MAX + 1);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var p = copyToNativeBytes(path, s);
+            var buf = s.allocateArray(C_CHAR, PATH_MAX + 1);
             throwUnixExceptionIf(FFIUtils.isNull(LibC.realpath(p, buf)));
             return FFIUtils.toByteArray(buf);
         }
@@ -366,9 +370,9 @@ class UnixNativeDispatcher {
      * symlink(const char* name1, const char* name2)
      */
     static void symlink(byte[] name1, UnixPath name2) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress targetBuffer = s.copyToNativeBytes(name1);
-            MemoryAddress linkBuffer = copyToNativeBytes(name2, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var targetBuffer = FFIUtils.copyToNativeBytes(name1, s::allocate);
+            var linkBuffer = copyToNativeBytes(name2, s);
             throwUnixExceptionIf(LibC.symlink(targetBuffer, linkBuffer) == -1);
         }
     }
@@ -377,10 +381,10 @@ class UnixNativeDispatcher {
      * stat(const char* path, struct stat* buf)
      */
     static void stat(UnixPath path, UnixFileAttributes attrs) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             stat64 buffer = stat64.allocate(s::allocate);
-            restartable(() -> LibC.stat64(file, buffer.ptr()));
+            restartable(() -> LibC.stat64(file, buffer));
             attrs.init(buffer);
         }
     }
@@ -391,10 +395,10 @@ class UnixNativeDispatcher {
      * @return st_mode (file type and mode) or 0 if an error occurs.
      */
     static int stat(UnixPath path) {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             stat64 buffer = stat64.allocate(s::allocate);
-            restartable(() -> LibC.stat64(file, buffer.ptr()));
+            restartable(() -> LibC.stat64(file, buffer));
             return buffer.st_mode$get();
         } catch (UnixException ex) {
             return 0;
@@ -406,10 +410,10 @@ class UnixNativeDispatcher {
      * lstat(const char* path, struct stat* buf)
      */
     static void lstat(UnixPath path, UnixFileAttributes attrs) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             stat64 buffer = stat64.allocate(s::allocate);
-            restartable(() -> LibC.lstat64(file, buffer.ptr()));
+            restartable(() -> LibC.lstat64(file, buffer));
             attrs.init(buffer);
         }
     }
@@ -418,9 +422,9 @@ class UnixNativeDispatcher {
      * fstat(int filedes, struct stat* buf)
      */
     static void fstat(int fd, UnixFileAttributes attrs) throws UnixException {
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             stat64 buffer = stat64.allocate(s::allocate);
-            restartable(() -> LibC.fstat64(fd, buffer.ptr()));
+            restartable(() -> LibC.fstat64(fd, buffer));
             attrs.init(buffer);
         }
     }
@@ -431,10 +435,10 @@ class UnixNativeDispatcher {
     static void fstatat(int dfd, byte[] path, int flag, UnixFileAttributes attrs)
         throws UnixException
     {
-        try (Scope s = localScope()) {
-            MemoryAddress file = s.copyToNativeBytes(path);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             stat buffer = LibC.stat.allocate(s::allocate);
-            restartable(() -> LibC.fstatat(dfd, file, buffer.ptr(), flag));
+            restartable(() -> LibC.fstatat(dfd, file, buffer, flag));
             attrs.init(buffer);
         }
     }
@@ -443,9 +447,8 @@ class UnixNativeDispatcher {
      * chown(const char* path, uid_t owner, gid_t group)
      */
     static void chown(UnixPath path, int uid, int gid) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
-
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             restartable(() -> LibC.chown(file, uid, gid));
         }
     }
@@ -454,9 +457,8 @@ class UnixNativeDispatcher {
      * lchown(const char* path, uid_t owner, gid_t group)
      */
     static void lchown(UnixPath path, int uid, int gid) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
-
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             restartable(() -> LibC.lchown(file, uid, gid));
         }
     }
@@ -472,9 +474,8 @@ class UnixNativeDispatcher {
      * chmod(const char* path, mode_t mode)
      */
     static void chmod(UnixPath path, int mode) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
-
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             restartable(() -> LibC.chmod(file, (short) mode));
         }
     }
@@ -492,15 +493,15 @@ class UnixNativeDispatcher {
     static void utimes(UnixPath path, long times0, long times1)
         throws UnixException
     {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             timeval v0 = timeval.allocate(s::allocate, 2);
             timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
             v1.tv_sec$set(times1 / 1000_000);
             v1.tv_usec$set((int) (times1 % 1000_000));
-            restartable(() -> LibC.utimes(file, v0.ptr()));
+            restartable(() -> LibC.utimes(file, v0));
         }
     }
 
@@ -508,14 +509,14 @@ class UnixNativeDispatcher {
      * futimes(int fildes, const struct timeval times[2])
      */
     static void futimes(int fd, long times0, long times1) throws UnixException {
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             timeval v0 = timeval.allocate(s::allocate, 2);
             timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
             v1.tv_sec$set(times1 / 1000_000);
             v1.tv_usec$set((int) (times1 % 1000_000));
-            restartable(() -> LibC.futimes(fd, v0.ptr()));
+            restartable(() -> LibC.futimes(fd, v0));
         }
     }
 
@@ -523,14 +524,14 @@ class UnixNativeDispatcher {
      * futimens(int fildes, const struct timespec times[2])
      */
     static void futimens(int fd, long times0, long times1) throws UnixException {
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             timespec v0 = timespec.allocate(s::allocate, 2);
             timespec v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000_000);
             v0.tv_nsec$set((int) (times0 % 1000_000_000));
             v1.tv_sec$set(times1 / 1000_000_000);
             v1.tv_nsec$set((int) (times1 % 1000_000_000));
-            restartable(() -> LibC.futimens(fd, v0.ptr()));
+            restartable(() -> LibC.futimens(fd, v0));
         }
     }
 
@@ -540,15 +541,15 @@ class UnixNativeDispatcher {
     static void lutimes(UnixPath path, long times0, long times1)
         throws UnixException
     {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             timeval v0 = timeval.allocate(s::allocate, 2);
             timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
             v1.tv_sec$set(times1 / 1000_000);
             v1.tv_usec$set((int) (times1 % 1000_000));
-            restartable(() -> LibC.lutimes(file, v0.ptr()));
+            restartable(() -> LibC.lutimes(file, v0));
         }
     }
 
@@ -556,7 +557,7 @@ class UnixNativeDispatcher {
      * DIR *opendir(const char* dirname)
      */
     static long opendir(UnixPath path) throws UnixException {
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             MemoryAddress dir = LibC.opendir(copyToNativeBytes(path, s));
             throwUnixExceptionIf(FFIUtils.isNull(dir));
             return dir.toRawLongValue();
@@ -583,10 +584,10 @@ class UnixNativeDispatcher {
         }
     }
 
-    static String hexDump(MemoryAddress buffer, long size) {
+    static String hexDump(MemorySegment buffer, long size) {
         StringBuffer sb = new StringBuffer();
         for (int i = 0; i < size; i++) {
-            sb.append(String.format("%02X", FFIUtils.CTypeAccess.readByte(buffer.addOffset(i))));
+            sb.append(String.format("%02X", MemoryAccess.getByteAtOffset(buffer, i)));
             if ((i % 32) == 31) {
                 sb.append("\n");
             } else {
@@ -605,19 +606,19 @@ class UnixNativeDispatcher {
         MemoryAddress dirp = MemoryAddress.ofLong(dir);
         setErrno(0);
 
-        MemoryAddress pdir = FFIUtils.resizePointer(LibC.readdir(dirp), dirent.sizeof());
+        MemoryAddress pdir = LibC.readdir(dirp);
         if (FFIUtils.isNull(pdir)) {
             checkErrno(0);
             return null;
         }
-
-        return FFIUtils.toString(dirent.at(pdir).d_name$ptr()).getBytes();
+        var entry = dirent.at(FFIUtils.ofNativeSegment(pdir, dirent.$LAYOUT));
+        return FFIUtils.toString(entry.d_name$ptr()).getBytes();
     }
 
     /**
      * size_t read(int fildes, void* buf, size_t nbyte)
      */
-    static int read(int fildes, MemoryAddress buf, int nbyte) throws UnixException {
+    static int read(int fildes, Addressable buf, int nbyte) throws UnixException {
         return restartable(() -> (int) LibC.read(fildes, buf, nbyte));
     }
 
@@ -628,7 +629,7 @@ class UnixNativeDispatcher {
     /**
      * size_t writeint fildes, void* buf, size_t nbyte)
      */
-    static int write(int fildes, MemoryAddress buf, int nbyte) throws UnixException {
+    static int write(int fildes, Addressable buf, int nbyte) throws UnixException {
         return restartable(() -> (int) LibC.write(fildes, buf, nbyte));
     }
 
@@ -640,8 +641,8 @@ class UnixNativeDispatcher {
      * access(const char* path, int amode);
      */
     static void access(UnixPath path, int amode) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             restartable(() -> LibC.access(file, amode));
         }
     }
@@ -652,8 +653,8 @@ class UnixNativeDispatcher {
      * @return true if the file exists, false otherwise
      */
     static boolean exists(UnixPath path) {
-        try (Scope s = localScope()) {
-            MemoryAddress file = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var file = copyToNativeBytes(path, s);
             try {
                 return (0 == restartable(() -> LibC.access(file, F_OK)));
             } catch (UnixException ex) {
@@ -671,18 +672,18 @@ class UnixNativeDispatcher {
     static byte[] getpwuid(int uid) throws UnixException {
         long tmp = LibC.sysconf(unistd_h._SC_GETPW_R_SIZE_MAX);
         final long bufLen = (tmp == -1) ? 1024 : tmp;
-        try (Scope s = localScope()) {
-            MemoryAddress buf = s.allocateArray(C_CHAR, bufLen);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var buf = s.allocateArray(C_CHAR, bufLen);
             passwd pwent = passwd.allocate(s::allocate);
-            MemoryAddress result = s.allocate(C_POINTER);
+            var result = s.allocate(C_POINTER);
             setErrno(0);
-            int rv = restartable(() -> LibC.getpwuid_r(uid, pwent.ptr(), buf, bufLen, result));
-            MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : FFIUtils.CTypeAccess.readPointer(result);
+            int rv = restartable(() -> LibC.getpwuid_r(uid, pwent, buf, bufLen, result));
+            MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : MemoryAccess.getAddress(result);
             if (FFIUtils.isNull(ptr)) {
                 int errno = errno();
                 throw new UnixException(errno == 0 ? ENOENT : errno);
             } else {
-                byte[] name = FFIUtils.toByteArray(pwent.pw_name$get().rebase(buf.segment()));
+                byte[] name = FFIUtils.toByteArray(buf.asSlice(pwent.pw_name$get()));
                 if (name == null || name.length == 0) {
                     throw new UnixException(ENOENT);
                 }
@@ -699,18 +700,18 @@ class UnixNativeDispatcher {
     static byte[] getgrgid(int gid) throws UnixException {
         long tmp = LibC.sysconf(unistd_h._SC_GETGR_R_SIZE_MAX);
         final long bufLen = (tmp == -1) ? 1024 : tmp;
-        try (Scope s = localScope()) {
-            MemoryAddress buf = s.allocateArray(C_CHAR, bufLen);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            MemorySegment buf = s.allocateArray(C_CHAR, bufLen);
             group grent = group.allocate(s::allocate);
-            MemoryAddress result = s.allocate(C_POINTER);
+            MemorySegment result = s.allocate(C_POINTER);
             setErrno(0);
-            int rv = restartable(() -> LibC.getgrgid_r(gid, grent.ptr(), buf, bufLen, result));
-            MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : FFIUtils.CTypeAccess.readPointer(result);
-            if (FFIUtils.isNull(ptr)) {
+            int rv = restartable(() -> LibC.getgrgid_r(gid, grent, buf, bufLen, result));
+            MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : MemoryAccess.getAddress(result);
+            if (ptr == MemoryAddress.NULL) {
                 int errno = errno();
                 throw new UnixException(errno == 0 ? ENOENT : errno);
             } else {
-                byte[] name = FFIUtils.toByteArray(grent.gr_name$get().rebase(buf.segment()));
+                byte[] name = FFIUtils.toByteArray(buf.asSlice(grent.gr_name$get()));
                 if (name == null || name.length == 0) {
                     throw new UnixException(ENOENT);
                 }
@@ -727,14 +728,14 @@ class UnixNativeDispatcher {
     static int getpwnam(String name) throws UnixException {
         long tmp = LibC.sysconf(unistd_h._SC_GETPW_R_SIZE_MAX);
         final long bufLen = (tmp == -1) ? 1024 : tmp;
-        try (Scope s = localScope()) {
-            MemoryAddress buf = s.allocateArray(C_CHAR, bufLen);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var buf = s.allocateArray(C_CHAR, bufLen);
             passwd pwent = passwd.allocate(s::allocate);
-            MemoryAddress result = s.allocate(C_POINTER);
+            var result = s.allocate(C_POINTER);
             setErrno(0);
-            int rv = restartable(() -> LibC.getpwnam_r(s.allocateCString(name),
-                    pwent.ptr(), buf, bufLen, result));
-            MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : FFIUtils.CTypeAccess.readPointer(result);
+            int rv = restartable(() -> LibC.getpwnam_r(CSupport.toCString(name, s),
+                    pwent, buf, bufLen, result));
+            MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : MemoryAccess.getAddress(result);
             if (FFIUtils.isNull(ptr)) {
                 int errno = errno();
                 if (errno == 0 || errno == ENOENT || errno == ESRCH &&
@@ -745,7 +746,7 @@ class UnixNativeDispatcher {
                     throw new UnixException(errno);
                 }
             } else {
-                if (FFIUtils.CTypeAccess.isEmptyString(pwent.pw_name$get().rebase(buf.segment()))) {
+                if (FFIUtils.isEmptyString(pwent.pw_name$get())) {
                     return -1;
                 }
                 return pwent.pw_uid$get();
@@ -761,17 +762,17 @@ class UnixNativeDispatcher {
     static int getgrnam(String name) throws UnixException {
         long tmp = LibC.sysconf(unistd_h._SC_GETGR_R_SIZE_MAX);
         long bufLen = (tmp == -1) ? 1024 : tmp;
-        try (Scope s = localScope()) {
+        try (NativeScope s = NativeScope.unboundedScope()) {
             boolean retry;
             do {
-                MemoryAddress buf = s.allocateArray(C_CHAR, bufLen);
+                var buf = s.allocateArray(C_CHAR, bufLen);
                 group grent = group.allocate(s::allocate);
-                MemoryAddress result = s.allocate(C_POINTER);
+                var result = s.allocate(C_POINTER);
                 setErrno(0);
                 final long len = bufLen;
-                int rv = restartable(() -> LibC.getgrnam_r(s.allocateCString(name),
-                        grent.ptr(), buf, len, result));
-                MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : FFIUtils.CTypeAccess.readPointer(result);
+                int rv = restartable(() -> LibC.getgrnam_r(CSupport.toCString(name, s),
+                        grent, buf, len, result));
+                MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : MemoryAccess.getAddress(result);
                 if (FFIUtils.isNull(ptr)) {
                     int errno = errno();
                     if (errno == 0 || errno == ENOENT || errno == ESRCH &&
@@ -785,7 +786,7 @@ class UnixNativeDispatcher {
                         throw new UnixException(errno);
                     }
                 } else {
-                    if (FFIUtils.CTypeAccess.isEmptyString(grent.gr_name$get().rebase(buf.segment()))) {
+                    if (FFIUtils.isEmptyString(grent.gr_name$get())) {
                         return -1;
                     }
                     return grent.gr_gid$get();
@@ -801,10 +802,10 @@ class UnixNativeDispatcher {
     static void statvfs(UnixPath path, UnixFileStoreAttributes attrs)
         throws UnixException
     {
-        try (Scope s = localScope()) {
-            MemoryAddress p = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var p = copyToNativeBytes(path, s);
             statvfs buffer = statvfs.allocate(s::allocate);
-            restartable(() -> LibC.statvfs(p, buffer.ptr()));
+            restartable(() -> LibC.statvfs(p, buffer));
             attrs.init(buffer);
         }
     }
@@ -813,8 +814,8 @@ class UnixNativeDispatcher {
      * long int pathconf(const char *path, int name);
      */
     static long pathconf(UnixPath path, int name) throws UnixException {
-        try (Scope s = localScope()) {
-            MemoryAddress p = copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var p = copyToNativeBytes(path, s);
             long rv = LibC.pathconf(p, name);
             throwUnixExceptionIf(-1 == rv);
             return rv;
@@ -834,8 +835,8 @@ class UnixNativeDispatcher {
      * char* strerror(int errnum)
      */
     static byte[] strerror(int errnum) {
-        try (Scope s = localScope()) {
-            MemoryAddress buf = s.allocateArray(C_CHAR, 1024);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var buf = s.allocateArray(C_CHAR, 1024);
             LibC.strerror_r(errnum, buf, 1024);
             return FFIUtils.toString(buf).getBytes();
         }

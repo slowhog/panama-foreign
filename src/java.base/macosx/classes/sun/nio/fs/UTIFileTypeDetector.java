@@ -31,7 +31,6 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
-import sun.nio.FFIUtils.Scope;
 
 import static jdk.incubator.foreign.CSupport.C_SHORT;
 

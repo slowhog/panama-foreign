@@ -28,9 +28,9 @@ package sun.nio.fs;
 import java.util.regex.Pattern;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.NativeScope;
 import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
-import sun.nio.FFIUtils.Scope;
 
 import static jdk.incubator.foreign.CSupport.C_SHORT;
 import static jdk.internal.macos.cf.CFString_h.kCFStringEncodingUTF16;
@@ -61,21 +61,14 @@ class MacOSXFileSystem extends BsdFileSystem {
         if (FFIUtils.isNull(csref)) {
             throw new OutOfMemoryError("native heap");
         }
-        try (Scope s = FFIUtils.localScope()) {
-            long byteCounts = C_SHORT.byteSize() * path.length;
-            MemoryAddress buf = s.allocate(byteCounts);
-            FFIUtils.asSegment(buf, byteCounts).copyFrom(MemorySegment.ofArray(path));
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            MemorySegment buf = s.allocateArray(C_SHORT, path);
             LibMacOS.CFStringAppendCharacters(csref, buf, path.length);
             LibMacOS.CFStringNormalize(csref, form);
             long len = LibMacOS.CFStringGetLength(csref);
-            byteCounts = C_SHORT.byteSize() * (len + 1);
-            buf = s.allocate(byteCounts);
-            LibMacOS.CFStringGetCString(csref, buf, byteCounts, kCFStringEncodingUTF16);
-            char[] rv = new char[(int) len];
-            // minus the terminating 0
-            byteCounts -= C_SHORT.byteSize();
-            MemorySegment.ofArray(rv).copyFrom(FFIUtils.asSegment(buf, byteCounts));
-            return rv;
+            buf = s.allocateArray(C_SHORT, len + 1);
+            LibMacOS.CFStringGetCString(csref, buf, buf.byteSize(), kCFStringEncodingUTF16);
+            return buf.asSlice(0, C_SHORT.byteSize() * len).toCharArray();
         } finally {
             LibMacOS.CFRelease(csref);
         }

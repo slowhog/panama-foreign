@@ -28,10 +28,10 @@ package sun.nio.fs;
 import java.io.IOException;
 import java.util.Arrays;
 import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.NativeScope;
 import jdk.internal.panama.LibC.statfs;
 import jdk.internal.panama.LibC;
 import sun.nio.FFIUtils;
-import sun.nio.FFIUtils.Scope;
 
 /**
  * Bsd implementation of FileStore
@@ -49,11 +49,11 @@ class BsdFileStore
     }
 
     private byte[] getmntonname(UnixPath path) throws UnixException {
-        try (Scope s = FFIUtils.localScope()) {
-            MemoryAddress cPath = UnixNativeDispatcher.copyToNativeBytes(path, s);
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            var cPath = UnixNativeDispatcher.copyToNativeBytes(path, s);
             statfs buf = statfs.allocate(s::allocate);
             UnixNativeDispatcher.throwUnixExceptionIf(
-                    0 != LibC.statfs(cPath, buf.ptr()));
+                    0 != LibC.statfs(cPath, buf));
             return FFIUtils.toByteArray(buf.f_mntonname$ptr());
         }
     }

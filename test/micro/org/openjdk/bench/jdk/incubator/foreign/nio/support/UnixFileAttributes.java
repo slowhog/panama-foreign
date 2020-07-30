@@ -28,7 +28,8 @@ package org.openjdk.bench.jdk.incubator.foreign.nio.support;
 import java.nio.file.attribute.FileTime;
 import java.util.concurrent.TimeUnit;
 
-import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryAccess;
+import jdk.incubator.foreign.MemorySegment;
 
 /**
  * Unix implementation of PosixFileAttributes.
@@ -73,36 +74,36 @@ public class UnixFileAttributes {
         st_birthtime_sec = buf.st_birthtimespec$get().tv_sec$get();
     }
 
-    UnixFileAttributes(MemoryAddress buf) {
+    UnixFileAttributes(MemorySegment buf) {
         try {
-            st_mode = (int) LibC.stat64.st_mode$VH.get(buf);
-            st_ino = (long) LibC.stat64.st_ino$VH.get(buf);
-            st_dev = (long) LibC.stat64.st_dev$VH.get(buf);
-            st_rdev = (long) LibC.stat64.st_rdev$VH.get(buf);
-            st_nlink = (int) LibC.stat64.st_nlink$VH.get(buf);
-            st_uid = (int) LibC.stat64.st_uid$VH.get(buf);
-            st_gid = (int) LibC.stat64.st_gid$VH.get(buf);
-            st_size = (long) LibC.stat64.st_size$VH.get(buf);
-            MemoryAddress ts = buf.addOffset(LibC.stat64.st_atimespec$OFFSET);
-            st_atime_sec = (long) LibC.timespec.tv_sec$VH.get(ts);
-            st_atime_nsec = (long) LibC.timespec.tv_nsec$VH.get(ts);
+            st_mode = MemoryAccess.getIntAtOffset(buf, LibC.stat64.st_mode$OFFSET);
+            st_ino = MemoryAccess.getLongAtOffset(buf, LibC.stat64.st_ino$OFFSET);
+            st_dev = MemoryAccess.getLongAtOffset(buf, LibC.stat64.st_dev$OFFSET);
+            st_rdev = MemoryAccess.getLongAtOffset(buf, LibC.stat64.st_rdev$OFFSET);
+            st_nlink = MemoryAccess.getIntAtOffset(buf, LibC.stat64.st_nlink$OFFSET);
+            st_uid = MemoryAccess.getIntAtOffset(buf, LibC.stat64.st_uid$OFFSET);
+            st_gid = MemoryAccess.getIntAtOffset(buf, LibC.stat64.st_gid$OFFSET);
+            st_size = MemoryAccess.getLongAtOffset(buf, LibC.stat64.st_size$OFFSET);
+            long offset = LibC.stat64.st_atimespec$OFFSET;
+            st_atime_sec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_sec$OFFSET);
+            st_atime_nsec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_nsec$OFFSET);
 
-            ts = buf.addOffset(LibC.stat64.st_mtimespec$OFFSET);
-            st_mtime_sec = (long) LibC.timespec.tv_sec$VH.get(ts);
-            st_mtime_nsec = (long) LibC.timespec.tv_nsec$VH.get(ts);
+            offset = LibC.stat64.st_mtimespec$OFFSET;
+            st_mtime_sec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_sec$OFFSET);
+            st_mtime_nsec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_nsec$OFFSET);
 
-            ts = buf.addOffset(LibC.stat64.st_ctimespec$OFFSET);
-            st_ctime_sec = (long) LibC.timespec.tv_sec$VH.get(ts);
-            st_ctime_nsec = (long) LibC.timespec.tv_nsec$VH.get(ts);
+            offset = LibC.stat64.st_ctimespec$OFFSET;
+            st_ctime_sec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_sec$OFFSET);
+            st_ctime_nsec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_nsec$OFFSET);
 
-            ts = buf.addOffset(LibC.stat64.st_birthtimespec$OFFSET);
-            st_birthtime_sec = (long) LibC.timespec.tv_sec$VH.get(ts);
+            offset = LibC.stat64.st_birthtimespec$OFFSET;
+            st_birthtime_sec = MemoryAccess.getLongAtOffset(buf, offset + LibC.timespec.tv_sec$OFFSET);
         } catch (Throwable ex) {
             throw new AssertionError(ex);
         }
     }
 
-    public static UnixFileAttributes from(MemoryAddress buf) {
+    public static UnixFileAttributes from(MemorySegment buf) {
         return new UnixFileAttributes(buf);
     }
 

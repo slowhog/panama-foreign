@@ -72,7 +72,7 @@ public class NativeIO {
         try (NativeScope scope = NativeScope.unboundedScope()) {
             MemoryAddress pDIR = LibC.opendir(CSupport.toCString(".", scope));
             MemoryAddress pent = LibC.readdir(pDIR);
-            MemoryAddress buffer = scope.allocate(LibC.stat64.$LAYOUT);
+            var buffer = scope.allocate(LibC.stat64.$LAYOUT);
             while (pent != MemoryAddress.NULL) {
                 LibC.stat64(pent.addOffset(LibC.dirent.d_name$OFFSET), buffer);
                 UnixFileAttributes attrs = UnixFileAttributes.from(buffer);

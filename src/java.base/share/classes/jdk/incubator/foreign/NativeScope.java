@@ -337,7 +337,7 @@ public abstract class NativeScope implements AutoCloseable {
      * {@code limit() - size() < bytesSize}.
      */
     public MemorySegment allocate(long bytesSize) {
-        return allocate(bytesSize, bytesSize);
+        return allocate(bytesSize, 8);
     }
 
     /**
