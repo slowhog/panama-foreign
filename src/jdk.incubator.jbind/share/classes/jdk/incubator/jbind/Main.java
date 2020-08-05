@@ -26,7 +26,8 @@
 package jdk.incubator.jbind;
 
 import jdk.incubator.jextract.Declaration;
-import jdk.incubator.jextract.JextractTask;
+import jdk.incubator.jextract.JextractTool;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -40,6 +41,7 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.regex.PatternSyntaxException;
 import java.util.spi.ToolProvider;
+import java.util.stream.Collectors;
 import javax.tools.JavaFileObject;
 import jdk.internal.joptsimple.OptionException;
 import jdk.internal.joptsimple.OptionParser;
@@ -238,8 +240,7 @@ public class Main {
         Path builtinInc = Paths.get(System.getProperty("java.home"), "conf", "jextract");
         parsingOptions.add("-I" + builtinInc);
 
-        JextractTask jextract = JextractTask.newTask(false, ctx.getSources().toArray(Path[]::new));
-        Declaration.Scoped root = jextract.parse(parsingOptions.toArray(String[]::new));
+        Declaration.Scoped root = JextractTool.parse(ctx.getSources(), parsingOptions.toArray(String[]::new));
 
         PatternFilter.Builder headers = PatternFilter.builder();
         tryAddPatterns(optionSet, "include-headers", headers::addInclude);
@@ -249,7 +250,7 @@ public class Main {
         tryAddPatterns(optionSet, "include-symbols", symbols::addInclude);
         tryAddPatterns(optionSet, "exclude-symbols", symbols::addExclude);
 
-        List<? extends JavaFileObject> files = JavaSourceFactory.of(ctx)
+        List<JavaFileObject> files = JavaSourceFactory.of(ctx)
                 .withHeaderFilter(headers.buildPathMatcher())
                 .withSymbolFilter(symbols.buildRegexMatcher())
                 .generate(root);

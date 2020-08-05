@@ -217,16 +217,22 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
 
         List<Declaration> candidates = new ArrayList<>();
         candidates.addAll(uniqTypes.members());
+        // Only explicitly included symbols
+        candidates.addAll(uniqConstants.members().stream()
+                .filter(d -> symbols.isIncluded(d.name()))
+                .collect(Collectors.toList()));
         candidates.addAll(uniqVariables.members());
         candidates.addAll(uniqFunctions.members());
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION,
                 candidates.toArray(Declaration[]::new));
 
         List<JavaFileObject> files = new ArrayList<>();
+        /* The indivisual header for constants
         fileMembers.entrySet().stream()
                 .filter(e -> headers.filter(e.getKey()))
                 .map(e -> generateHeader(e.getKey(), e.getValue()))
                 .forEach(files::addAll);
+        */
         files.addAll(Arrays.asList(
             StaticWrapperSourceFactory.generate(
                 root, ctx.getMainClsName(), ctx.targetPackageName(),
@@ -251,16 +257,19 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
 
     @Override
     public Void visitScoped(Declaration.Scoped d, Configurations context) {
-        // Top level just process each member
-        if (d.kind() == Declaration.Scoped.Kind.TOPLEVEL) {
-            d.members().forEach(m -> m.accept(this, context));
-            return null;
-        }
         // Non-toplevel
         switch (d.kind()) {
+            case TOPLEVEL:
+                d.members().forEach(m -> m.accept(this, context));
+                // TOPLEVEL we are done
+                return null;
             case UNION:
             case STRUCT:
                 uniqTypes.add(d);
+                break;
+            case ENUM:
+                // Add all enum constants
+                d.members().forEach(m -> m.accept(this, context));
                 break;
             default:
         }

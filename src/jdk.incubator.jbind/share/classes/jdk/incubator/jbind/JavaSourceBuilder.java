@@ -308,21 +308,15 @@ abstract class JavaSourceBuilder {
         indent();
         sb.append(PUB_MODS + name + " at(MemorySegment ms) { return new " + name + "(ms); }\n");
         indent();
-        sb.append(PUB_MODS + name + " allocate(LongFunction<MemorySegment> allocator, int count) {\n");
-        incrAlign();
-        indent();
-        sb.append("return new " + name + "(allocator.apply(sizeof() * count));\n");
-        decrAlign();
-        indent();
-        sb.append("}\n");
-        indent();
-        sb.append(PUB_MODS + name + " allocate(LongFunction<MemorySegment> allocator) { return allocate(allocator, 1); }\n");
-        indent();
         sb.append(PUB_CLS_MODS + name + " offset(int count) { return at(segment().asSlice(sizeof() * count)); }\n");
     }
 
-    protected void addLayoutHelperMethods(String elementName, GroupLayout layout) {
-        String layoutStmt = describeStructLayout(elementName, layout);
+    protected void addLayoutHelperMethods(String name, GroupLayout layout) {
+        String layoutStmt = describeStructLayout(name, layout);
+        indent();
+        sb.append(PUB_MODS + name + " allocate(NativeScope scope) { return new " + name + "(scope.allocate(" + layoutStmt + ")); }\n");
+        indent();
+        sb.append(PUB_MODS + name + " allocate(NativeScope scope, long count) { return new " + name + "(scope.allocateArray(" + layoutStmt + ", count)); }\n");
         indent();
         sb.append(PUB_MODS + "long sizeof() { return " + layoutStmt + ".byteSize(); }\n");
         indent();
