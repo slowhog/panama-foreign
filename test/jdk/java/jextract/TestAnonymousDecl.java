@@ -25,7 +25,7 @@
  * @test
  * @build JextractApiTestBase
  * @modules jdk.incubator.jbind/jdk.incubator.jbind jdk.incubator.jextract/jdk.internal.jextract.impl
- * @run testng/othervm -ea TestAnonymousDecl
+ * @run testng/othervm -ea -Dforeign.restricted=permit TestAnonymousDecl
  */
 
 import java.util.List;

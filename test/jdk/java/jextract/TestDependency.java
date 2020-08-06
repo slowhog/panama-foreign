@@ -25,7 +25,7 @@
  * @test
  * @build JextractApiTestBase
  * @modules jdk.incubator.jbind/jdk.incubator.jbind jdk.incubator.jextract/jdk.internal.jextract.impl
- * @run testng/othervm -ea TestDependency
+ * @run testng/othervm -Dforeign.restricted=permit -ea TestDependency
  */
 
 import java.io.ByteArrayOutputStream;
@@ -33,7 +33,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Position;
 import jdk.incubator.jextract.Type;
@@ -44,7 +43,7 @@ import org.testng.annotations.Test;
 import static org.testng.Assert.*;
 
 public class TestDependency extends JextractApiTestBase {
-    private final static Type C_INT = Type.primitive(Type.Primitive.Kind.Int, MemoryLayouts.C_INT);
+    private final static Type C_INT = Type.primitive(Type.Primitive.Kind.Int);
     // We need stdint.h for pointer macro, otherwise evaluation failed and Constant declaration is not created
     final static String BUILTIN_INCLUDE = Paths.get(System.getProperty("java.home"), "conf", "jextract").toString();
     Declaration.Scoped platform;
