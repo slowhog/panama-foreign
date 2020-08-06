@@ -51,7 +51,7 @@ class BsdFileStore
     private byte[] getmntonname(UnixPath path) throws UnixException {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var cPath = UnixNativeDispatcher.copyToNativeBytes(path, s);
-            statfs buf = statfs.allocate(s::allocate);
+            statfs buf = statfs.allocate(s);
             UnixNativeDispatcher.throwUnixExceptionIf(
                     0 != LibC.statfs(cPath, buf));
             return FFIUtils.toByteArray(buf.f_mntonname$ptr());

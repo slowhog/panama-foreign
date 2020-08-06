@@ -40,7 +40,7 @@ import jdk.internal.misc.Unsafe;
 import jdk.internal.panama.LibC;
 import sun.nio.FFIUtils;
 
-import static jdk.internal.panama.sys.errno_h.EINTR;
+import static jdk.internal.panama.LibC.EINTR;
 import static sun.nio.FFIUtils.errno;
 
 /**

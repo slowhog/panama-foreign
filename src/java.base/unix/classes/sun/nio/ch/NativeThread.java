@@ -40,7 +40,7 @@ package sun.nio.ch;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.internal.panama.LibC;
 
-import static jdk.internal.panama.sys.signal_h.SIGIO;
+import static jdk.internal.panama.LibC.SIGIO;
 
 public class NativeThread {
     private static final int INTERRUPT_SIGNAL = SIGIO;
@@ -65,8 +65,8 @@ public class NativeThread {
 /*
     private static void initFFI() {
         try (Scope s = FFIUtils.localScope()) {
-            var sa = sigaction.allocate(s::allocate);
-            var osa = sigaction.allocate(s::allocate);
+            var sa = sigaction.allocate(s);
+            var osa = sigaction.allocate(s);
             sa.__sigaction_u$get().__sa_handler$set((notUsed -> {}));
             sa.sa_flags$set(0);
             LibC.sigemptyset(sa.sa_mask$ptr());

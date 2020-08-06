@@ -35,8 +35,8 @@ import jdk.internal.panama.LibC.iovec;
 import jdk.internal.panama.LibC.msghdr;
 import sun.nio.FFIUtils;
 
-import static jdk.internal.panama.limits_h.IOV_MAX;
-import static jdk.internal.panama.sys.errno_h.ECONNREFUSED;
+import static jdk.internal.panama.LibC.IOV_MAX;
+import static jdk.internal.panama.LibC.ECONNREFUSED;
 import static sun.nio.FFIUtils.errno;
 
 /**
@@ -94,7 +94,7 @@ class DatagramDispatcher extends NativeDispatcher {
         iovec buf = iovec.at(FFIUtils.ofNativeSegment(address, iovec.sizeof()));
         try (NativeScope s = NativeScope.unboundedScope()) {
             // TODO: Make sure the allocated struct is initialized with 0
-            msghdr m = msghdr.allocate(s::allocate);
+            msghdr m = msghdr.allocate(s);
             m.msg_iov$set(buf.address());
             m.msg_iovlen$set(len > IOV_MAX ? IOV_MAX : len);
             long res = LibC.recvmsg(FFIUtils.getFD(fd), m, 0);
@@ -121,7 +121,7 @@ class DatagramDispatcher extends NativeDispatcher {
         iovec buf = iovec.at(FFIUtils.ofNativeSegment(address, iovec.sizeof()));
         try (NativeScope s = NativeScope.unboundedScope()) {
             // TODO: Make sure the allocated struct is initialized with 0
-            msghdr m = msghdr.allocate(s::allocate);
+            msghdr m = msghdr.allocate(s);
             m.msg_iov$set(buf.address());
             m.msg_iovlen$set(len > IOV_MAX ? IOV_MAX : len);
             long res = LibC.sendmsg(FFIUtils.getFD(fd), m, 0);

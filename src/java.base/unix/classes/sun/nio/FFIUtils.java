@@ -50,9 +50,9 @@ import static jdk.incubator.foreign.CSupport.C_INT;
 import static jdk.incubator.foreign.CSupport.C_LONG;
 import static jdk.incubator.foreign.CSupport.C_POINTER;
 import static jdk.internal.foreign.NativeMemorySegmentImpl.EVERYTHING;
-import static jdk.internal.panama.sys.errno_h.EAGAIN;
-import static jdk.internal.panama.sys.errno_h.EINTR;
-import static jdk.internal.panama.sys.errno_h.EWOULDBLOCK;
+import static jdk.internal.panama.LibC.EAGAIN;
+import static jdk.internal.panama.LibC.EINTR;
+import static jdk.internal.panama.LibC.EWOULDBLOCK;
 
 public final class FFIUtils {
     private static JavaIOFileDescriptorAccess fda = SharedSecrets.getJavaIOFileDescriptorAccess();

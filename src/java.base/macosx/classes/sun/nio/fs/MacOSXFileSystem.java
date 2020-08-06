@@ -33,7 +33,7 @@ import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
 
 import static jdk.incubator.foreign.CSupport.C_SHORT;
-import static jdk.internal.macos.cf.CFString_h.kCFStringEncodingUTF16;
+import static jdk.internal.panama.LibMacOS.kCFStringEncodingUTF16;
 import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormC;
 import static sun.nio.fs.MacOSXNativeDispatcher.kCFStringNormalizationFormD;
 

@@ -42,21 +42,21 @@ import jdk.internal.panama.LibC.statvfs;
 import sun.nio.FFIUtils;
 
 import static jdk.incubator.foreign.CSupport.C_INT;
-import static jdk.internal.panama.stdio_h.SEEK_CUR;
-import static jdk.internal.panama.stdio_h.SEEK_SET;
-import static jdk.internal.panama.sys.errno_h.EACCES;
-import static jdk.internal.panama.sys.errno_h.EAGAIN;
-import static jdk.internal.panama.sys.errno_h.EINTR;
-import static jdk.internal.panama.sys.errno_h.ENOTSUP;
-import static jdk.internal.panama.sys.fcntl_h.F_FULLFSYNC;
-import static jdk.internal.panama.sys.fcntl_h.F_NOCACHE;
-import static jdk.internal.panama.sys.fcntl_h.F_RDLCK;
-import static jdk.internal.panama.sys.fcntl_h.F_SETLK;
-import static jdk.internal.panama.sys.fcntl_h.F_SETLKW;
-import static jdk.internal.panama.sys.fcntl_h.F_UNLCK;
-import static jdk.internal.panama.sys.fcntl_h.F_WRLCK;
-import static jdk.internal.panama.sys.socket_h.AF_UNIX;
-import static jdk.internal.panama.sys.socket_h.SOCK_STREAM;
+import static jdk.internal.panama.LibC.SEEK_CUR;
+import static jdk.internal.panama.LibC.SEEK_SET;
+import static jdk.internal.panama.LibC.EACCES;
+import static jdk.internal.panama.LibC.EAGAIN;
+import static jdk.internal.panama.LibC.EINTR;
+import static jdk.internal.panama.LibC.ENOTSUP;
+import static jdk.internal.panama.LibC.F_FULLFSYNC;
+import static jdk.internal.panama.LibC.F_NOCACHE;
+import static jdk.internal.panama.LibC.F_RDLCK;
+import static jdk.internal.panama.LibC.F_SETLK;
+import static jdk.internal.panama.LibC.F_SETLKW;
+import static jdk.internal.panama.LibC.F_UNLCK;
+import static jdk.internal.panama.LibC.F_WRLCK;
+import static jdk.internal.panama.LibC.AF_UNIX;
+import static jdk.internal.panama.LibC.SOCK_STREAM;
 import static sun.nio.FFIUtils.errno;
 
 class FileDispatcherImpl extends FileDispatcher {
@@ -259,7 +259,7 @@ class FileDispatcherImpl extends FileDispatcher {
 
     static long size0(FileDescriptor fd) throws IOException {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            stat64 fbuf = stat64.allocate(s::allocate);
+            stat64 fbuf = stat64.allocate(s);
             if (LibC.fstat64(fdAccess.get(fd), fbuf) < 0) {
                 return handle(-1, "Size failed");
             }
@@ -282,7 +282,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static int lock0(FileDescriptor fd, boolean blocking, long pos,
                        long size, boolean shared) throws IOException {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            flock fl = flock.allocate(s::allocate);
+            flock fl = flock.allocate(s);
             fl.l_whence$set((short) SEEK_SET);
             fl.l_len$set((size == Long.MAX_VALUE) ? 0 : size);
             fl.l_start$set(pos);
@@ -306,7 +306,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static void release0(FileDescriptor fd, long pos, long size)
             throws IOException {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            flock fl = flock.allocate(s::allocate);
+            flock fl = flock.allocate(s);
             fl.l_whence$set((short) SEEK_SET);
             fl.l_len$set((size == Long.MAX_VALUE) ? 0 : size);
             fl.l_start$set(pos);
@@ -347,7 +347,7 @@ class FileDispatcherImpl extends FileDispatcher {
     static int setDirect0(FileDescriptor fd) throws IOException {
         try (NativeScope s = NativeScope.unboundedScope()) {
             int fdInt = fdAccess.get(fd);
-            statvfs file_stat = statvfs.allocate(s::allocate);
+            statvfs file_stat = statvfs.allocate(s);
             int result = LibC.fcntl(fdInt, F_NOCACHE, 1);
             if (result == -1) {
                 throw new IOException(FFIUtils.getLastErrorMsg("DirectIO setup failed"));

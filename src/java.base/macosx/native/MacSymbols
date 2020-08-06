@@ -12,3 +12,4 @@
 --include-symbols UTTypeCopyPreferredTagWithClass
 --include-symbols kUTTagClassFilenameExtension
 --include-symbols kUTTagClassMIMEType
+--include-symbols kCFStringEncodingUTF16

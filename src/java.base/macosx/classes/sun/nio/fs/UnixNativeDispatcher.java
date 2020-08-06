@@ -36,7 +36,6 @@ import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.NativeScope;
 import jdk.internal.panama.LibC;
-import jdk.internal.panama.unistd_h;
 import sun.nio.FFIUtils;
 
 import static jdk.incubator.foreign.CSupport.C_CHAR;
@@ -51,17 +50,19 @@ import static jdk.internal.panama.LibC.stat64;
 import static jdk.internal.panama.LibC.statvfs;
 import static jdk.internal.panama.LibC.timespec;
 import static jdk.internal.panama.LibC.timeval;
-import static jdk.internal.panama.i386.limits_h.INT_MAX;
-import static jdk.internal.panama.stdio_h.EOF;
-import static jdk.internal.panama.sys.errno_h.EBADF;
-import static jdk.internal.panama.sys.errno_h.EINTR;
-import static jdk.internal.panama.sys.errno_h.ENAMETOOLONG;
-import static jdk.internal.panama.sys.errno_h.ENOENT;
-import static jdk.internal.panama.sys.errno_h.EOVERFLOW;
-import static jdk.internal.panama.sys.errno_h.EPERM;
-import static jdk.internal.panama.sys.errno_h.ERANGE;
-import static jdk.internal.panama.sys.errno_h.ESRCH;
-import static jdk.internal.panama.sys.unistd_h.F_OK;
+import static jdk.internal.panama.LibC.INT_MAX;
+import static jdk.internal.panama.LibC.EOF;
+import static jdk.internal.panama.LibC.EBADF;
+import static jdk.internal.panama.LibC.EINTR;
+import static jdk.internal.panama.LibC.ENAMETOOLONG;
+import static jdk.internal.panama.LibC.ENOENT;
+import static jdk.internal.panama.LibC.EOVERFLOW;
+import static jdk.internal.panama.LibC.EPERM;
+import static jdk.internal.panama.LibC.ERANGE;
+import static jdk.internal.panama.LibC.ESRCH;
+import static jdk.internal.panama.LibC.F_OK;
+import static jdk.internal.panama.LibC._SC_GETGR_R_SIZE_MAX;
+import static jdk.internal.panama.LibC._SC_GETPW_R_SIZE_MAX;
 import static sun.nio.FFIUtils.errno;
 import static sun.nio.FFIUtils.setErrno;
 
@@ -383,7 +384,7 @@ class UnixNativeDispatcher {
     static void stat(UnixPath path, UnixFileAttributes attrs) throws UnixException {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var file = copyToNativeBytes(path, s);
-            stat64 buffer = stat64.allocate(s::allocate);
+            stat64 buffer = stat64.allocate(s);
             restartable(() -> LibC.stat64(file, buffer));
             attrs.init(buffer);
         }
@@ -397,7 +398,7 @@ class UnixNativeDispatcher {
     static int stat(UnixPath path) {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var file = copyToNativeBytes(path, s);
-            stat64 buffer = stat64.allocate(s::allocate);
+            var buffer = stat64.allocate(s);
             restartable(() -> LibC.stat64(file, buffer));
             return buffer.st_mode$get();
         } catch (UnixException ex) {
@@ -412,7 +413,7 @@ class UnixNativeDispatcher {
     static void lstat(UnixPath path, UnixFileAttributes attrs) throws UnixException {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var file = copyToNativeBytes(path, s);
-            stat64 buffer = stat64.allocate(s::allocate);
+            stat64 buffer = stat64.allocate(s);
             restartable(() -> LibC.lstat64(file, buffer));
             attrs.init(buffer);
         }
@@ -423,7 +424,7 @@ class UnixNativeDispatcher {
      */
     static void fstat(int fd, UnixFileAttributes attrs) throws UnixException {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            stat64 buffer = stat64.allocate(s::allocate);
+            stat64 buffer = stat64.allocate(s);
             restartable(() -> LibC.fstat64(fd, buffer));
             attrs.init(buffer);
         }
@@ -437,7 +438,7 @@ class UnixNativeDispatcher {
     {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var file = copyToNativeBytes(path, s);
-            stat buffer = LibC.stat.allocate(s::allocate);
+            stat buffer = LibC.stat.at(s.allocate(LibC.stat.$LAYOUT));
             restartable(() -> LibC.fstatat(dfd, file, buffer, flag));
             attrs.init(buffer);
         }
@@ -495,7 +496,7 @@ class UnixNativeDispatcher {
     {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var file = copyToNativeBytes(path, s);
-            timeval v0 = timeval.allocate(s::allocate, 2);
+            timeval v0 = timeval.allocate(s, 2);
             timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
@@ -510,7 +511,7 @@ class UnixNativeDispatcher {
      */
     static void futimes(int fd, long times0, long times1) throws UnixException {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            timeval v0 = timeval.allocate(s::allocate, 2);
+            timeval v0 = timeval.allocate(s, 2);
             timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
@@ -525,7 +526,7 @@ class UnixNativeDispatcher {
      */
     static void futimens(int fd, long times0, long times1) throws UnixException {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            timespec v0 = timespec.allocate(s::allocate, 2);
+            timespec v0 = timespec.allocate(s, 2);
             timespec v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000_000);
             v0.tv_nsec$set((int) (times0 % 1000_000_000));
@@ -543,7 +544,7 @@ class UnixNativeDispatcher {
     {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var file = copyToNativeBytes(path, s);
-            timeval v0 = timeval.allocate(s::allocate, 2);
+            timeval v0 = timeval.allocate(s, 2);
             timeval v1 = v0.offset(1);
             v0.tv_sec$set(times0 / 1000_000);
             v0.tv_usec$set((int) (times0 % 1000_000));
@@ -670,11 +671,11 @@ class UnixNativeDispatcher {
      * @return  passwd->pw_name
      */
     static byte[] getpwuid(int uid) throws UnixException {
-        long tmp = LibC.sysconf(unistd_h._SC_GETPW_R_SIZE_MAX);
+        long tmp = LibC.sysconf(_SC_GETPW_R_SIZE_MAX);
         final long bufLen = (tmp == -1) ? 1024 : tmp;
         try (NativeScope s = NativeScope.unboundedScope()) {
             var buf = s.allocateArray(C_CHAR, bufLen);
-            passwd pwent = passwd.allocate(s::allocate);
+            passwd pwent = passwd.allocate(s);
             var result = s.allocate(C_POINTER);
             setErrno(0);
             int rv = restartable(() -> LibC.getpwuid_r(uid, pwent, buf, bufLen, result));
@@ -698,11 +699,11 @@ class UnixNativeDispatcher {
      * @return  group->gr_name
      */
     static byte[] getgrgid(int gid) throws UnixException {
-        long tmp = LibC.sysconf(unistd_h._SC_GETGR_R_SIZE_MAX);
+        long tmp = LibC.sysconf(_SC_GETGR_R_SIZE_MAX);
         final long bufLen = (tmp == -1) ? 1024 : tmp;
         try (NativeScope s = NativeScope.unboundedScope()) {
             MemorySegment buf = s.allocateArray(C_CHAR, bufLen);
-            group grent = group.allocate(s::allocate);
+            group grent = group.allocate(s);
             MemorySegment result = s.allocate(C_POINTER);
             setErrno(0);
             int rv = restartable(() -> LibC.getgrgid_r(gid, grent, buf, bufLen, result));
@@ -726,11 +727,11 @@ class UnixNativeDispatcher {
      * @return  passwd->pw_uid
      */
     static int getpwnam(String name) throws UnixException {
-        long tmp = LibC.sysconf(unistd_h._SC_GETPW_R_SIZE_MAX);
+        long tmp = LibC.sysconf(_SC_GETPW_R_SIZE_MAX);
         final long bufLen = (tmp == -1) ? 1024 : tmp;
         try (NativeScope s = NativeScope.unboundedScope()) {
             var buf = s.allocateArray(C_CHAR, bufLen);
-            passwd pwent = passwd.allocate(s::allocate);
+            passwd pwent = passwd.allocate(s);
             var result = s.allocate(C_POINTER);
             setErrno(0);
             int rv = restartable(() -> LibC.getpwnam_r(CSupport.toCString(name, s),
@@ -760,13 +761,13 @@ class UnixNativeDispatcher {
      * @return  group->gr_name
      */
     static int getgrnam(String name) throws UnixException {
-        long tmp = LibC.sysconf(unistd_h._SC_GETGR_R_SIZE_MAX);
+        long tmp = LibC.sysconf(_SC_GETGR_R_SIZE_MAX);
         long bufLen = (tmp == -1) ? 1024 : tmp;
         try (NativeScope s = NativeScope.unboundedScope()) {
             boolean retry;
             do {
                 var buf = s.allocateArray(C_CHAR, bufLen);
-                group grent = group.allocate(s::allocate);
+                group grent = group.allocate(s);
                 var result = s.allocate(C_POINTER);
                 setErrno(0);
                 final long len = bufLen;
@@ -804,7 +805,7 @@ class UnixNativeDispatcher {
     {
         try (NativeScope s = NativeScope.unboundedScope()) {
             var p = copyToNativeBytes(path, s);
-            statvfs buffer = statvfs.allocate(s::allocate);
+            statvfs buffer = statvfs.allocate(s);
             restartable(() -> LibC.statvfs(p, buffer));
             attrs.init(buffer);
         }

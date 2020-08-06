@@ -41,8 +41,8 @@ import jdk.internal.panama.LibC;
 import jdk.internal.panama.LibC.statfs;
 import sun.nio.FFIUtils;
 
-import static jdk.internal.panama.sys.mount_h.MNT_NOWAIT;
-import static jdk.internal.panama.sys.mount_h.MNT_WAIT;
+import static jdk.internal.panama.LibC.MNT_NOWAIT;
+import static jdk.internal.panama.LibC.MNT_WAIT;
 
 /**
  * Bsd implementation of FileSystem

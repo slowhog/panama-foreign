@@ -36,7 +36,7 @@ import jdk.internal.panama.LibC.kevent;
 import jdk.internal.panama.LibC.timespec;
 import sun.nio.FFIUtils;
 
-import static jdk.internal.panama.sys.errno_h.EINTR;
+import static jdk.internal.panama.LibC.EINTR;
 
 /**
  * Provides access to the BSD kqueue facility.
@@ -119,7 +119,7 @@ class KQueue {
 
     static int register(int kqfd, int fd, int filter, int flags) {
         try (NativeScope s = NativeScope.unboundedScope()) {
-            kevent ev = kevent.allocate(s::allocate);
+            kevent ev = kevent.at(s.allocate(kevent.$LAYOUT));
             ev.ident$set(fd);
             ev.filter$set((short) filter);
             ev.flags$set((short) flags);
@@ -146,7 +146,7 @@ class KQueue {
         try (NativeScope s = NativeScope.unboundedScope()) {
             MemoryAddress tsp;
             if (timeout >= 0) {
-                timespec ts = timespec.allocate(s::allocate);
+                timespec ts = timespec.allocate(s);
                 ts.tv_sec$set(timeout / 1000);
                 ts.tv_nsec$set((timeout % 1000) * 1000_000);
                 tsp = ts.address();

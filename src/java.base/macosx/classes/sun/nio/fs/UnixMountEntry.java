@@ -28,7 +28,7 @@ package sun.nio.fs;
 import jdk.internal.panama.LibC.statfs;
 import sun.nio.FFIUtils;
 
-import static jdk.internal.panama.sys.mount_h.MNT_RDONLY;
+import static jdk.internal.panama.LibC.MNT_RDONLY;
 
 /**
  * Represents an entry in the mount table.
