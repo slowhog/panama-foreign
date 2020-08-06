@@ -106,7 +106,7 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
     @Override
     public void addPrimitiveGlobal(String javaName, String nativeName, MemoryLayout layout, Class<?> type, int dimensions) {
         addLayout(javaName, layout);
-        addAddress(javaName, nativeName);
+        addAddress(javaName, nativeName, getLayoutName(javaName));
         addVarHandle(javaName, type, dimensions);
 
         String addrStmt = javaName + "$ADDR";
@@ -126,11 +126,11 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
 
     @Override
     public void addRecordTypeGlobal(String javaName, String nativeName, MemoryLayout layout, ClassDesc CD_type, int dimensions) {
-        addAddress(javaName, nativeName);
-
         String addrStmt = javaName + "$ADDR";
         String typeName = simpleName(CD_type);
-        String layoutStmt = typeName + "$LAYOUT";
+        String layoutStmt = typeName + ".$LAYOUT";
+
+        addAddress(javaName, nativeName, layoutStmt);
 
         // Getter
         beginGetter(javaName, typeName, dimensions, true);
@@ -374,10 +374,10 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         sb.append(")");
     }
 
-    protected void addAddress(String name, String symbol) {
+    protected void addAddress(String name, String symbol, String layoutstmt) {
         indent();
         sb.append(PUB_MODS + "MemorySegment " + name + "$ADDR" + " = ");
-        addAddressLookup(name, symbol);
+        addAddressLookup(name, symbol, layoutstmt);
         sb.append(";\n");
     }
 
@@ -385,9 +385,9 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
         return "vh_" + ((parent == null) ? name  : (parent.name() + "$" + name));
     }
 
-    protected void addAddressLookup(String name, String symbol) {
+    protected void addAddressLookup(String name, String symbol, String layoutstmt) {
         sb.append("RuntimeHelper.lookupGlobalVariable(LIBRARIES, \"" + symbol + "\", "
-                + getLayoutName(name) + ")");
+                + layoutstmt + ")");
     }
 
     void addLibraries(String[] libraryNames) {

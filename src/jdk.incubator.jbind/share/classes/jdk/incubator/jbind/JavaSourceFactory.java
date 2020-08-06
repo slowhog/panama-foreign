@@ -185,9 +185,9 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         if (headers.isIncluded(pos.path())) {
             return true;
         }
-        if (decl instanceof Declaration.Scoped) {
-            Declaration.Scoped s = (Declaration.Scoped) decl;
-            return (s.kind() == Declaration.Scoped.Kind.ENUM);
+        if (decl instanceof Declaration.Scoped &&
+            ((Declaration.Scoped) decl).kind() == Declaration.Scoped.Kind.ENUM) {
+                return true;
         }
         if (decl instanceof Declaration.Constant) {
             return true;
