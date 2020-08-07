@@ -36,7 +36,29 @@ import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Type;
 import jdk.incubator.jextract.Type.Delegated.Kind;
 
+/**
+ * This class collect all declaration needed to fulfill the type used by a given declaration.
+ */
 public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, Declaration> {
+    public static List<Declaration> collect(Declaration decl, AnonymousRegistry registry) {
+        SymbolDependencyCollector instance = new SymbolDependencyCollector(registry);
+        TypeDependencyWalker.walkDeclaration(decl, instance);
+        List<Declaration> decls = new ArrayList<>(instance.dependencies.size() + 1);
+        decls.addAll(instance.dependencies);
+        decls.add(decl);
+        return decls;
+    }
+
+    public static List<Declaration> collect(Declaration decl) {
+        return collect(decl, new AnonymousRegistry());
+    }
+
+    private SymbolDependencyCollector(AnonymousRegistry registry) {
+        super();
+        this.registry = registry;
+        this.dependencies = new LinkedHashSet<>();
+    }
+
     private final AnonymousRegistry registry;
     private final Set<Declaration> dependencies;
 
@@ -61,7 +83,7 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
         String typeName = registry.getName(record, parent);
 
         // Not adding record type for anonymous field
-        // Named field will the dependcy via Field declaration
+        // Named field will have the dependcy via Field declaration
         if (! isRecord(parent)) {
             if (record.name().isEmpty()) {
                 // inject implicit typedef
@@ -95,25 +117,5 @@ public class SymbolDependencyCollector implements Declaration.Visitor<Boolean, D
         // Ensure we gave any anonymous declaration a name
         registry.getName(decl, parent);
         return true;
-    }
-
-    private SymbolDependencyCollector(AnonymousRegistry registry) {
-        super();
-        this.registry = registry;
-        this.dependencies = new LinkedHashSet<>();
-    }
-
-    public static List<Declaration> collect(Declaration decl, AnonymousRegistry registry) {
-        SymbolDependencyCollector instance = new SymbolDependencyCollector(registry);
-        TypeDependencyWalker.walkDeclaration(decl, instance);
-        List<Declaration> decls = new ArrayList<>(instance.dependencies.size() + 1);
-        decls.addAll(instance.dependencies);
-        decls.add(decl);
-        return decls;
-    }
-
-    public static List<Declaration> collect(Declaration decl) {
-        AnonymousRegistry registry = new AnonymousRegistry();
-        return collect(decl, registry);
     }
 }

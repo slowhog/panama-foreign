@@ -94,7 +94,7 @@ public class AnonymousRegistry {
     private Declaration.Visitor<String, Declaration> namingScheme = new Declaration.Visitor<>() {
         private String getSuffix(Declaration decl) {
             assert (decl.name() == null || decl.name().isEmpty());
-            StringBuilder sb = new StringBuilder("$");
+            StringBuilder sb = new StringBuilder("_");
             if (decl instanceof Declaration.Scoped) {
                 Declaration.Scoped s = (Declaration.Scoped) decl;
                 sb.append(switch (s.kind()) {
@@ -117,7 +117,7 @@ public class AnonymousRegistry {
             } else {
                 throw new IllegalArgumentException("Unexpected anonymous declaration " + decl);
             }
-            return sb.append("$")
+            return sb.append("_")
                 .append(decl.pos().line())
                 .append("_")
                 .append(decl.pos().col())

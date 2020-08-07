@@ -33,8 +33,14 @@ import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Position;
 import jdk.incubator.jextract.Type;
 
+/**
+ * This class walk through all types used by a given declaration or type.
+ */
 public class TypeDependencyWalker {
+    // Avoid loop in types references, e.g, a struct has a field points to itself, like linked list.
     private final Set<Declaration> loopDetection = new HashSet<>();
+    // Determine if a declaration should be look into. The referencing declaration is passed as
+    // parameter. Return true if we should walk this declaration type, false otherwise.
     private final Declaration.Visitor<Boolean, Declaration> accepted;
 
     private TypeDependencyWalker(Declaration.Visitor<Boolean, Declaration> handler) {

@@ -226,7 +226,6 @@ abstract class JavaSourceBuilder {
     }
 
     public void addFunctionalInterface(String name, MethodType mtype,  FunctionDescriptor fDesc) {
-        incrAlign();
         indent();
         sb.append("public interface " + name + " {\n");
         incrAlign();
@@ -242,8 +241,6 @@ abstract class JavaSourceBuilder {
         decrAlign();
         indent();
         sb.append("}\n");
-        decrAlign();
-        indent();
     }
 
     public void beginRecordType(String name, GroupLayout layout) {
@@ -292,7 +289,7 @@ abstract class JavaSourceBuilder {
     private void addFunctionalFactory(String className, MethodType mtype, FunctionDescriptor fDesc) {
         String desc = describeFunction(className, fDesc);
         indent();
-        sb.append(PUB_MODS + "MemorySegment allocate(" + className + " fi) {\n");
+        sb.append("public static MemorySegment allocate(" + className + " fi) {\n");
         incrAlign();
         indent();
         sb.append("return RuntimeHelper.upcallStub(" + className + ".class, fi, " + desc + ", " +

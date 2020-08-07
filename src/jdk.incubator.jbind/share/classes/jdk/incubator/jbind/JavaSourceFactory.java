@@ -27,6 +27,7 @@ package jdk.incubator.jbind;
 
 import jdk.incubator.jextract.Declaration;
 import jdk.incubator.jextract.Position;
+import jdk.incubator.jextract.Type;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -288,6 +289,21 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
             uniqVariables.add(variable);
         }
         return visitDeclaration(variable, ctx);
+    }
+
+    @Override
+    public Void visitTypedef(Declaration.Typedef typedef, Configurations ctx) {
+        Type type = typedef.type();
+        // Only generate for anonymous typedef
+        // No need for alias or primitive typpe
+        if (type instanceof Type.Declared) {
+            Declaration.Scoped record = ((Type.Declared) type).tree();
+            String name = record.name();
+            if (name == null || name.isEmpty()) {
+                uniqTypes.add(typedef);
+            }
+        }
+        return visitDeclaration(typedef, ctx);
     }
 
     @Override

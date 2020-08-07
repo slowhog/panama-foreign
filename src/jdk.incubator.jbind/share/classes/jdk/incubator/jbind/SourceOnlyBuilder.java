@@ -215,13 +215,10 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
     @Override
     protected String describeFunction(String javaName, FunctionDescriptor fDesc) {
         String varName = javaName + "$DESC";
-        incrAlign();
         indent();
-        sb.append(PRI_MODS + "FunctionDescriptor " + varName + " = ");
+        sb.append("public static FunctionDescriptor " + varName + " = ");
         addFunction(fDesc);
         sb.append(";\n");
-        decrAlign();
-        indent();
         return varName;
     }
 

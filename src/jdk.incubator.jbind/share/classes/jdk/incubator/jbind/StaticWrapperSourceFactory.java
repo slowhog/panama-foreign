@@ -172,7 +172,7 @@ public class StaticWrapperSourceFactory extends AbstractCodeFactory implements D
 
         Class<?> clazz = typeTranslator.getJavaType(type);
         boolean isRecord = isRecord(type);
-        String clzName = isRecord ? ((Type.Declared) type).tree().name() : clazz.getName();
+        String clzName = isRecord ? aliases.getName(((Type.Declared) type).tree()).get() : clazz.getName();
 
         // Diagnosis, not suppose to happen
         if (clzName.isEmpty()) {
