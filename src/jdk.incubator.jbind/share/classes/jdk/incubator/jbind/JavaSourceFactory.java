@@ -26,6 +26,7 @@
 package jdk.incubator.jbind;
 
 import jdk.incubator.jextract.Declaration;
+import jdk.incubator.jextract.JextractTool;
 import jdk.incubator.jextract.Position;
 import jdk.incubator.jextract.Type;
 import java.nio.file.Path;
@@ -53,6 +54,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
     final DeclarationSet uniqConstants = new DeclarationSet("constant definition");
     final PatternFilter<Path> headers;
     final PatternFilter<String> symbols;
+    final boolean useJextract;
     final List<Path> sources;
 
     Configurations ctx;
@@ -61,6 +63,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         private Configurations ctx;
         private PatternFilter<Path> headers = PatternFilter.empty();
         private PatternFilter<String> symbols = PatternFilter.empty();
+        private boolean useJextract = false;
 
         Builder(Configurations ctx) {
             this.ctx = ctx;
@@ -76,8 +79,13 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
             return this;
         }
 
+        public Builder useJextractCodegen(boolean useJextract) {
+            this.useJextract = useJextract;
+            return this;
+        }
+
         public List<JavaFileObject> generate(Declaration.Scoped root) {
-            return new JavaSourceFactory(ctx, symbols, headers).generate(root);
+            return new JavaSourceFactory(ctx, symbols, headers, useJextract).generate(root);
         }
     }
 
@@ -85,10 +93,11 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         return new Builder(ctx);
     }
 
-    JavaSourceFactory(Configurations cfg, PatternFilter<String> symbols, PatternFilter<Path> headers) {
+    JavaSourceFactory(Configurations cfg, PatternFilter<String> symbols, PatternFilter<Path> headers, boolean useJextract) {
         this.ctx = cfg;
         this.symbols = symbols;
         this.headers = headers;
+        this.useJextract = useJextract;
         this.sources = (symbols.hasIncludes() || headers.hasIncludes()) ?
                 Collections.emptyList() :
                 ctx.getSources().stream()
@@ -227,18 +236,22 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
         Declaration.Scoped root = Declaration.toplevel(Position.NO_POSITION,
                 candidates.toArray(Declaration[]::new));
 
-        List<JavaFileObject> files = new ArrayList<>();
-        /* The indivisual header for constants
-        fileMembers.entrySet().stream()
-                .filter(e -> headers.filter(e.getKey()))
-                .map(e -> generateHeader(e.getKey(), e.getValue()))
-                .forEach(files::addAll);
-        */
-        files.addAll(Arrays.asList(
-            StaticWrapperSourceFactory.generate(
-                root, ctx.getMainClsName(), ctx.targetPackageName(),
-                anonymousNames, ctx.getLibs(), ctx.getLibPaths(), ctx.useCondy())));
-        return files;
+        if (useJextract) {
+            return JextractTool.generate(root, ctx.getMainClsName(), ctx.targetPackageName(), ctx.getLibs());
+        } else {
+            List<JavaFileObject> files = new ArrayList<>();
+            /* The indivisual header for constants
+            fileMembers.entrySet().stream()
+                    .filter(e -> headers.filter(e.getKey()))
+                    .map(e -> generateHeader(e.getKey(), e.getValue()))
+                    .forEach(files::addAll);
+            */
+            files.addAll(Arrays.asList(
+                StaticWrapperSourceFactory.generate(
+                    root, ctx.getMainClsName(), ctx.targetPackageName(),
+                    anonymousNames, ctx.getLibs(), ctx.getLibPaths(), ctx.useCondy())));
+            return files;
+        }
     }
 
     private List<JavaFileObject> generateAll(Declaration.Scoped decl) {

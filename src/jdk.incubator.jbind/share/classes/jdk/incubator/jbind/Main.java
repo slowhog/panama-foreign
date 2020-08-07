@@ -90,6 +90,7 @@ public class Main {
 
         // long options starts with --
         parser.accepts("condy", Log.format("help.condy"));
+        parser.accepts("jextract-style", Log.format("help.jextract"));
         parser.accepts("dry-run", Log.format("help.dry_run"));
         parser.accepts("exclude-symbols", Log.format("help.exclude", "symbols")).withRequiredArg();
         parser.accepts("include-symbols", Log.format("help.include", "symbols")).withRequiredArg();
@@ -253,6 +254,7 @@ public class Main {
         List<JavaFileObject> files = JavaSourceFactory.of(ctx)
                 .withHeaderFilter(headers.buildPathMatcher())
                 .withSymbolFilter(symbols.buildRegexMatcher())
+                .useJextractCodegen(optionSet.has("jextract-style"))
                 .generate(root);
 
         Path binaryOutputDir = Paths.get(optionSet.has("d") ? (String) optionSet.valueOf("d") : ".");
