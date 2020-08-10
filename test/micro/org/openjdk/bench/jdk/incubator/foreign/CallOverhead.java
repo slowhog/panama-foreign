@@ -52,7 +52,7 @@ import static jdk.incubator.foreign.CSupport.C_POINTER;
 @Measurement(iterations = 10, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @State(org.openjdk.jmh.annotations.Scope.Thread)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(value = 3, jvmArgsAppend = { "--add-modules=jdk.incubator.foreign", "-Dforeign.restricted=permit" })
+@Fork(value = 3, jvmArgsAppend = { "-Dforeign.restricted=permit" })
 public class CallOverhead {
 
     static final ForeignLinker abi = CSupport.getSystemLinker();
