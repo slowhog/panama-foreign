@@ -25,7 +25,8 @@
  */
 package jdk.internal.clang;
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.Addressable;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemorySegment;
@@ -45,18 +46,18 @@ public class SourceLocation {
 
     @FunctionalInterface
     private interface LocationFactory {
-        void get(MemorySegment loc, MemoryAddress file,
-                 MemoryAddress line, MemoryAddress column, MemoryAddress offset);
+        void get(MemorySegment loc, Addressable file,
+                 Addressable line, Addressable column, Addressable offset);
     }
 
     @SuppressWarnings("unchecked")
     private Location getLocation(LocationFactory fn) {
-        try (MemorySegment file = MemorySegment.allocateNative(CSupport.C_POINTER);
-             MemorySegment line = MemorySegment.allocateNative(CSupport.C_INT);
-             MemorySegment col = MemorySegment.allocateNative(CSupport.C_INT);
-             MemorySegment offset = MemorySegment.allocateNative(CSupport.C_INT)) {
+        try (MemorySegment file = MemorySegment.allocateNative(CLinker.C_POINTER);
+             MemorySegment line = MemorySegment.allocateNative(CLinker.C_INT);
+             MemorySegment col = MemorySegment.allocateNative(CLinker.C_INT);
+             MemorySegment offset = MemorySegment.allocateNative(CLinker.C_INT)) {
 
-            fn.get(loc, file.address(), line.address(), col.address(), offset.address());
+            fn.get(loc, file, line, col, offset);
             MemoryAddress fname = MemoryAccess.getAddress(file);
 
 

@@ -29,8 +29,7 @@ import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.SequenceLayout;
-import jdk.incubator.foreign.ValueLayout;
+import jdk.internal.foreign.PlatformLayouts;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.CallingSequenceBuilder;
 import jdk.internal.foreign.abi.UpcallHandler;
@@ -47,7 +46,7 @@ import java.lang.invoke.MethodType;
 import java.util.List;
 import java.util.Optional;
 
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.internal.foreign.PlatformLayouts.*;
 import static jdk.internal.foreign.abi.aarch64.AArch64Architecture.*;
 
 /**
@@ -232,8 +231,8 @@ public class CallArranger {
                     bindings.dup();
                 }
                 Class<?> type = SharedUtils.primitiveCarrierForSize(copy);
-                bindings.dereference(offset, type)
-                        .move(storage, type);
+                bindings.bufferLoad(offset, type)
+                        .vmStore(storage, type);
                 offset += STACK_SLOT_SIZE;
             }
         }
@@ -251,8 +250,8 @@ public class CallArranger {
                     storageCalculator.stackAlloc(copy, STACK_SLOT_SIZE);
                 Class<?> type = SharedUtils.primitiveCarrierForSize(copy);
                 bindings.dup()
-                        .move(storage, type)
-                        .dereference(offset, type);
+                        .vmLoad(storage, type)
+                        .bufferStore(offset, type);
                 offset += STACK_SLOT_SIZE;
             }
         }
@@ -270,8 +269,8 @@ public class CallArranger {
         @Override
         List<Binding> getIndirectBindings() {
             return Binding.builder()
-                .convertAddress()
-                .move(INDIRECT_RESULT, long.class)
+                .unboxAddress()
+                .vmStore(INDIRECT_RESULT, long.class)
                 .build();
         }
 
@@ -294,8 +293,8 @@ public class CallArranger {
                             if (offset + copy < layout.byteSize()) {
                                 bindings.dup();
                             }
-                            bindings.dereference(offset, type)
-                                    .move(storage, type);
+                            bindings.bufferLoad(offset, type)
+                                    .vmStore(storage, type);
                             offset += copy;
                         }
                     } else {
@@ -307,10 +306,10 @@ public class CallArranger {
                     assert carrier == MemorySegment.class;
                     bindings.copy(layout)
                             .baseAddress()
-                            .convertAddress();
+                            .unboxAddress();
                     VMStorage storage = storageCalculator.nextStorage(
                         StorageClasses.INTEGER, layout);
-                    bindings.move(storage, long.class);
+                    bindings.vmStore(storage, long.class);
                     break;
                 }
                 case STRUCT_HFA: {
@@ -327,8 +326,8 @@ public class CallArranger {
                             if (i + 1 < group.memberLayouts().size()) {
                                 bindings.dup();
                             }
-                            bindings.dereference(offset, type)
-                                    .move(storage, type);
+                            bindings.bufferLoad(offset, type)
+                                    .vmStore(storage, type);
                             offset += size;
                         }
                     } else {
@@ -337,22 +336,22 @@ public class CallArranger {
                     break;
                 }
                 case POINTER: {
-                    bindings.convertAddress();
+                    bindings.unboxAddress();
                     VMStorage storage =
                         storageCalculator.nextStorage(StorageClasses.INTEGER, layout);
-                    bindings.move(storage, long.class);
+                    bindings.vmStore(storage, long.class);
                     break;
                 }
                 case INTEGER: {
                     VMStorage storage =
                         storageCalculator.nextStorage(StorageClasses.INTEGER, layout);
-                    bindings.move(storage, carrier);
+                    bindings.vmStore(storage, carrier);
                     break;
                 }
                 case FLOAT: {
                     VMStorage storage =
                         storageCalculator.nextStorage(StorageClasses.VECTOR, layout);
-                    bindings.move(storage, carrier);
+                    bindings.vmStore(storage, carrier);
                     break;
                 }
                 default:
@@ -370,8 +369,8 @@ public class CallArranger {
         @Override
         List<Binding> getIndirectBindings() {
             return Binding.builder()
-                .move(INDIRECT_RESULT, long.class)
-                .convertAddress()
+                .vmLoad(INDIRECT_RESULT, long.class)
+                .boxAddress()
                 .build();
         }
 
@@ -393,8 +392,8 @@ public class CallArranger {
                             VMStorage storage = regs[regIndex++];
                             bindings.dup();
                             Class<?> type = SharedUtils.primitiveCarrierForSize(copy);
-                            bindings.move(storage, type)
-                                    .dereference(offset, type);
+                            bindings.vmLoad(storage, type)
+                                    .bufferStore(offset, type);
                             offset += copy;
                         }
                     } else {
@@ -405,11 +404,9 @@ public class CallArranger {
                 case STRUCT_REFERENCE: {
                     assert carrier == MemorySegment.class;
                     VMStorage storage = storageCalculator.nextStorage(StorageClasses.INTEGER, layout);
-                    bindings.move(storage, long.class)
-                            .convertAddress();
-                    // ASSERT SCOPE OF BOXED ADDRESS HERE
-                    // caveat. buffer should instead go out of scope after call
-                    bindings.copy(layout);
+                    bindings.vmLoad(storage, long.class)
+                            .boxAddress()
+                            .toSegment(layout);
                     break;
                 }
                 case STRUCT_HFA: {
@@ -425,8 +422,8 @@ public class CallArranger {
                             final long size = group.memberLayouts().get(i).byteSize();
                             Class<?> type = SharedUtils.primitiveCarrierForSize(size);
                             bindings.dup()
-                                    .move(storage, type)
-                                    .dereference(offset, type);
+                                    .vmLoad(storage, type)
+                                    .bufferStore(offset, type);
                             offset += size;
                         }
                     } else {
@@ -437,20 +434,20 @@ public class CallArranger {
                 case POINTER: {
                     VMStorage storage =
                         storageCalculator.nextStorage(StorageClasses.INTEGER, layout);
-                    bindings.move(storage, long.class)
-                            .convertAddress();
+                    bindings.vmLoad(storage, long.class)
+                            .boxAddress();
                     break;
                 }
                 case INTEGER: {
                     VMStorage storage =
                         storageCalculator.nextStorage(StorageClasses.INTEGER, layout);
-                    bindings.move(storage, carrier);
+                    bindings.vmLoad(storage, carrier);
                     break;
                 }
                 case FLOAT: {
                     VMStorage storage =
                         storageCalculator.nextStorage(StorageClasses.VECTOR, layout);
-                    bindings.move(storage, carrier);
+                    bindings.vmLoad(storage, carrier);
                     break;
                 }
                 default:

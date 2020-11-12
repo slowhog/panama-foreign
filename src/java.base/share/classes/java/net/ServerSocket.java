@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1995, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1995, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -315,7 +315,7 @@ public class ServerSocket implements java.io.Closeable {
     /**
      * Creates the socket implementation.
      *
-     * @throws IOException if creation fails
+     * @throws SocketException if creation fails
      * @since 1.4
      */
     void createImpl() throws SocketException {
@@ -529,7 +529,6 @@ public class ServerSocket implements java.io.Closeable {
      * @return the new Socket
      * @see SecurityManager#checkAccept
      * @revised 1.4
-     * @spec JSR-51
      */
     public Socket accept() throws IOException {
         if (isClosed())
@@ -573,7 +572,6 @@ public class ServerSocket implements java.io.Closeable {
      *
      * @since   1.1
      * @revised 1.4
-     * @spec JSR-51
      */
     protected final void implAccept(Socket s) throws IOException {
         SocketImpl si = s.impl;
@@ -717,7 +715,6 @@ public class ServerSocket implements java.io.Closeable {
      *
      * @throws     IOException  if an I/O error occurs when closing the socket.
      * @revised 1.4
-     * @spec JSR-51
      */
     public void close() throws IOException {
         synchronized(closeLock) {
@@ -743,7 +740,6 @@ public class ServerSocket implements java.io.Closeable {
      *          for a channel
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public ServerSocketChannel getChannel() {
         return null;

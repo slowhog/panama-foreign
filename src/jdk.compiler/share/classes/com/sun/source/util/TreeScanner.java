@@ -691,7 +691,7 @@ public class TreeScanner<R,P> implements TreeVisitor<R,P> {
      */
     @Override
     public R visitBindingPattern(BindingPatternTree node, P p) {
-        return scan(node.getType(), p);
+        return scan(node.getVariable(), p);
     }
 
     /**
@@ -950,7 +950,7 @@ public class TreeScanner<R,P> implements TreeVisitor<R,P> {
     }
 
     /**
-     * {@inheritDoc} This implementation returns {@code null}.
+     * {@inheritDoc} This implementation scans the children in left to right order.
      *
      * @param node  {@inheritDoc}
      * @param p  {@inheritDoc}

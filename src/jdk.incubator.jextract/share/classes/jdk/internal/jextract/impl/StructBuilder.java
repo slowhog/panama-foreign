@@ -24,68 +24,35 @@
  */
 package jdk.internal.jextract.impl;
 
+import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.jextract.Declaration;
+import jdk.incubator.jextract.Type;
 
 /**
  * This class generates static utilities class for C structs, unions.
  */
-class StructBuilder extends JavaSourceBuilder {
+class StructBuilder extends NestedClassBuilder {
 
-    private final JavaSourceBuilder prev;
+    private final GroupLayout parentLayout;
+    private final String structAnno;
+    private final String structArrayAnno;
+    private final String structPtrAnno;
+    private final Type structType;
 
-    StructBuilder(JavaSourceBuilder prev, String className, String pkgName, ConstantHelper constantHelper) {
-        super(prev.uniqueNestedClassName(className), pkgName, constantHelper);
-        this.prev = prev;
-    }
-
-    JavaSourceBuilder prev() {
-        return prev;
-    }
-
-    @Override
-    void append(String s) {
-        prev.append(s);
-    }
-
-    @Override
-    void append(char c) {
-        prev.append(c);
+    StructBuilder(JavaSourceBuilder enclosing, String className, GroupLayout parentLayout, Type structType) {
+        super(enclosing, Kind.CLASS, className);
+        this.parentLayout = parentLayout;
+        this.structAnno = annotationWriter.getCAnnotation(structType);
+        this.structArrayAnno = annotationWriter.getCAnnotation(Type.array(structType));
+        this.structPtrAnno = annotationWriter.getCAnnotation(Type.pointer(structType));
+        this.structType = structType;
     }
 
     @Override
-    void append(long l) {
-        prev.append(l);
-    }
-
-    @Override
-    void indent() {
-        prev.indent();
-    }
-
-    @Override
-    void incrAlign() {
-        prev.incrAlign();
-    }
-
-    @Override
-    void decrAlign() {
-        prev.decrAlign();
-    }
-
-    @Override
-    protected String getClassModifiers() {
-        return PUB_MODS;
-    }
-
-    @Override
-    protected void addPackagePrefix() {
-        // nested class. containing class has necessary package declaration
-    }
-
-    @Override
-    protected void addImportSection() {
-        // nested class. containing class has necessary imports
+    Type type() {
+        return structType;
     }
 
     @Override
@@ -95,152 +62,237 @@ class StructBuilder extends JavaSourceBuilder {
         emitScopeAllocate();
         emitAllocateArray();
         emitScopeAllocateArray();
+        emitAllocatePoiner();
+        emitScopeAllocatePointer();
+        emitAsRestricted();
         return super.classEnd();
+    }
+
+    private String getQualifiedName(String fieldName) {
+        return qualifiedName(this) + "$" + fieldName;
+    }
+
+    @Override
+    void addVarHandleGetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type) {
+        var desc = constantHelper.addFieldVarHandle(getQualifiedName(javaName), nativeName, layout, type, layoutField(), parentLayout);
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS + displayName(desc.invocationType().returnType()) + " " + javaName + "$VH() {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return " + getCallString(desc) + ";\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
     }
 
     @Override
     void addLayoutGetter(String javaName, MemoryLayout layout) {
-        var desc = constantHelper.addLayout(javaName + "$struct", layout);
-        incrAlign();
-        indent();
-        append(PUB_MODS + displayName(desc.invocationType().returnType()) + " $LAYOUT() {\n");
-        incrAlign();
-        indent();
-        append("return " + getCallString(desc) + ";\n");
-        decrAlign();
-        indent();
-        append("}\n");
-        decrAlign();
+        var desc = constantHelper.addLayout(javaName, layout);
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS + displayName(desc.invocationType().returnType()) + " $LAYOUT() {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return " + getCallString(desc) + ";\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
     }
 
     @Override
-    void addGetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
-        incrAlign();
-        indent();
-        append(PUB_MODS + type.getName() + " " + javaName + "$get(MemorySegment addr) {\n");
-        incrAlign();
-        indent();
-        append("return (" + type.getName() + ")"
-                + varHandleGetCallString(javaName, nativeName, layout, type, parentLayout) + ".get(addr);\n");
-        decrAlign();
-        indent();
-        append("}\n");
-        decrAlign();
+    void addGetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, String anno) {
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS + " " + anno + " " + type.getSimpleName() + " " + javaName + "$get(" + this.structAnno + " MemorySegment seg) {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return (" + type.getName() + ")"
+                + fieldVarHandleGetCallString(getQualifiedName(javaName), nativeName, layout, type) + ".get(seg);\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
 
-        addIndexGetter(javaName, nativeName, layout, type, parentLayout);
+        addIndexGetter(javaName, nativeName, layout, type, anno);
     }
 
     @Override
-    void addSetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
-        incrAlign();
-        indent();
-        String param = MemorySegment.class.getName() + " addr";
-        append(PUB_MODS + "void " + javaName + "$set(" + param + ", " + type.getName() + " x) {\n");
-        incrAlign();
-        indent();
-        append(varHandleGetCallString(javaName, nativeName, layout, type, null) + ".set(addr, x);\n");
-        decrAlign();
-        indent();
-        append("}\n");
-        decrAlign();
+    void addSetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, String anno) {
+        builder.incrAlign();
+        builder.indent();
+        String param = MemorySegment.class.getSimpleName() + " seg";
+        builder.append(PUB_MODS + "void " + javaName + "$set(" + this.structAnno + " " + param + ", " + anno + " " + type.getSimpleName() + " x) {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append(fieldVarHandleGetCallString(getQualifiedName(javaName), nativeName, layout, type) + ".set(seg, x);\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
 
-        addIndexSetter(javaName, nativeName, layout, type, parentLayout);
+        addIndexSetter(javaName, nativeName, layout, type, anno);
     }
 
     @Override
-    void addAddressGetter(String javaName, String nativeName, MemoryLayout layout, MemoryLayout parentLayout) {
-        incrAlign();
-        indent();
-        append(PUB_MODS + "MemorySegment " + javaName + "$addr(MemorySegment addr) {\n");
-        incrAlign();
-        indent();
-        append("return addr.asSlice(");
-        append(parentLayout.byteOffset(MemoryLayout.PathElement.groupElement(nativeName)));
-        append(", ");
-        append(layout.byteSize());
-        append(");\n");
-        decrAlign();
-        indent();
-        append("}\n");
-        decrAlign();
+    void addSegmentGetter(String javaName, String nativeName, MemoryLayout layout) {
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS + "MemorySegment " + javaName + "$slice(MemorySegment seg) {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return RuntimeHelper.nonCloseableNonTransferableSegment(seg.asSlice(");
+        builder.append(parentLayout.byteOffset(MemoryLayout.PathElement.groupElement(nativeName)));
+        builder.append(", ");
+        builder.append(layout.byteSize());
+        builder.append("));\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
+
     }
 
     private void emitSizeof() {
-        incrAlign();
-        indent();
-        append(PUB_MODS);
-        append("long sizeof() { return $LAYOUT().byteSize(); }\n");
-        decrAlign();
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append("long sizeof() { return $LAYOUT().byteSize(); }\n");
+        builder.decrAlign();
     }
 
     private void emitAllocate() {
-        incrAlign();
-        indent();
-        append(PUB_MODS);
-        append("MemorySegment allocate() { return MemorySegment.allocateNative($LAYOUT()); }\n");
-        decrAlign();
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structAnno + " MemorySegment allocate() { return MemorySegment.allocateNative($LAYOUT()); }\n");
+        builder.decrAlign();
     }
 
     private void emitScopeAllocate() {
-        incrAlign();
-        indent();
-        append(PUB_MODS);
-        append("MemorySegment allocate(NativeScope scope) { return scope.allocate($LAYOUT()); }\n");
-        decrAlign();
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structAnno + " MemorySegment allocate(NativeScope scope) { return scope.allocate($LAYOUT()); }\n");
+        builder.decrAlign();
     }
 
     private void emitAllocateArray() {
-        incrAlign();
-        indent();
-        append(PUB_MODS);
-        append("MemorySegment allocateArray(int len) {\n");
-        incrAlign();
-        indent();
-        append("return MemorySegment.allocateNative(MemoryLayout.ofSequence(len, $LAYOUT()));");
-        decrAlign();
-        append("}\n");
-        decrAlign();
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structArrayAnno + " MemorySegment allocateArray(int len) {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return MemorySegment.allocateNative(MemoryLayout.ofSequence(len, $LAYOUT()));\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append('}');
+        builder.decrAlign();
     }
 
     private void emitScopeAllocateArray() {
-        incrAlign();
-        indent();
-        append(PUB_MODS);
-        append("MemorySegment allocateArray(int len, NativeScope scope) {\n");
-        incrAlign();
-        indent();
-        append("return scope.allocate(MemoryLayout.ofSequence(len, $LAYOUT()));");
-        decrAlign();
-        append("}\n");
-        decrAlign();
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structArrayAnno + " MemorySegment allocateArray(int len, NativeScope scope) {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return scope.allocate(MemoryLayout.ofSequence(len, $LAYOUT()));\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
     }
 
-    private void addIndexGetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
-        incrAlign();
-        indent();
-        String params = MemorySegment.class.getName() + " addr, long index";
-        append(PUB_MODS + type.getName() + " " + javaName + "$get(" + params + ") {\n");
-        incrAlign();
-        indent();
-        append("return (" + type.getName() + ")"
-                + varHandleGetCallString(javaName, nativeName, layout, type, parentLayout) + ".get(addr.asSlice(index*sizeof()));\n");
-        decrAlign();
-        indent();
-        append("}\n");
-        decrAlign();
+    private void emitAllocatePoiner() {
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structPtrAnno + " MemorySegment allocatePointer() {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return MemorySegment.allocateNative(C_POINTER);\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
     }
 
-    private void addIndexSetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, MemoryLayout parentLayout) {
-        incrAlign();
-        indent();
-        String params = MemorySegment.class.getName() + " addr, long index, " + type.getName() + " x";
-        append(PUB_MODS + "void " + javaName + "$set(" + params + ") {\n");
-        incrAlign();
-        indent();
-        append(varHandleGetCallString(javaName, nativeName, layout, type, parentLayout) + ".set(addr.asSlice(index*sizeof()), x);\n");
-        decrAlign();
-        indent();
-        append("}\n");
-        decrAlign();
+    private void emitScopeAllocatePointer() {
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structPtrAnno + " MemorySegment allocatePointer(NativeScope scope) {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return scope.allocate(C_POINTER);\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
+    }
+
+    private void emitAsRestricted() {
+        builder.incrAlign();
+        builder.indent();
+        builder.append(PUB_MODS);
+        builder.append(structAnno + " MemorySegment ofAddressRestricted(MemoryAddress addr) { return RuntimeHelper.asArrayRestricted(addr, $LAYOUT(), 1); }\n");
+        builder.decrAlign();
+    }
+
+    private void addIndexGetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, String anno) {
+        builder.incrAlign();
+        builder.indent();
+        String params = this.structAnno + " " + MemorySegment.class.getSimpleName() + " seg, long index";
+        builder.append(PUB_MODS + " " + anno + " " + type.getSimpleName() + " " + javaName + "$get(" + params + ") {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append("return (" + type.getName() + ")"
+                + fieldVarHandleGetCallString(getQualifiedName(javaName), nativeName, layout, type) +
+                ".get(seg.asSlice(index*sizeof()));\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
+    }
+
+    private void addIndexSetter(String javaName, String nativeName, MemoryLayout layout, Class<?> type, String anno) {
+        builder.incrAlign();
+        builder.indent();
+        String params = this.structAnno + " " + MemorySegment.class.getSimpleName() + " seg, long index, " + anno + " " + type.getSimpleName() + " x";
+        builder.append(PUB_MODS + "void " + javaName + "$set(" + params + ") {\n");
+        builder.incrAlign();
+        builder.indent();
+        builder.append(fieldVarHandleGetCallString(getQualifiedName(javaName), nativeName, layout, type) +
+                ".set(seg.asSlice(index*sizeof()), x);\n");
+        builder.decrAlign();
+        builder.indent();
+        builder.append("}\n");
+        builder.decrAlign();
+    }
+
+    private String fieldVarHandleGetCallString(String javaName, String nativeName, MemoryLayout layout, Class<?> type) {
+        return getCallString(constantHelper.addFieldVarHandle(javaName, nativeName, layout, type, layoutField(), parentLayout));
+    }
+
+    private String qualifiedName(JavaSourceBuilder builder) {
+        if (builder instanceof NestedClassBuilder) {
+            NestedClassBuilder nestedClassBuilder = (NestedClassBuilder)builder;
+            String prefix = qualifiedName(nestedClassBuilder.enclosing);
+            return prefix.isEmpty() ?
+                    nestedClassBuilder.className :
+                    prefix + "$" + nestedClassBuilder.className;
+        } else {
+            return "";
+        }
+    }
+
+    String layoutField() {
+        GroupLayout groupLayout = parentLayout;
+        String suffix = groupLayout.isUnion() ? "union" : "struct";
+        return qualifiedName(this) + "$" + suffix;
     }
 }

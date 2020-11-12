@@ -26,7 +26,7 @@
 
 package jdk.internal.clang;
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.internal.clang.libclang.Index_h;
 
@@ -109,8 +109,8 @@ public final class Type {
 
     // Struct/RecordType
     private long getOffsetOf0(String fieldName) {
-        try (MemorySegment cfname = CSupport.toCString(fieldName)) {
-            return Index_h.clang_Type_getOffsetOf(type, cfname.address());
+        try (MemorySegment cfname = CLinker.toCString(fieldName)) {
+            return Index_h.clang_Type_getOffsetOf(type, cfname);
         }
     }
 
@@ -186,7 +186,7 @@ public final class Type {
     }
 
     public int kind0() {
-        return Index_h.CXType$kind$get(type);
+        return Index_h.CXType.kind$get(type);
     }
 
     private long size0() {

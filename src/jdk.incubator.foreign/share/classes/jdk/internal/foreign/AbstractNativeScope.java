@@ -5,10 +5,9 @@ import jdk.incubator.foreign.NativeScope;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.OptionalLong;
 
-public abstract class AbstractNativeScope extends NativeScope {
+public abstract class AbstractNativeScope implements NativeScope {
 
     private final List<MemorySegment> segments = new ArrayList<>();
     private final Thread ownerThread;
@@ -19,6 +18,10 @@ public abstract class AbstractNativeScope extends NativeScope {
         this.ownerThread = ownerThread;
     }
 
+    public static NativeScope emptyScope() {
+        return new EmptyScope();
+    }
+
     @Override
     public Thread ownerThread() {
         return ownerThread;
@@ -26,13 +29,7 @@ public abstract class AbstractNativeScope extends NativeScope {
 
     @Override
     public void close() {
-        for (MemorySegment segment : segments) {
-            try {
-                segment.close();
-            } catch (IllegalStateException ex) {
-                //already closed - skip
-            }
-        }
+        segments.forEach(MemorySegment::close);
     }
 
     void checkOwnerThread() {
@@ -51,19 +48,8 @@ public abstract class AbstractNativeScope extends NativeScope {
         return newSegment(size, size);
     }
 
-    @Override
-    public MemorySegment register(MemorySegment segment) {
-        Objects.requireNonNull(segment);
-        if (segment.ownerThread() != null && (segment.ownerThread() != ownerThread())) {
-            throw new IllegalArgumentException("Cannot register segment owned by a different thread");
-        } else if (!segment.hasAccessModes(MemorySegment.CLOSE)) {
-            throw new IllegalArgumentException("Cannot register a non-closeable segment");
-        }
-        MemorySegment attachedSegment = ((AbstractMemorySegmentImpl)segment)
-                .dupAndClose(ownerThread());
-        segments.add(attachedSegment);
-        return attachedSegment
-                .withAccessModes(segment.accessModes() & SCOPE_MASK);
+    public void register(MemorySegment segment) {
+        segments.add(segment);
     }
 
     public static class UnboundedNativeScope extends AbstractNativeScope {
@@ -147,6 +133,28 @@ public abstract class AbstractNativeScope extends NativeScope {
             } catch (IndexOutOfBoundsException ex) {
                 throw new OutOfMemoryError("Not enough space left to allocate");
             }
+        }
+    }
+
+    // only for registering
+    private static class EmptyScope extends AbstractNativeScope {
+        public EmptyScope() {
+            super(Thread.currentThread());
+        }
+
+        @Override
+        public OptionalLong byteSize() {
+            return OptionalLong.of(0);
+        }
+
+        @Override
+        public long allocatedBytes() {
+            return 0;
+        }
+
+        @Override
+        public MemorySegment allocate(long bytesSize, long bytesAlignment) {
+            throw new OutOfMemoryError("Not enough space left to allocate");
         }
     }
 }

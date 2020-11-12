@@ -30,14 +30,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.ValueLayout;
 import jdk.incubator.jextract.Declaration;
 
@@ -47,19 +46,8 @@ import jdk.incubator.jextract.Declaration;
  * method is called to get overall generated source string.
  */
 class SourceOnlyBuilder extends JavaSourceBuilder {
-    private static final String ABI;
-    private static final String ABI_CLASS_ATTR;
+    private static final String ABI_CLASS_ATTR  = CLinker.TypeKind.ATTR_NAME;
     private final String[] libraryNames;
-
-    static {
-        ABI = CSupport.getSystemLinker().name();
-        ABI_CLASS_ATTR = switch (ABI) {
-            case CSupport.SysV.NAME -> CSupport.SysV.CLASS_ATTRIBUTE_NAME;
-            case CSupport.Win64.NAME -> CSupport.Win64.CLASS_ATTRIBUTE_NAME;
-            case CSupport.AArch64.NAME -> CSupport.AArch64.CLASS_ATTRIBUTE_NAME;
-            default -> throw new UnsupportedOperationException("Unsupported Foreign Linker: " + ABI);
-        };
-    }
 
     SourceOnlyBuilder(List<String> libraryNames) {
         this.libraryNames = libraryNames.toArray(new String[0]);
@@ -240,25 +228,23 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
     }
 
     static String typeToLayoutName(ValueLayout vl) {
-        if (matchLayout(vl, CSupport.C_BOOL)) {
-            return "C_BOOL";
-        } else if (matchLayout(vl, CSupport.C_CHAR)) {
+        if (matchLayout(vl, CLinker.C_CHAR)) {
             return "C_CHAR";
-        } else if (matchLayout(vl, CSupport.C_SHORT)) {
+        } else if (matchLayout(vl, CLinker.C_SHORT)) {
             return "C_SHORT";
-        } else if (matchLayout(vl, CSupport.C_INT)) {
+        } else if (matchLayout(vl, CLinker.C_INT)) {
             return "C_INT";
-        } else if (matchLayout(vl, CSupport.C_LONG)) {
+        } else if (matchLayout(vl, CLinker.C_LONG)) {
             return "C_LONG";
-        } else if (matchLayout(vl, CSupport.C_LONGLONG)) {
+        } else if (matchLayout(vl, CLinker.C_LONGLONG)) {
             return "C_LONGLONG";
-        } else if (matchLayout(vl, CSupport.C_FLOAT)) {
+        } else if (matchLayout(vl, CLinker.C_FLOAT)) {
             return "C_FLOAT";
-        } else if (matchLayout(vl, CSupport.C_DOUBLE)) {
+        } else if (matchLayout(vl, CLinker.C_DOUBLE)) {
             return "C_DOUBLE";
-        } else if (matchLayout(vl, CSupport.C_LONGDOUBLE)) {
+        } else if (matchLayout(vl, CLinker.C_LONGDOUBLE)) {
             return "C_LONGDOUBLE";
-        } else if (matchLayout(vl, CSupport.C_POINTER)) {
+        } else if (matchLayout(vl, CLinker.C_POINTER)) {
             return "C_POINTER";
         } else {
             throw new RuntimeException("should not reach here, problematic layout: " + vl);
@@ -287,27 +273,23 @@ class SourceOnlyBuilder extends JavaSourceBuilder {
             addLayout(((SequenceLayout) l).elementLayout());
             sb.append(")");
         } else if (l instanceof GroupLayout) {
-            if (l == CSupport.SysV.C_COMPLEX_LONGDOUBLE) {
-                sb.append("C_COMPLEX_LONGDOUBLE");
+            if (((GroupLayout) l).isStruct()) {
+                sb.append("MemoryLayout.ofStruct(\n");
             } else {
-                if (((GroupLayout) l).isStruct()) {
-                    sb.append("MemoryLayout.ofStruct(\n");
-                } else {
-                    sb.append("MemoryLayout.ofUnion(\n");
-                }
-                incrAlign();
-                String delim = "";
-                for (MemoryLayout e : ((GroupLayout) l).memberLayouts()) {
-                    sb.append(delim);
-                    indent();
-                    addLayout(e);
-                    delim = ",\n";
-                }
-                sb.append("\n");
-                decrAlign();
-                indent();
-                sb.append(")");
+                sb.append("MemoryLayout.ofUnion(\n");
             }
+            incrAlign();
+            String delim = "";
+            for (MemoryLayout e : ((GroupLayout) l).memberLayouts()) {
+                sb.append(delim);
+                indent();
+                addLayout(e);
+                delim = ",\n";
+            }
+            sb.append("\n");
+            decrAlign();
+            indent();
+            sb.append(")");
         } else {
             //padding
             sb.append("MemoryLayout.ofPaddingBits(" + l.bitSize() + ")");

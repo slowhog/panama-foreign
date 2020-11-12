@@ -24,18 +24,16 @@
 package jdk.internal.foreign.abi;
 
 import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.NativeScope;
 import jdk.internal.foreign.MemoryAddressImpl;
-import jdk.internal.foreign.Utils;
+import jdk.internal.foreign.abi.SharedUtils.Allocator;
 import jdk.internal.vm.annotation.Stable;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.lang.invoke.VarHandle;
-import java.nio.ByteOrder;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -62,6 +60,8 @@ public class ProgrammableUpcallHandler implements UpcallHandler {
     private final ABIDescriptor abi;
     private final BufferLayout layout;
 
+    private final long bufferCopySize;
+
     public ProgrammableUpcallHandler(ABIDescriptor abi, MethodHandle target, CallingSequence callingSequence) {
         this.abi = abi;
         this.layout = BufferLayout.of(abi);
@@ -69,6 +69,7 @@ public class ProgrammableUpcallHandler implements UpcallHandler {
         this.callingSequence = callingSequence;
         this.mh = target.asSpreader(Object[].class, callingSequence.methodType().parameterCount());
         this.entryPoint = allocateUpcallStub(abi, layout);
+        this.bufferCopySize = SharedUtils.bufferCopySize(callingSequence);
     }
 
     @Override
@@ -81,7 +82,10 @@ public class ProgrammableUpcallHandler implements UpcallHandler {
     }
 
     private void invoke(MemoryAddress buffer) {
-        try {
+        Allocator allocator = bufferCopySize != 0
+                ? Allocator.ofScope(NativeScope.boundedScope(bufferCopySize))
+                : Allocator.empty();
+        try (allocator) {
             MemorySegment bufferBase = MemoryAddressImpl.ofLongUnchecked(buffer.toRawLongValue(), layout.size);
 
             if (DEBUG) {
@@ -98,7 +102,7 @@ public class ProgrammableUpcallHandler implements UpcallHandler {
                                 ? stackArgsBase.asSlice(storage.index() * abi.arch.typeSize(abi.arch.stackType()))
                                 : bufferBase.asSlice(layout.argOffset(storage));
                             return SharedUtils.read(ptr, type);
-                        });
+                        }, allocator);
             }
 
             if (DEBUG) {

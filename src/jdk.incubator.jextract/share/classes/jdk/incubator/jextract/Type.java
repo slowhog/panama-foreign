@@ -26,7 +26,7 @@
 
 package jdk.incubator.jextract;
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.internal.jextract.impl.LayoutUtils;
@@ -95,11 +95,11 @@ public interface Type {
             /**
              * {@code Bool} type.
              */
-            Bool("_Bool", CSupport.C_BOOL),
+            Bool("_Bool", CLinker.C_CHAR),
             /**
              * {@code char} type.
              */
-            Char("char", CSupport.C_CHAR),
+            Char("char", CLinker.C_CHAR),
             /**
              * {@code char16} type.
              */
@@ -111,19 +111,19 @@ public interface Type {
             /**
              * {@code short} type.
              */
-            Short("short", CSupport.C_SHORT),
+            Short("short", CLinker.C_SHORT),
             /**
              * {@code int} type.
              */
-            Int("int", CSupport.C_INT),
+            Int("int", CLinker.C_INT),
             /**
              * {@code long} type.
              */
-            Long("long", CSupport.C_LONG),
+            Long("long", CLinker.C_LONG),
             /**
              * {@code long long} type.
              */
-            LongLong("long long", CSupport.C_LONGLONG),
+            LongLong("long long", CLinker.C_LONGLONG),
             /**
              * {@code int128} type.
              */
@@ -131,15 +131,15 @@ public interface Type {
             /**
              * {@code float} type.
              */
-            Float("float", CSupport.C_FLOAT),
+            Float("float", CLinker.C_FLOAT),
             /**
              * {@code double} type.
              */
-            Double("double",CSupport.C_DOUBLE),
+            Double("double",CLinker.C_DOUBLE),
             /**
              * {@code long double} type.
              */
-            LongDouble("long double", CSupport.C_LONGDOUBLE),
+            LongDouble("long double", CLinker.C_LONGDOUBLE),
             /**
              * {@code float128} type.
              */

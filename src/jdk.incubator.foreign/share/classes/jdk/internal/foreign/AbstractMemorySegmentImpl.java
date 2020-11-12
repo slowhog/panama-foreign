@@ -25,27 +25,22 @@
 
 package jdk.internal.foreign;
 
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemoryLayouts;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.SequenceLayout;
+import jdk.incubator.foreign.*;
 import jdk.internal.access.JavaNioAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.access.foreign.MemorySegmentProxy;
 import jdk.internal.access.foreign.UnmapperProxy;
+import jdk.internal.misc.ScopedMemoryAccess;
 import jdk.internal.misc.Unsafe;
 import jdk.internal.util.ArraysSupport;
 import jdk.internal.vm.annotation.ForceInline;
 import sun.security.action.GetPropertyAction;
 
+import java.io.FileDescriptor;
 import java.lang.invoke.VarHandle;
+import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-import java.util.Random;
-import java.util.Spliterator;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.IntFunction;
@@ -62,6 +57,7 @@ import java.util.function.IntFunction;
 public abstract class AbstractMemorySegmentImpl implements MemorySegment, MemorySegmentProxy {
 
     private static final Unsafe UNSAFE = Unsafe.getUnsafe();
+    private static final ScopedMemoryAccess SCOPED_MEMORY_ACCESS = ScopedMemoryAccess.getScopedMemoryAccess();
 
     private static final boolean enableSmallSegments =
             Boolean.parseBoolean(GetPropertyAction.privilegedGetProperty("jdk.incubator.foreign.SmallSegments", "true"));
@@ -113,20 +109,20 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         return dup(offset, newSize, mask, scope);
     }
 
-    @SuppressWarnings("unchecked")
-    public static <S extends MemorySegment> Spliterator<S> spliterator(S segment, SequenceLayout sequenceLayout) {
-        ((AbstractMemorySegmentImpl)segment).checkValidState();
-        if (sequenceLayout.byteSize() != segment.byteSize()) {
+    @Override
+    public Spliterator<MemorySegment> spliterator(SequenceLayout sequenceLayout) {
+        checkValidState();
+        if (sequenceLayout.byteSize() != byteSize()) {
             throw new IllegalArgumentException();
         }
-        return (Spliterator<S>)new SegmentSplitter(sequenceLayout.elementLayout().byteSize(), sequenceLayout.elementCount().getAsLong(),
-                (AbstractMemorySegmentImpl)segment.withAccessModes(segment.accessModes() & ~CLOSE));
+        return new SegmentSplitter(sequenceLayout.elementLayout().byteSize(), sequenceLayout.elementCount().getAsLong(),
+                withAccessModes(accessModes() & ~CLOSE));
     }
 
     @Override
     public final MemorySegment fill(byte value){
         checkAccess(0, length, false);
-        UNSAFE.setMemory(base(), min(), length, value);
+        SCOPED_MEMORY_ACCESS.setMemory(scope, base(), min(), length, value);
         return this;
     }
 
@@ -135,7 +131,7 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         long size = that.byteSize();
         checkAccess(0, size, false);
         that.checkAccess(0, size, true);
-        UNSAFE.copyMemory(
+        SCOPED_MEMORY_ACCESS.copyMemory(scope, that.scope,
                 that.base(), that.min(),
                 base(), min(), size);
     }
@@ -143,9 +139,9 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
     public void copyFromSwap(MemorySegment src, long elemSize) {
         AbstractMemorySegmentImpl that = (AbstractMemorySegmentImpl)src;
         long size = that.byteSize();
-        checkAccess(0, size, true);
-        that.checkAccess(0, size, false);
-        UNSAFE.copySwapMemory(
+        checkAccess(0, size, false);
+        that.checkAccess(0, size, true);
+        SCOPED_MEMORY_ACCESS.copySwapMemory(scope, that.scope,
                 that.base(), that.min(),
                 base(), min(), size, elemSize);
     }
@@ -162,6 +158,7 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         this.checkAccess(0, length, true);
         that.checkAccess(0, length, true);
         if (this == other) {
+            checkValidState();
             return -1;
         }
 
@@ -170,7 +167,7 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
             if ((byte) BYTE_HANDLE.get(this, 0) != (byte) BYTE_HANDLE.get(that, 0)) {
                 return 0;
             }
-            i = ArraysSupport.vectorizedMismatchLargeForBytes(
+            i = vectorizedMismatchLargeForBytes(scope, that.scope,
                     this.base(), this.min(),
                     that.base(), that.min(),
                     length);
@@ -187,6 +184,38 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
             }
         }
         return thisSize != thatSize ? length : -1;
+    }
+
+    /**
+     * Mismatch over long lengths.
+     */
+    private static long vectorizedMismatchLargeForBytes(MemoryScope aScope, MemoryScope bScope,
+                                                       Object a, long aOffset,
+                                                       Object b, long bOffset,
+                                                       long length) {
+        long off = 0;
+        long remaining = length;
+        int i, size;
+        boolean lastSubRange = false;
+        while (remaining > 7 && !lastSubRange) {
+            if (remaining > Integer.MAX_VALUE) {
+                size = Integer.MAX_VALUE;
+            } else {
+                size = (int) remaining;
+                lastSubRange = true;
+            }
+            i = SCOPED_MEMORY_ACCESS.vectorizedMismatch(aScope, bScope,
+                    a, aOffset + off,
+                    b, bOffset + off,
+                    size, ArraysSupport.LOG2_ARRAY_BYTE_INDEX_SCALE);
+            if (i >= 0)
+                return off + i;
+
+            i = size - ~i;
+            off += i;
+            remaining -= i;
+        }
+        return ~remaining;
     }
 
     @Override
@@ -251,22 +280,14 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         }
     }
 
-    @Override
-    public MemorySegment withOwnerThread(Thread newOwner) {
-        Objects.requireNonNull(newOwner);
+    public MemorySegment handoff(Thread thread) {
+        Objects.requireNonNull(thread);
+        checkValidState();
         if (!isSet(HANDOFF)) {
             throw unsupportedAccessMode(HANDOFF);
         }
-        if (scope.ownerThread() == newOwner) {
-            throw new IllegalArgumentException("Segment already owned by thread: " + newOwner);
-        } else {
-            return dupAndClose(newOwner);
-        }
-    }
-
-    public MemorySegment dupAndClose(Thread newOwner) {
         try {
-            return dup(0L, length, mask, scope.dup(newOwner));
+            return dup(0L, length, mask, scope.confineTo(thread));
         } finally {
             //flush read/writes to segment memory before returning the new segment
             VarHandle.fullFence();
@@ -274,22 +295,57 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
     }
 
     @Override
-    public final void close() {
+    public MemorySegment share() {
+        checkValidState();
+        if (!isSet(SHARE)) {
+            throw unsupportedAccessMode(SHARE);
+        }
+        try {
+            return dup(0L, length, mask, scope.share());
+        } finally {
+            //flush read/writes to segment memory before returning the new segment
+            VarHandle.fullFence();
+        }
+    }
+
+   @Override
+    public MemorySegment handoff(NativeScope scope) {
+        Objects.requireNonNull(scope);
+        checkValidState();
+        if (!isSet(HANDOFF)) {
+            throw unsupportedAccessMode(HANDOFF);
+        }
         if (!isSet(CLOSE)) {
             throw unsupportedAccessMode(CLOSE);
         }
-        closeNoCheck();
+        MemorySegment dup = handoff(scope.ownerThread());
+        ((AbstractNativeScope)scope).register(dup);
+        return dup.withAccessModes(accessModes() & (READ | WRITE));
     }
 
-    private final void closeNoCheck() {
+
+    @Override
+    public MemorySegment registerCleaner(Cleaner cleaner) {
+        Objects.requireNonNull(cleaner);
+        checkValidState();
+        if (!isSet(CLOSE)) {
+            throw unsupportedAccessMode(CLOSE);
+        }
+        return dup(0L, length, mask, scope.cleanable(cleaner));
+    }
+
+    @Override
+    public final void close() {
+        checkValidState();
+        if (!isSet(CLOSE)) {
+            throw unsupportedAccessMode(CLOSE);
+        }
         scope.close();
     }
 
-    final AbstractMemorySegmentImpl acquire() {
-        if (Thread.currentThread() != ownerThread() && !isSet(ACQUIRE)) {
-            throw unsupportedAccessMode(ACQUIRE);
-        }
-        return dup(0, length, mask, scope.acquire());
+    @Override
+    public Optional<FileDescriptor> fileDescriptor() {
+        return Optional.empty();
     }
 
     @Override
@@ -342,13 +398,25 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
 
     @Override
     public void checkAccess(long offset, long length, boolean readOnly) {
-        scope.checkValidState();
         if (!readOnly && !isSet(WRITE)) {
             throw unsupportedAccessMode(WRITE);
         } else if (readOnly && !isSet(READ)) {
             throw unsupportedAccessMode(READ);
         }
         checkBounds(offset, length);
+    }
+
+    private void checkAccessAndScope(long offset, long length, boolean readOnly) {
+        checkValidState();
+        checkAccess(offset, length, readOnly);
+    }
+
+    private void checkValidState() {
+        try {
+            scope.checkValidState();
+        } catch (ScopedMemoryAccess.Scope.ScopedAccessError ex) {
+            throw new IllegalStateException("This segment is already closed");
+        }
     }
 
     @Override
@@ -359,11 +427,6 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
     @Override
     public Object unsafeGetBase() {
         return base();
-    }
-
-    @Override
-    public final void checkValidState() {
-        scope.checkValidState();
     }
 
     // Helper methods
@@ -395,6 +458,11 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         }
     }
 
+    @Override
+    public MemoryScope scope() {
+        return scope;
+    }
+
     private void checkBoundsSmall(int offset, int length) {
         if (length < 0 ||
                 offset < 0 ||
@@ -419,8 +487,8 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         if ((mode & CLOSE) != 0) {
             modes.add("CLOSE");
         }
-        if ((mode & ACQUIRE) != 0) {
-            modes.add("ACQUIRE");
+        if ((mode & SHARE) != 0) {
+            modes.add("SHARE");
         }
         if ((mode & HANDOFF) != 0) {
             modes.add("HANDOFF");
@@ -470,11 +538,10 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         public boolean tryAdvance(Consumer<? super MemorySegment> action) {
             Objects.requireNonNull(action);
             if (currentIndex < elemCount) {
-                AbstractMemorySegmentImpl acquired = segment.acquire();
+                AbstractMemorySegmentImpl acquired = segment;
                 try {
                     action.accept(acquired.asSliceNoCheck(currentIndex * elementSize, elementSize));
                 } finally {
-                    acquired.closeNoCheck();
                     currentIndex++;
                     if (currentIndex == elemCount) {
                         segment = null;
@@ -490,7 +557,7 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
         public void forEachRemaining(Consumer<? super MemorySegment> action) {
             Objects.requireNonNull(action);
             if (currentIndex < elemCount) {
-                AbstractMemorySegmentImpl acquired = segment.acquire();
+                AbstractMemorySegmentImpl acquired = segment;
                 try {
                     if (acquired.isSmall()) {
                         int index = (int) currentIndex;
@@ -505,7 +572,6 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
                         }
                     }
                 } finally {
-                    acquired.closeNoCheck();
                     currentIndex = elemCount;
                     segment = null;
                 }
@@ -546,7 +612,7 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
             bufferScope = bufferSegment.scope;
             modes = bufferSegment.mask;
         } else {
-            bufferScope = MemoryScope.create(bb, null);
+            bufferScope = MemoryScope.createConfined(bb, MemoryScope.DUMMY_CLEANUP_ACTION, null);
             modes = defaultAccessModes(size);
         }
         if (bb.isReadOnly()) {
@@ -560,29 +626,4 @@ public abstract class AbstractMemorySegmentImpl implements MemorySegment, Memory
             return new MappedMemorySegmentImpl(bbAddress + pos, unmapper, size, modes, bufferScope);
         }
     }
-
-    public static final AbstractMemorySegmentImpl NOTHING = new AbstractMemorySegmentImpl(
-        0, 0, MemoryScope.createUnchecked(null, null, null)
-    ) {
-        @Override
-        ByteBuffer makeByteBuffer() {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        long min() {
-            return 0;
-        }
-
-        @Override
-        Object base() {
-            return null;
-        }
-
-        @Override
-        AbstractMemorySegmentImpl dup(long offset, long size, int mask, MemoryScope scope) {
-            throw new UnsupportedOperationException();
-        }
-    };
-
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
  *  DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  *  This code is free software; you can redistribute it and/or modify it
@@ -24,9 +24,11 @@
 
 /*
  * @test
+ * @modules jdk.incubator.foreign/jdk.internal.foreign
  * @run testng/othervm -Dforeign.restricted=permit TestNative
  */
 
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
@@ -140,8 +142,13 @@ public class TestNative {
 
     public static native long getCapacity(Buffer buffer);
 
-    public static native long allocate(int size);
-    public static native void free(long address);
+    public static MemoryAddress allocate(int size) {
+        return CLinker.allocateMemoryRestricted(size);
+    }
+
+    public static void free(MemoryAddress addr) {
+        CLinker.freeMemoryRestricted(addr);
+    }
 
     @Test(dataProvider="nativeAccessOps")
     public void testNativeAccess(Consumer<MemorySegment> checker, Consumer<MemorySegment> initializer, SequenceLayout seq) {
@@ -165,9 +172,8 @@ public class TestNative {
 
     @Test
     public void testDefaultAccessModes() {
-        MemoryAddress addr = MemoryAddress.ofLong(allocate(12));
-        MemorySegment mallocSegment = MemorySegment.ofNativeRestricted(addr, 12, null,
-                () -> free(addr.toRawLongValue()), null);
+        MemoryAddress addr = allocate(12);
+        MemorySegment mallocSegment = addr.asSegmentRestricted(12, () -> free(addr), null);
         try (MemorySegment segment = mallocSegment) {
             assertTrue(segment.hasAccessModes(ALL_ACCESS));
             assertEquals(segment.accessModes(), ALL_ACCESS);
@@ -183,9 +189,8 @@ public class TestNative {
 
     @Test
     public void testMallocSegment() {
-        MemoryAddress addr = MemoryAddress.ofLong(allocate(12));
-        MemorySegment mallocSegment = MemorySegment.ofNativeRestricted(addr, 12, null,
-                () -> free(addr.toRawLongValue()), null);
+        MemoryAddress addr = allocate(12);
+        MemorySegment mallocSegment = addr.asSegmentRestricted(12, () -> free(addr), null);
         assertEquals(mallocSegment.byteSize(), 12);
         mallocSegment.close(); //free here
         assertTrue(!mallocSegment.isAlive());
@@ -193,23 +198,18 @@ public class TestNative {
 
     @Test
     public void testEverythingSegment() {
-        MemoryAddress addr = MemoryAddress.ofLong(allocate(4));
+        MemoryAddress addr = allocate(4);
         MemorySegment everything = MemorySegment.ofNativeRestricted();
         MemoryAccess.setIntAtOffset(everything, addr.toRawLongValue(), 42);
         assertEquals(MemoryAccess.getIntAtOffset(everything, addr.toRawLongValue()), 42);
-        free(addr.toRawLongValue());
+        free(addr);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class)
     public void testBadResize() {
         try (MemorySegment segment = MemorySegment.allocateNative(4)) {
-            MemorySegment.ofNativeRestricted(segment.address(), 0, null, null, null);
+            segment.address().asSegmentRestricted(0);
         }
-    }
-
-    @Test(expectedExceptions = NullPointerException.class)
-    public void testNullUnsafeSegment() {
-        MemorySegment.ofNativeRestricted(null, 10, null, null, null);
     }
 
     static {

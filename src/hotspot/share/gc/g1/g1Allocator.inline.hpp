@@ -105,11 +105,7 @@ inline HeapWord* G1PLABAllocator::plab_allocate(G1HeapRegionAttr dest,
                                                 size_t word_sz,
                                                 uint node_index) {
   PLAB* buffer = alloc_buffer(dest, node_index);
-  if (_survivor_alignment_bytes == 0 || !dest.is_young()) {
-    return buffer->allocate(word_sz);
-  } else {
-    return buffer->allocate_aligned(word_sz, _survivor_alignment_bytes);
-  }
+  return buffer->allocate(word_sz);
 }
 
 inline HeapWord* G1PLABAllocator::allocate(G1HeapRegionAttr dest,
@@ -130,9 +126,7 @@ inline void G1ArchiveAllocator::enable_archive_object_check() {
   }
 
   _archive_check_enabled = true;
-  size_t length = G1CollectedHeap::heap()->max_reserved_capacity();
-  _archive_region_map.initialize(G1CollectedHeap::heap()->base(),
-                                 G1CollectedHeap::heap()->base() + length,
+  _archive_region_map.initialize(G1CollectedHeap::heap()->reserved(),
                                  HeapRegion::GrainBytes);
 }
 

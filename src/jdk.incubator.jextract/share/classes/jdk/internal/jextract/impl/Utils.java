@@ -54,6 +54,10 @@ import java.util.stream.Stream;
  * General utility functions
  */
 class Utils {
+    public static String qualifiedClassName(String packageName, String simpleName) {
+        return (packageName.isEmpty() ? "" : packageName + ".") + simpleName;
+    }
+
     private static URI fileName(String pkgName, String clsName, String extension) {
         String pkgPrefix = pkgName.isEmpty() ? "" : pkgName.replaceAll("\\.", "/") + "/";
         return URI.create(pkgPrefix + clsName + extension);
@@ -199,26 +203,6 @@ class Utils {
     static Stream<Cursor> flattenableChildren(Cursor c) {
         return c.children()
                 .filter(cx -> cx.isAnonymousStruct() || cx.kind() == CursorKind.FieldDecl);
-    }
-
-    static Optional<Cursor> lastChild(Cursor c) {
-        List<Cursor> children = flattenableChildren(c)
-                .collect(Collectors.toList());
-        return children.isEmpty() ? Optional.empty() : Optional.of(children.get(children.size() - 1));
-    }
-
-    static boolean hasIncompleteArray(Cursor c) {
-        switch (c.kind()) {
-            case FieldDecl:
-                return c.type().kind() == TypeKind.IncompleteArray;
-            case UnionDecl:
-                return flattenableChildren(c)
-                        .anyMatch(Utils::hasIncompleteArray);
-            case StructDecl:
-                return lastChild(c).map(Utils::hasIncompleteArray).orElse(false);
-            default:
-                throw new IllegalStateException("Unhandled cursor kind: " + c.kind());
-        }
     }
 
     // return builtin Record types accessible from the given Type

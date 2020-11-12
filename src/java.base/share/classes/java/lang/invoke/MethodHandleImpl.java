@@ -696,7 +696,7 @@ abstract class MethodHandleImpl {
 
     // Intrinsified by C2. Counters are used during parsing to calculate branch frequencies.
     @Hidden
-    @jdk.internal.HotSpotIntrinsicCandidate
+    @jdk.internal.vm.annotation.IntrinsicCandidate
     static boolean profileBoolean(boolean result, int[] counters) {
         // Profile is int[2] where [0] and [1] correspond to false and true occurrences respectively.
         int idx = result ? 1 : 0;
@@ -711,7 +711,7 @@ abstract class MethodHandleImpl {
 
     // Intrinsified by C2. Returns true if obj is a compile-time constant.
     @Hidden
-    @jdk.internal.HotSpotIntrinsicCandidate
+    @jdk.internal.vm.annotation.IntrinsicCandidate
     static boolean isCompileConstant(Object obj) {
         return false;
     }
@@ -1765,41 +1765,8 @@ abstract class MethodHandleImpl {
             }
 
             @Override
-            public byte[] generateDirectMethodHandleHolderClassBytes(
-                    String className, MethodType[] methodTypes, int[] types) {
-                return GenerateJLIClassesHelper
-                        .generateDirectMethodHandleHolderClassBytes(
-                                className, methodTypes, types);
-            }
-
-            @Override
-            public byte[] generateDelegatingMethodHandleHolderClassBytes(
-                    String className, MethodType[] methodTypes) {
-                return GenerateJLIClassesHelper
-                        .generateDelegatingMethodHandleHolderClassBytes(
-                                className, methodTypes);
-            }
-
-            @Override
-            public Map.Entry<String, byte[]> generateConcreteBMHClassBytes(
-                    final String types) {
-                return GenerateJLIClassesHelper
-                        .generateConcreteBMHClassBytes(types);
-            }
-
-            @Override
-            public byte[] generateBasicFormsClassBytes(final String className) {
-                return GenerateJLIClassesHelper
-                        .generateBasicFormsClassBytes(className);
-            }
-
-            @Override
-            public byte[] generateInvokersHolderClassBytes(final String className,
-                    MethodType[] invokerMethodTypes,
-                    MethodType[] callSiteMethodTypes) {
-                return GenerateJLIClassesHelper
-                        .generateInvokersHolderClassBytes(className,
-                                invokerMethodTypes, callSiteMethodTypes);
+            public Map<String, byte[]> generateHolderClasses(Stream<String> traces) {
+                return GenerateJLIClassesHelper.generateHolderClasses(traces);
             }
 
             @Override

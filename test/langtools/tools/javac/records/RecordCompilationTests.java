@@ -26,7 +26,8 @@
 /**
  * RecordCompilationTests
  *
- * @test 8250629
+ * @test
+ * @bug 8250629 8252307 8247352 8241151 8246774
  * @summary Negative compilation tests, and positive compilation (smoke) tests for records
  * @library /lib/combo /tools/lib /tools/javac/lib
  * @modules
@@ -35,9 +36,8 @@
  *      jdk.compiler/com.sun.tools.javac.util
  *      jdk.jdeps/com.sun.tools.classfile
  * @build JavacTestingAbstractProcessor
- * @compile --enable-preview -source ${jdk.version} RecordCompilationTests.java
- * @run testng/othervm -DuseAP=false --enable-preview RecordCompilationTests
- * @run testng/othervm -DuseAP=true --enable-preview RecordCompilationTests
+ * @run testng/othervm -DuseAP=false RecordCompilationTests
+ * @run testng/othervm -DuseAP=true RecordCompilationTests
  */
 
 import java.io.File;
@@ -119,17 +119,7 @@ import static org.testng.Assert.assertEquals;
 
 @Test
 public class RecordCompilationTests extends CompilationTestCase {
-    // @@@ When records become a permanent feature, we don't need these any more
-    private static String[] PREVIEW_OPTIONS = {
-            "--enable-preview",
-            "-source", Integer.toString(Runtime.version().feature())
-    };
-
-    private static String[] PREVIEW_OPTIONS_WITH_AP = {
-            "--enable-preview",
-            "-source", Integer.toString(Runtime.version().feature()),
-            "-processor", SimplestAP.class.getName()
-    };
+    private static String[] OPTIONS_WITH_AP = {"-processor", SimplestAP.class.getName()};
 
     private static final List<String> BAD_COMPONENT_NAMES = List.of(
             "clone", "finalize", "getClass", "hashCode",
@@ -145,16 +135,20 @@ public class RecordCompilationTests extends CompilationTestCase {
         }
     }
 
+    boolean useAP;
+
     public RecordCompilationTests() {
-        boolean useAP = System.getProperty("useAP") == null ? false : System.getProperty("useAP").equals("true");
+        useAP = System.getProperty("useAP", "false").equals("true");
         setDefaultFilename("R.java");
-        setCompileOptions(useAP ? PREVIEW_OPTIONS_WITH_AP : PREVIEW_OPTIONS);
+        if (useAP) {
+            setCompileOptions(OPTIONS_WITH_AP);
+        }
         System.out.println(useAP ? "running all tests using an annotation processor" : "running all tests without annotation processor");
     }
 
     public void testMalformedDeclarations() {
         assertFail("compiler.err.premature.eof", "record R()");
-        assertFail("compiler.err.premature.eof", "record R();");
+        assertFail("compiler.err.expected", "record R();");
         assertFail("compiler.err.illegal.start.of.type", "record R(,) { }");
         assertFail("compiler.err.illegal.start.of.type", "record R((int x)) { }");
         assertFail("compiler.err.record.header.expected", "record R { }");
@@ -393,6 +387,9 @@ public class RecordCompilationTests extends CompilationTestCase {
         // first invocation should be one to the canonical
         assertFail("compiler.err.first.statement.must.be.call.to.another.constructor",
                 "record R(int x, int y) { public R(int y, int x, int z) { this.x = this.y = 0; } }");
+
+        assertFail("compiler.err.first.statement.must.be.call.to.another.constructor",
+                "record R(int x, int y) { public R(int y, int x, int z) { super(); this.x = this.y = 0; } }");
 
         assertOK("record R(int x, int y) { " +
                  "    public R(int x, int y, int z) { this(x, y); } " +
@@ -1005,7 +1002,7 @@ public class RecordCompilationTests extends CompilationTestCase {
         String[] previousOptions = getCompileOptions();
         String[] testOptions = {/* no options */};
         setCompileOptions(testOptions);
-        assertOKWithWarning("compiler.warn.restricted.type.not.allowed.preview",
+        assertFail("compiler.err.illegal.start.of.type",
                 "class R {\n" +
                 "    record RR(int i) {\n" +
                 "        return null;\n" +
@@ -1042,6 +1039,12 @@ public class RecordCompilationTests extends CompilationTestCase {
                 "ElementType.TYPE_USE,ElementType.FIELD,ElementType.PARAMETER",
                 "ElementType.TYPE_USE,ElementType.FIELD,ElementType.RECORD_COMPONENT",
                 "ElementType.FIELD,ElementType.TYPE_USE",
+                "ElementType.FIELD,ElementType.CONSTRUCTOR",
+                "ElementType.FIELD,ElementType.LOCAL_VARIABLE",
+                "ElementType.FIELD,ElementType.ANNOTATION_TYPE",
+                "ElementType.FIELD,ElementType.PACKAGE",
+                "ElementType.FIELD,ElementType.TYPE_PARAMETER",
+                "ElementType.FIELD,ElementType.MODULE",
                 "ElementType.METHOD,ElementType.TYPE_USE",
                 "ElementType.PARAMETER,ElementType.TYPE_USE",
                 "ElementType.RECORD_COMPONENT,ElementType.TYPE_USE",
@@ -1051,8 +1054,6 @@ public class RecordCompilationTests extends CompilationTestCase {
         );
 
         String[] generalOptions = {
-                "--enable-preview",
-                "-source", Integer.toString(Runtime.version().feature()),
                 "-processor", Processor.class.getName(),
                 "-Atargets="
         };
@@ -1073,7 +1074,7 @@ public class RecordCompilationTests extends CompilationTestCase {
             /* if FIELD is one of the targets then there must be a declaration annotation applied to the field, apart from
              * the type annotation
              */
-            if (target.contains("FIELD")) {
+            if (target.contains("ElementType.FIELD")) {
                 checkAnno(classFile,
                         (RuntimeAnnotations_attribute)findAttributeOrFail(
                                 field.attributes,
@@ -1084,7 +1085,7 @@ public class RecordCompilationTests extends CompilationTestCase {
             }
 
             // lets check now for the type annotation
-            if (target.contains("TYPE_USE")) {
+            if (target.contains("ElementType.TYPE_USE")) {
                 checkTypeAnno(
                         classFile,
                         (RuntimeVisibleTypeAnnotations_attribute)findAttributeOrFail(field.attributes, RuntimeVisibleTypeAnnotations_attribute.class),
@@ -1099,7 +1100,7 @@ public class RecordCompilationTests extends CompilationTestCase {
             /* if PARAMETER is one of the targets then there must be a declaration annotation applied to the parameter, apart from
              * the type annotation
              */
-            if (target.contains("PARAMETER")) {
+            if (target.contains("ElementType.PARAMETER")) {
                 checkParameterAnno(classFile,
                         (RuntimeVisibleParameterAnnotations_attribute)findAttributeOrFail(
                                 init.attributes,
@@ -1109,7 +1110,7 @@ public class RecordCompilationTests extends CompilationTestCase {
                 assertAttributeNotPresent(init.attributes, RuntimeVisibleAnnotations_attribute.class);
             }
             // let's check now for the type annotation
-            if (target.contains("TYPE_USE")) {
+            if (target.contains("ElementType.TYPE_USE")) {
                 checkTypeAnno(
                         classFile,
                         (RuntimeVisibleTypeAnnotations_attribute) findAttributeOrFail(init.attributes, RuntimeVisibleTypeAnnotations_attribute.class),
@@ -1123,7 +1124,7 @@ public class RecordCompilationTests extends CompilationTestCase {
             /* if METHOD is one of the targets then there must be a declaration annotation applied to the accessor, apart from
              * the type annotation
              */
-            if (target.contains("METHOD")) {
+            if (target.contains("ElementType.METHOD")) {
                 checkAnno(classFile,
                         (RuntimeAnnotations_attribute)findAttributeOrFail(
                                 accessor.attributes,
@@ -1133,7 +1134,7 @@ public class RecordCompilationTests extends CompilationTestCase {
                 assertAttributeNotPresent(accessor.attributes, RuntimeVisibleAnnotations_attribute.class);
             }
             // let's check now for the type annotation
-            if (target.contains("TYPE_USE")) {
+            if (target.contains("ElementType.TYPE_USE")) {
                 checkTypeAnno(
                         classFile,
                         (RuntimeVisibleTypeAnnotations_attribute)findAttributeOrFail(accessor.attributes, RuntimeVisibleTypeAnnotations_attribute.class),
@@ -1148,7 +1149,7 @@ public class RecordCompilationTests extends CompilationTestCase {
             /* if RECORD_COMPONENT is one of the targets then there must be a declaration annotation applied to the
              * field, apart from the type annotation
              */
-            if (target.contains("RECORD_COMPONENT")) {
+            if (target.contains("ElementType.RECORD_COMPONENT")) {
                 checkAnno(classFile,
                         (RuntimeAnnotations_attribute)findAttributeOrFail(
                                 record.component_info_arr[0].attributes,
@@ -1158,7 +1159,7 @@ public class RecordCompilationTests extends CompilationTestCase {
                 assertAttributeNotPresent(record.component_info_arr[0].attributes, RuntimeVisibleAnnotations_attribute.class);
             }
             // lets check now for the type annotation
-            if (target.contains("TYPE_USE")) {
+            if (target.contains("ElementType.TYPE_USE")) {
                 checkTypeAnno(
                         classFile,
                         (RuntimeVisibleTypeAnnotations_attribute)findAttributeOrFail(
@@ -1294,7 +1295,6 @@ public class RecordCompilationTests extends CompilationTestCase {
                         throw new AssertionError("unexpected element kind");
                 }
             }
-            Assert.check(targetSet.isEmpty(), targetSet.toString());
         }
 
         private void checkTypeAnnotations(Element rootElement) {
@@ -1653,6 +1653,57 @@ public class RecordCompilationTests extends CompilationTestCase {
         assertFail("compiler.err.record.component.and.old.array.syntax",
                 """
                 record R<T>(T t[]) {}
+                """
+        );
+    }
+
+    public void testNoWarningForSerializableRecords() {
+        if (!useAP) {
+            /* dont execute this test when the default annotation processor is on as it will fail due to
+             * spurious warnings
+             */
+            appendCompileOptions("-Werror", "-Xlint:serial");
+            assertOK(
+                    """
+                    import java.io.*;
+                    record R() implements java.io.Serializable {}
+                    """
+            );
+            removeLastCompileOptions(2);
+        }
+    }
+
+    public void testAnnotationsOnVarargsRecComp() {
+        assertOK(
+                """
+                import java.lang.annotation.*;
+
+                @Target({ElementType.TYPE_USE})
+                @interface Simple {}
+
+                record R(@Simple int... val) {
+                    static void test() {
+                        R rec = new R(10, 20);
+                    }
+                }
+                """
+        );
+        assertOK(
+                """
+                import java.lang.annotation.*;
+
+                @Target({ElementType.TYPE_USE})
+                @interface SimpleContainer{ Simple[] value(); }
+
+                @Repeatable(SimpleContainer.class)
+                @Target({ElementType.TYPE_USE})
+                @interface Simple {}
+
+                record R(@Simple int... val) {
+                    static void test() {
+                        R rec = new R(10, 20);
+                    }
+                }
                 """
         );
     }

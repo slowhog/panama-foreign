@@ -30,7 +30,6 @@ import jdk.incubator.jextract.Type;
 import jdk.incubator.jextract.Type.Primitive;
 
 import javax.tools.JavaFileObject;
-import javax.tools.SimpleJavaFileObject;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.lang.constant.ClassDesc;
@@ -54,15 +53,17 @@ import java.util.stream.Collectors;
  * particular Tree is processed or skipped.
  */
 public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
+    // internal symbol used by clang for "va_list"
+    private static final String VA_LIST_TAG = "__va_list_tag";
     private final Set<String> constants = new HashSet<>();
     // To detect duplicate Variable and Function declarations.
-    private final Set<Declaration.Variable> variables = new HashSet<>();
+    private final Set<String> variables = new HashSet<>();
     private final Set<Declaration.Function> functions = new HashSet<>();
 
-    protected final HeaderBuilder toplevelBuilder;
+    protected final ToplevelBuilder toplevelBuilder;
     protected JavaSourceBuilder currentBuilder;
-    protected final ConstantHelper constantHelper;
     protected final TypeTranslator typeTranslator = new TypeTranslator();
+    protected final AnnotationWriter annotationWriter;
     private final String pkgName;
     private final Map<Declaration, String> structClassNames = new HashMap<>();
     private final Set<Declaration.Typedef> unresolvedStructTypedefs = new HashSet<>();
@@ -81,7 +82,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
 
     // have we seen this Variable earlier?
     protected boolean variableSeen(Declaration.Variable tree) {
-        return !variables.add(tree);
+        return !variables.add(tree.name());
     }
 
     // have we seen this Function earlier?
@@ -89,39 +90,26 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         return !functions.add(tree);
     }
 
-    public static JavaFileObject[] generateWrapped(Declaration.Scoped decl, String headerName, String pkgName, List<String> libraryNames) {
+    public static JavaFileObject[] generateWrapped(Declaration.Scoped decl, String headerName, boolean source,
+                String pkgName, List<String> libraryNames) {
         String clsName = Utils.javaSafeIdentifier(headerName.replace(".h", "_h"), true);
-        String qualName = pkgName.isEmpty() ? clsName : pkgName + "." + clsName;
-        ConstantHelper constantHelper = new ConstantHelper(qualName,
-                ClassDesc.of(pkgName, "RuntimeHelper"), ClassDesc.of("jdk.incubator.foreign", "CSupport"),
+        ConstantHelper constantHelper = ConstantHelper.make(source, pkgName, clsName,
+                ClassDesc.of(pkgName, "RuntimeHelper"), ClassDesc.of("jdk.incubator.foreign", "CLinker"),
                 libraryNames.toArray(String[]::new));
-        return new OutputFactory(pkgName,
-                new HeaderBuilder(clsName, pkgName, constantHelper), constantHelper).generate(decl);
+        AnnotationWriter annotationWriter = new AnnotationWriter();
+        ToplevelBuilder toplevelBuilder = new ToplevelBuilder(clsName, pkgName, constantHelper, annotationWriter);
+        return new OutputFactory(pkgName, toplevelBuilder, annotationWriter).generate(decl);
     }
 
-    private OutputFactory(String pkgName, HeaderBuilder toplevelBuilder, ConstantHelper constantHelper) {
+    private OutputFactory(String pkgName, ToplevelBuilder toplevelBuilder,
+                          AnnotationWriter annotationWriter) {
         this.pkgName = pkgName;
         this.toplevelBuilder = toplevelBuilder;
         this.currentBuilder = toplevelBuilder;
-        this.constantHelper = constantHelper;
+        this.annotationWriter = annotationWriter;
     }
 
-    private static String getCLangConstantsHolder() {
-        String prefix = "jdk.incubator.foreign.CSupport.";
-        String abi = CSupport.getSystemLinker().name();
-        switch (abi) {
-            case CSupport.SysV.NAME:
-                return prefix + "SysV";
-            case CSupport.Win64.NAME:
-                return prefix + "Win64";
-            case CSupport.AArch64.NAME:
-                return prefix + "AArch64";
-            default:
-                throw new UnsupportedOperationException("Unsupported ABI: " + abi);
-        }
-    }
-
-    static final String C_LANG_CONSTANTS_HOLDER = getCLangConstantsHolder();
+    static final String C_LANG_CONSTANTS_HOLDER = "jdk.incubator.foreign.CLinker";
 
     JavaFileObject[] generate(Declaration.Scoped decl) {
         toplevelBuilder.classBegin();
@@ -129,17 +117,16 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         decl.members().forEach(this::generateDecl);
         // check if unresolved typedefs can be resolved now!
         for (Declaration.Typedef td : unresolvedStructTypedefs) {
-            Declaration.Scoped structDef = ((Type.Declared)td.type()).tree();
-            if (structDefinitionSeen(structDef)) {
-                toplevelBuilder.emitTypedef(td.name(), structDefinitionName(structDef));
-            }
+            Declaration.Scoped structDef = ((Type.Declared) td.type()).tree();
+            toplevelBuilder.addTypeDef(td.name(),
+                    structDefinitionSeen(structDef) ? structDefinitionName(structDef) : null, td.type());
         }
         toplevelBuilder.classEnd();
         try {
             List<JavaFileObject> files = new ArrayList<>();
-            files.add(toplevelBuilder.build());
-            files.addAll(constantHelper.getClasses());
-            files.add(fileFromString(pkgName,"RuntimeHelper", getRuntimeHelperSource()));
+            files.addAll(toplevelBuilder.build());
+            files.add(jfoFromString(pkgName,"RuntimeHelper", getRuntimeHelperSource()));
+            files.add(jfoFromString(pkgName,"C", getCAnnotationSource()));
             return files.toArray(new JavaFileObject[0]);
         } catch (IOException ex) {
             throw new UncheckedIOException(ex);
@@ -153,6 +140,12 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         return (pkgName.isEmpty()? "" : "package " + pkgName + ";\n") +
                         String.join("\n", Files.readAllLines(Paths.get(runtimeHelper.toURI())))
                                 .replace("${C_LANG}", C_LANG_CONSTANTS_HOLDER);
+    }
+
+    private String getCAnnotationSource() throws URISyntaxException, IOException {
+        URL cAnnotation = OutputFactory.class.getResource("resources/C.java.template");
+        return (pkgName.isEmpty()? "" : "package " + pkgName + ";\n") +
+                String.join("\n", Files.readAllLines(Paths.get(cAnnotation.toURI())));
     }
 
     private void generateDecl(Declaration tree) {
@@ -172,14 +165,9 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         return TypeTranslator.layoutToClass(isFloat, layout);
     }
 
-    private JavaFileObject fileFromString(String pkgName, String clsName, String contents) {
+    private JavaFileObject jfoFromString(String pkgName, String clsName, String contents) {
         String pkgPrefix = pkgName.isEmpty() ? "" : pkgName.replaceAll("\\.", "/") + "/";
-        return new SimpleJavaFileObject(URI.create(pkgPrefix + clsName + ".java"), JavaFileObject.Kind.SOURCE) {
-            @Override
-            public CharSequence getCharContent(boolean ignoreEncodingErrors) throws IOException {
-                return contents;
-            }
-        };
+        return InMemoryJavaCompiler.jfoFromString(URI.create(pkgPrefix + clsName + ".java"), contents);
     }
 
     @Override
@@ -189,9 +177,10 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             return null;
         }
 
-        toplevelBuilder.addConstantGetter(Utils.javaSafeIdentifier(constant.name()),
+        String anno = annotationWriter.getCAnnotation(constant.type());
+        header().addConstantGetter(Utils.javaSafeIdentifier(constant.name()),
                 constant.value() instanceof String ? MemorySegment.class :
-                typeTranslator.getJavaType(constant.type()), constant.value());
+                typeTranslator.getJavaType(constant.type()), constant.value(), anno);
         return null;
     }
 
@@ -209,11 +198,11 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                 case UNION: {
                     structClass = true;
                     String className = d.name().isEmpty() ? parent.name() : d.name();
-                    currentBuilder = new StructBuilder(currentBuilder, className, pkgName, constantHelper);
+                    GroupLayout parentLayout = (GroupLayout)parentLayout(d);
+                    currentBuilder = currentBuilder.newStructBuilder(className, parentLayout, Type.declared(d));
                     addStructDefinition(d, currentBuilder.className);
-                    currentBuilder.incrAlign();
                     currentBuilder.classBegin();
-                    currentBuilder.addLayoutGetter(className, d.layout().get());
+                    currentBuilder.addLayoutGetter(((StructBuilder)currentBuilder).layoutField(), d.layout().get());
                     break;
                 }
             }
@@ -221,9 +210,42 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         d.members().forEach(fieldTree -> fieldTree.accept(this, d));
         if (structClass) {
             currentBuilder = currentBuilder.classEnd();
-            currentBuilder.decrAlign();
         }
         return null;
+    }
+
+    private static final boolean isVaList(FunctionDescriptor desc) {
+        List<MemoryLayout> argLayouts = desc.argumentLayouts();
+        int size = argLayouts.size();
+        if (size > 0) {
+            MemoryLayout lastLayout = argLayouts.get(size - 1);
+            if (lastLayout instanceof SequenceLayout) {
+                SequenceLayout seq = (SequenceLayout)lastLayout;
+                MemoryLayout elem = seq.elementLayout();
+                // FIXME: hack for now to use internal symbol used by clang for va_list
+                return elem.name().orElse("").equals(VA_LIST_TAG);
+            }
+        }
+
+        return false;
+    }
+
+    private static boolean isLongDouble(MemoryLayout layout) {
+        return CLinker.C_LONGDOUBLE.bitSize() == 128
+            && CLinker.C_LONGDOUBLE.equals(layout);
+    }
+
+    private static boolean usesLongDouble(FunctionDescriptor desc) {
+        if (isLongDouble(desc.returnLayout().orElse(null))) {
+            return true;
+        }
+
+        for (MemoryLayout argLayout : desc.argumentLayouts()) {
+            if (isLongDouble(argLayout)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -238,16 +260,39 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             //abort
             return null;
         }
+
+        if (usesLongDouble(descriptor)) {
+            warn("skipping " + funcTree.name() + " because of long double usage");
+            return null;
+        }
+
+        if (isVaList(descriptor)) {
+            MemoryLayout[] argLayouts = descriptor.argumentLayouts().toArray(new MemoryLayout[0]);
+            argLayouts[argLayouts.length - 1] = CLinker.C_VA_LIST;
+            descriptor = descriptor.returnLayout().isEmpty()?
+                    FunctionDescriptor.ofVoid(argLayouts) :
+                    FunctionDescriptor.of(descriptor.returnLayout().get(), argLayouts);
+            Class<?>[] argTypes = mtype.parameterArray();
+            argTypes[argLayouts.length - 1] = MemoryAddress.class;
+            mtype = MethodType.methodType(mtype.returnType(), argTypes);
+        }
+
         String mhName = Utils.javaSafeIdentifier(funcTree.name());
-        toplevelBuilder.addMethodHandleGetter(mhName, funcTree.name(), mtype, descriptor, funcTree.type().varargs());
+        header().addMethodHandleGetter(mhName, funcTree.name(), mtype, descriptor, funcTree.type().varargs());
         //generate static wrapper for function
         List<String> paramNames = funcTree.parameters()
                                           .stream()
                                           .map(Declaration.Variable::name)
                                           .map(p -> !p.isEmpty() ? Utils.javaSafeIdentifier(p) : p)
                                           .collect(Collectors.toList());
-        toplevelBuilder.addStaticFunctionWrapper(Utils.javaSafeIdentifier(funcTree.name()), funcTree.name(), mtype,
-                Type.descriptorFor(funcTree.type()).orElseThrow(), funcTree.type().varargs(), paramNames);
+        List<String> annos = funcTree.parameters()
+                .stream()
+                .map(Declaration.Variable::type)
+                .map(annotationWriter::getCAnnotation)
+                .collect(Collectors.toList());
+        String returnAnno = annotationWriter.getCAnnotation(funcTree.type().returnType());
+        header().addStaticFunctionWrapper(Utils.javaSafeIdentifier(funcTree.name()), funcTree.name(), mtype,
+                Type.descriptorFor(funcTree.type()).orElseThrow(), funcTree.type().varargs(), paramNames, annos, returnAnno);
         int i = 0;
         for (Declaration.Variable param : funcTree.parameters()) {
             Type.Function f = getAsFunctionPointer(param.type());
@@ -256,10 +301,11 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                 name = Utils.javaSafeIdentifier(name);
                 //generate functional interface
                 if (f.varargs()) {
-                    System.err.println("WARNING: varargs in callbacks is not supported");
+                    warn("varargs in callbacks is not supported");
                 }
                 MethodType fitype = typeTranslator.getMethodType(f, false);
-                toplevelBuilder.addFunctionalInterface(name, fitype, Type.descriptorFor(f).orElseThrow());
+                toplevelBuilder.addFunctionalInterface(name, fitype,
+                        Type.descriptorFor(f).orElseThrow(), param.type());
                 i++;
             }
         }
@@ -306,7 +352,7 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                              * };
                              */
                             if (structDefinitionSeen(s)) {
-                                toplevelBuilder.emitTypedef(tree.name(), structDefinitionName(s));
+                                toplevelBuilder.addTypeDef(tree.name(), structDefinitionName(s), tree.type());
                             } else {
                                 /*
                                  * Definition of typedef'ed struct/union not seen yet. May be the definition comes later.
@@ -322,7 +368,8 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
                 }
             }
         } else if (type instanceof Type.Primitive) {
-             toplevelBuilder.emitPrimitiveTypedef((Type.Primitive)type, tree.name());
+             String anno = annotationWriter.getCAnnotation(type);
+             header().emitPrimitiveTypedef((Type.Primitive)type, tree.name(), anno);
         }
         return null;
     }
@@ -349,7 +396,12 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             //no layout - abort
             return null;
         }
+        if (isLongDouble(layout)) {
+            warn("skipping " + fieldName + " because of long double usage");
+        }
+
         Class<?> clazz = typeTranslator.getJavaType(type);
+        String anno = annotationWriter.getCAnnotation(type);
         if (tree.kind() == Declaration.Variable.Kind.BITFIELD ||
                 (layout instanceof ValueLayout && layout.byteSize() > 8)) {
             //skip
@@ -357,25 +409,39 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
         }
 
         boolean isSegment = clazz == MemorySegment.class;
+        boolean sizeAvailable;
+        try {
+            layout.byteSize();
+            sizeAvailable = true;
+        } catch (Exception ignored) {
+            sizeAvailable = false;
+        }
         MemoryLayout treeLayout = tree.layout().orElseThrow();
         if (parent != null) { //struct field
-            MemoryLayout parentLayout = parentLayout(parent);
             if (isSegment) {
-                currentBuilder.addAddressGetter(fieldName, tree.name(), treeLayout, parentLayout);
+                if (sizeAvailable) {
+                    currentBuilder.addSegmentGetter(fieldName, tree.name(), treeLayout);
+                } else {
+                    warn("Layout size not available for " + fieldName);
+                }
             } else {
-                currentBuilder.addVarHandleGetter(fieldName, tree.name(), treeLayout, clazz, parentLayout);
-                currentBuilder.addGetter(fieldName, tree.name(), treeLayout, clazz, parentLayout);
-                currentBuilder.addSetter(fieldName, tree.name(), treeLayout, clazz, parentLayout);
+                currentBuilder.addVarHandleGetter(fieldName, tree.name(), treeLayout, clazz);
+                currentBuilder.addGetter(fieldName, tree.name(), treeLayout, clazz, anno);
+                currentBuilder.addSetter(fieldName, tree.name(), treeLayout, clazz, anno);
             }
         } else {
-            if (isSegment) {
-                toplevelBuilder.addAddressGetter(fieldName, tree.name(), treeLayout, null);
+            if (sizeAvailable) {
+                if (isSegment) {
+                    header().addSegmentGetter(fieldName, tree.name(), treeLayout);
+                } else {
+                    header().addLayoutGetter(fieldName, layout);
+                    header().addVarHandleGetter(fieldName, tree.name(), treeLayout, clazz);
+                    header().addSegmentGetter(fieldName, tree.name(), treeLayout);
+                    header().addGetter(fieldName, tree.name(), treeLayout, clazz, anno);
+                    header().addSetter(fieldName, tree.name(), treeLayout, clazz, anno);
+                }
             } else {
-                toplevelBuilder.addLayoutGetter(fieldName, layout);
-                toplevelBuilder.addVarHandleGetter(fieldName, tree.name(), treeLayout, clazz,null);
-                toplevelBuilder.addAddressGetter(fieldName, tree.name(), treeLayout, null);
-                toplevelBuilder.addGetter(fieldName, tree.name(), treeLayout, clazz, null);
-                toplevelBuilder.addSetter(fieldName, tree.name(), treeLayout, clazz, null);
+                warn("Layout size not available for " + fieldName);
             }
         }
 
@@ -405,5 +471,13 @@ public class OutputFactory implements Declaration.Visitor<Void, Declaration> {
             throw new IllegalArgumentException("Unexpected parent declaration");
         }
         // case like `typedef struct { ... } Foo`
+    }
+
+    private void warn(String msg) {
+        System.err.println("WARNING: " + msg);
+    }
+
+    HeaderFileBuilder header() {
+        return toplevelBuilder.nextHeader();
     }
 }

@@ -21,7 +21,7 @@
  * questions.
  */
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemorySegment;
 import org.testng.annotations.AfterTest;
 import org.testng.annotations.BeforeTest;
@@ -71,6 +71,7 @@ public class ConstantsTest extends JextractToolRunner {
         var f = findMethod(constants, name);
         assertNotNull(f);
         assertSame(f.getReturnType(), type);
+        f.setAccessible(true);
         Object actual = f.invoke(null);
         checker.accept(actual);
     }
@@ -110,7 +111,7 @@ public class ConstantsTest extends JextractToolRunner {
     }
 
     static Consumer<MemorySegment> equalsToJavaStr(String expected) {
-        return actual -> assertEquals(CSupport.toJavaString(actual), expected);
+        return actual -> assertEquals(CLinker.toJavaString(actual), expected);
     }
 
     static Consumer<MemoryAddress> equalsPtrContents(long expected) {

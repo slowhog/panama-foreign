@@ -61,6 +61,7 @@
 //    [last sp               ]
 //    [oop temp              ]                     (only for native calls)
 
+//    [padding               ]                     (to preserve machine SP alignment)
 //    [locals and parameters ]
 //                               <- sender sp
 // ------------------------------ Asm interpreter ----------------------------------------
@@ -159,5 +160,8 @@
   void interpreter_frame_set_last_sp(intptr_t* sp);
 
   static jint interpreter_frame_expression_stack_direction() { return -1; }
+
+  // returns the sending frame, without applying any barriers
+  frame sender_raw(RegisterMap* map) const;
 
 #endif // CPU_AARCH64_FRAME_AARCH64_HPP

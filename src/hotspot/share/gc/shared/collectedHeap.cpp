@@ -36,7 +36,8 @@
 #include "gc/shared/gcWhen.hpp"
 #include "gc/shared/memAllocator.hpp"
 #include "logging/log.hpp"
-#include "memory/metaspace.hpp"
+#include "logging/logStream.hpp"
+#include "memory/classLoaderMetaspace.hpp"
 #include "memory/resourceArea.hpp"
 #include "memory/universe.hpp"
 #include "oops/instanceMirrorKlass.hpp"
@@ -123,14 +124,28 @@ MetaspaceSummary CollectedHeap::create_metaspace_summary() {
 }
 
 void CollectedHeap::print_heap_before_gc() {
-  Universe::print_heap_before_gc();
+  LogTarget(Debug, gc, heap) lt;
+  if (lt.is_enabled()) {
+    LogStream ls(lt);
+    ls.print_cr("Heap before GC invocations=%u (full %u):", total_collections(), total_full_collections());
+    ResourceMark rm;
+    print_on(&ls);
+  }
+
   if (_gc_heap_log != NULL) {
     _gc_heap_log->log_heap_before(this);
   }
 }
 
 void CollectedHeap::print_heap_after_gc() {
-  Universe::print_heap_after_gc();
+  LogTarget(Debug, gc, heap) lt;
+  if (lt.is_enabled()) {
+    LogStream ls(lt);
+    ls.print_cr("Heap after GC invocations=%u (full %u):", total_collections(), total_full_collections());
+    ResourceMark rm;
+    print_on(&ls);
+  }
+
   if (_gc_heap_log != NULL) {
     _gc_heap_log->log_heap_after(this);
   }
@@ -190,7 +205,10 @@ bool CollectedHeap::is_oop(oop object) const {
 
 
 CollectedHeap::CollectedHeap() :
+  _capacity_at_last_gc(0),
+  _used_at_last_gc(0),
   _is_gc_active(false),
+  _last_whole_heap_examined_time_ns(os::javaTimeNanos()),
   _total_collections(0),
   _total_full_collections(0),
   _gc_cause(GCCause::_no_gc),
@@ -488,6 +506,14 @@ void CollectedHeap::resize_all_tlabs() {
   }
 }
 
+jlong CollectedHeap::millis_since_last_whole_heap_examined() {
+  return (os::javaTimeNanos() - _last_whole_heap_examined_time_ns) / NANOSECS_PER_MILLISEC;
+}
+
+void CollectedHeap::record_whole_heap_examined_timestamp() {
+  _last_whole_heap_examined_time_ns = os::javaTimeNanos();
+}
+
 void CollectedHeap::full_gc_dump(GCTimer* timer, bool before) {
   assert(timer != NULL, "timer is null");
   if ((HeapDumpBeforeFullGC && before) || (HeapDumpAfterFullGC && !before)) {
@@ -580,4 +606,11 @@ void CollectedHeap::deduplicate_string(oop str) {
 uint32_t CollectedHeap::hash_oop(oop obj) const {
   const uintptr_t addr = cast_from_oop<uintptr_t>(obj);
   return static_cast<uint32_t>(addr >> LogMinObjAlignment);
+}
+
+// It's the caller's responsibility to ensure glitch-freedom
+// (if required).
+void CollectedHeap::update_capacity_and_used_at_gc() {
+  _capacity_at_last_gc = capacity();
+  _used_at_last_gc     = used();
 }

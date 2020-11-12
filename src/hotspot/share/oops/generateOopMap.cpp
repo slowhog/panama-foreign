@@ -27,6 +27,7 @@
 #include "logging/log.hpp"
 #include "logging/logStream.hpp"
 #include "memory/allocation.inline.hpp"
+#include "memory/resourceArea.hpp"
 #include "oops/constantPool.hpp"
 #include "oops/generateOopMap.hpp"
 #include "oops/oop.inline.hpp"
@@ -2000,7 +2001,7 @@ CellTypeState *GenerateOopMap::signature_to_effect(const Symbol* sig, int bci, C
   return vCTS;                               // Otherwise
 }
 
-long GenerateOopMap::_total_byte_count = 0;
+uint64_t GenerateOopMap::_total_byte_count = 0;
 elapsedTimer GenerateOopMap::_total_oopmap_time;
 
 // This function assumes "bcs" is at a "ret" instruction and that the vars

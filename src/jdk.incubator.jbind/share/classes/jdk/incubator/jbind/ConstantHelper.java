@@ -24,7 +24,7 @@
  */
 package jdk.incubator.jbind;
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
@@ -177,7 +177,7 @@ class ConstantHelper {
                         MemoryLayout.class)
         );
         this.MH_makeCString = findRuntimeHelperBootstrap(
-                desc(CSupport.class),
+                desc(CLinker.class),
                 "toCString",
                 methodType(
                         MemorySegment.class,

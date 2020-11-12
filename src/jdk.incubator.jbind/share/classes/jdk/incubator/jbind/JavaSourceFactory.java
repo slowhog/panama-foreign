@@ -237,7 +237,7 @@ public class JavaSourceFactory implements Declaration.Visitor<Void, Configuratio
                 candidates.toArray(Declaration[]::new));
 
         if (useJextract) {
-            return JextractTool.generate(root, ctx.getMainClsName(), ctx.targetPackageName(), ctx.getLibs());
+            return JextractTool.generate(root, ctx.getMainClsName(), true, ctx.targetPackageName(), ctx.getLibs());
         } else {
             List<JavaFileObject> files = new ArrayList<>();
             /* The indivisual header for constants

@@ -27,6 +27,7 @@
 #include "aot/aotLoader.hpp"
 #include "classfile/classFileParser.hpp"
 #include "classfile/classFileStream.hpp"
+#include "classfile/classListWriter.hpp"
 #include "classfile/classLoader.hpp"
 #include "classfile/classLoaderData.inline.hpp"
 #include "classfile/javaClasses.hpp"
@@ -47,6 +48,7 @@
 #include "logging/logMessage.hpp"
 #include "logging/logStream.hpp"
 #include "memory/allocation.inline.hpp"
+#include "memory/archiveUtils.hpp"
 #include "memory/iterator.inline.hpp"
 #include "memory/metadataFactory.hpp"
 #include "memory/metaspaceClosure.hpp"
@@ -69,6 +71,7 @@
 #include "prims/jvmtiRedefineClasses.hpp"
 #include "prims/jvmtiThreadState.hpp"
 #include "prims/methodComparator.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/atomic.hpp"
 #include "runtime/biasedLocking.hpp"
 #include "runtime/fieldDescriptor.inline.hpp"
@@ -76,6 +79,7 @@
 #include "runtime/javaCalls.hpp"
 #include "runtime/mutexLocker.hpp"
 #include "runtime/orderAccess.hpp"
+#include "runtime/reflectionUtils.hpp"
 #include "runtime/thread.inline.hpp"
 #include "services/classLoadingService.hpp"
 #include "services/threadService.hpp"
@@ -896,8 +900,7 @@ bool InstanceKlass::link_class_impl(TRAPS) {
 
   // Timing
   // timer handles recursion
-  assert(THREAD->is_Java_thread(), "non-JavaThread in link_class_impl");
-  JavaThread* jt = (JavaThread*)THREAD;
+  JavaThread* jt = THREAD->as_Java_thread();
 
   // link super class before linking this class
   Klass* super_klass = super();
@@ -999,9 +1002,7 @@ bool InstanceKlass::link_class_impl(TRAPS) {
 #endif
       set_init_state(linked);
       if (JvmtiExport::should_post_class_prepare()) {
-        Thread *thread = THREAD;
-        assert(thread->is_Java_thread(), "thread->is_Java_thread()");
-        JvmtiExport::post_class_prepare((JavaThread *) thread, this);
+        JvmtiExport::post_class_prepare(THREAD->as_Java_thread(), this);
       }
     }
   }
@@ -1065,8 +1066,7 @@ void InstanceKlass::initialize_impl(TRAPS) {
 
   bool wait = false;
 
-  assert(THREAD->is_Java_thread(), "non-JavaThread in initialize_impl");
-  JavaThread* jt = (JavaThread*)THREAD;
+  JavaThread* jt = THREAD->as_Java_thread();
 
   // refer to the JVM book page 47 for description of steps
   // Step 1
@@ -1442,7 +1442,7 @@ Klass* InstanceKlass::array_klass_impl(bool or_null, int n, TRAPS) {
     if (or_null) return NULL;
 
     ResourceMark rm(THREAD);
-    JavaThread *jt = (JavaThread *)THREAD;
+    JavaThread *jt = THREAD->as_Java_thread();
     {
       // Atomic creation of array_klasses
       MutexLocker ma(THREAD, MultiArray_lock);
@@ -2992,19 +2992,39 @@ bool InstanceKlass::is_override(const methodHandle& super_method, Handle targetc
    return(is_same_class_package(targetclassloader(), targetclassname));
 }
 
+
+static bool is_prohibited_package_slow(Symbol* class_name) {
+  // Caller has ResourceMark
+  int length;
+  jchar* unicode = class_name->as_unicode(length);
+  return (length >= 5 &&
+          unicode[0] == 'j' &&
+          unicode[1] == 'a' &&
+          unicode[2] == 'v' &&
+          unicode[3] == 'a' &&
+          unicode[4] == '/');
+}
+
 // Only boot and platform class loaders can define classes in "java/" packages.
 void InstanceKlass::check_prohibited_package(Symbol* class_name,
                                              ClassLoaderData* loader_data,
                                              TRAPS) {
   if (!loader_data->is_boot_class_loader_data() &&
       !loader_data->is_platform_class_loader_data() &&
-      class_name != NULL) {
+      class_name != NULL && class_name->utf8_length() >= 5) {
     ResourceMark rm(THREAD);
-    char* name = class_name->as_C_string();
-    if (strncmp(name, JAVAPKG, JAVAPKG_LEN) == 0 && name[JAVAPKG_LEN] == '/') {
+    bool prohibited;
+    const u1* base = class_name->base();
+    if ((base[0] | base[1] | base[2] | base[3] | base[4]) & 0x80) {
+      prohibited = is_prohibited_package_slow(class_name);
+    } else {
+      char* name = class_name->as_C_string();
+      prohibited = (strncmp(name, JAVAPKG, JAVAPKG_LEN) == 0 && name[JAVAPKG_LEN] == '/');
+    }
+    if (prohibited) {
       TempNewSymbol pkg_name = ClassLoader::package_from_class_name(class_name);
       assert(pkg_name != NULL, "Error in parsing package name starting with 'java/'");
-      name = pkg_name->as_C_string();
+      char* name = pkg_name->as_C_string();
       const char* class_loader_name = loader_data->loader_name_and_id();
       StringUtils::replace_no_expand(name, "/", ".");
       const char* msg_text1 = "Class loader (instance of): ";
@@ -3599,8 +3619,10 @@ const char* InstanceKlass::internal_name() const {
 }
 
 void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
-                                             const char* module_name,
+                                             const ModuleEntry* module_entry,
                                              const ClassFileStream* cfs) const {
+  log_to_classlist(cfs);
+
   if (!log_is_enabled(Info, class, load)) {
     return;
   }
@@ -3615,6 +3637,7 @@ void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
   // Source
   if (cfs != NULL) {
     if (cfs->source() != NULL) {
+      const char* module_name = (module_entry->name() == NULL) ? UNNAMED_MODULE : module_entry->name()->as_C_string();
       if (module_name != NULL) {
         // When the boot loader created the stream, it didn't know the module name
         // yet. Let's format it now.
@@ -3630,7 +3653,7 @@ void InstanceKlass::print_class_load_logging(ClassLoaderData* loader_data,
       Thread* THREAD = Thread::current();
       Klass* caller =
             THREAD->is_Java_thread()
-                ? ((JavaThread*)THREAD)->security_get_caller_class(1)
+                ? THREAD->as_Java_thread()->security_get_caller_class(1)
                 : NULL;
       // caller can be NULL, for example, during a JVMTI VM_Init hook
       if (caller != NULL) {
@@ -3956,8 +3979,9 @@ void InstanceKlass::purge_previous_version_list() {
       InstanceKlass* next = pv_node->previous_versions();
       pv_node->link_previous_versions(NULL);   // point next to NULL
       last->link_previous_versions(next);
-      // Add to the deallocate list after unlinking
-      loader_data->add_to_deallocate_list(pv_node);
+      // Delete this node directly. Nothing is referring to it and we don't
+      // want it to increase the counter for metadata to delete in CLDG.
+      MetadataFactory::free_metadata(loader_data, pv_node);
       pv_node = next;
       deleted_count++;
       version++;
@@ -4189,3 +4213,58 @@ unsigned char * InstanceKlass::get_cached_class_file_bytes() {
   return VM_RedefineClasses::get_cached_class_file_bytes(_cached_class_file);
 }
 #endif
+
+void InstanceKlass::log_to_classlist(const ClassFileStream* stream) const {
+#if INCLUDE_CDS
+  if (ClassListWriter::is_enabled()) {
+    if (!ClassLoader::has_jrt_entry()) {
+       warning("DumpLoadedClassList and CDS are not supported in exploded build");
+       DumpLoadedClassList = NULL;
+       return;
+    }
+    ClassLoaderData* loader_data = class_loader_data();
+    if (!SystemDictionaryShared::is_sharing_possible(loader_data)) {
+      return;
+    }
+    bool skip = false;
+    if (is_shared()) {
+      assert(stream == NULL, "shared class with stream");
+      if (is_hidden()) {
+        // Don't include archived lambda proxy class in the classlist.
+        assert(!is_non_strong_hidden(), "unexpected non-strong hidden class");
+        return;
+      }
+    } else {
+      assert(stream != NULL, "non-shared class without stream");
+      // skip hidden class and unsafe anonymous class.
+      if ( is_hidden() || unsafe_anonymous_host() != NULL) {
+        return;
+      }
+      oop class_loader = loader_data->class_loader();
+      if (class_loader == NULL || SystemDictionary::is_platform_class_loader(class_loader)) {
+        // For the boot and platform class loaders, skip classes that are not found in the
+        // java runtime image, such as those found in the --patch-module entries.
+        // These classes can't be loaded from the archive during runtime.
+        if (!stream->from_boot_loader_modules_image() && strncmp(stream->source(), "jrt:", 4) != 0) {
+          skip = true;
+        }
+
+        if (class_loader == NULL && ClassLoader::contains_append_entry(stream->source())) {
+          // .. but don't skip the boot classes that are loaded from -Xbootclasspath/a
+          // as they can be loaded from the archive during runtime.
+          skip = false;
+        }
+      }
+    }
+    ResourceMark rm;
+    if (skip) {
+      tty->print_cr("skip writing class %s from source %s to classlist file",
+                    name()->as_C_string(), stream->source());
+    } else {
+      ClassListWriter w;
+      w.stream()->print_cr("%s", name()->as_C_string());
+      w.stream()->flush();
+    }
+  }
+#endif // INCLUDE_CDS
+}

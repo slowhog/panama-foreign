@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1997, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1997, 2020, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -67,7 +67,7 @@ const double CLEAN_DEAD_HIGH_WATER_MARK = 0.5;
 #if INCLUDE_CDS_JAVA_HEAP
 inline oop read_string_from_compact_hashtable(address base_address, u4 offset) {
   assert(sizeof(narrowOop) == sizeof(offset), "must be");
-  narrowOop v = (narrowOop)offset;
+  narrowOop v = CompressedOops::narrow_oop_cast(offset);
   return HeapShared::decode_from_archive(v);
 }
 
@@ -91,11 +91,11 @@ static size_t _current_size = 0;
 static volatile size_t _items_count = 0;
 
 volatile bool _alt_hash = false;
-static juint murmur_seed = 0;
+static uint64_t _alt_hash_seed = 0;
 
 uintx hash_string(const jchar* s, int len, bool useAlt) {
   return  useAlt ?
-    AltHashing::murmur3_32(murmur_seed, s, len) :
+    AltHashing::halfsiphash_32(_alt_hash_seed, s, len) :
     java_lang_String::hash_code(s, len);
 }
 
@@ -523,7 +523,7 @@ void StringTable::rehash_table() {
     return;
   }
 
-  murmur_seed = AltHashing::compute_seed();
+  _alt_hash_seed = AltHashing::compute_seed();
   {
     if (do_rehash()) {
       rehashed = true;
@@ -719,10 +719,7 @@ oop StringTable::lookup_shared(const jchar* name, int len, unsigned int hash) {
 
 oop StringTable::create_archived_string(oop s, Thread* THREAD) {
   assert(DumpSharedSpaces, "this function is only used with -Xshare:dump");
-
-  if (HeapShared::is_archived_object(s)) {
-    return s;
-  }
+  assert(!HeapShared::is_archived_object(s), "sanity");
 
   oop new_s = NULL;
   typeArrayOop v = java_lang_String::value_no_keepalive(s);
@@ -740,42 +737,34 @@ oop StringTable::create_archived_string(oop s, Thread* THREAD) {
   return new_s;
 }
 
-struct CopyToArchive : StackObj {
+class CopyToArchive : StackObj {
   CompactHashtableWriter* _writer;
+public:
   CopyToArchive(CompactHashtableWriter* writer) : _writer(writer) {}
-  bool operator()(WeakHandle* val) {
-    oop s = val->peek();
-    if (s == NULL) {
-      return true;
-    }
+  bool do_entry(oop s, bool value_ignored) {
+    assert(s != NULL, "sanity");
     unsigned int hash = java_lang_String::hash_code(s);
     oop new_s = StringTable::create_archived_string(s, Thread::current());
     if (new_s == NULL) {
       return true;
     }
 
-    val->replace(new_s);
     // add to the compact table
-    _writer->add(hash, CompressedOops::encode(new_s));
+    _writer->add(hash, CompressedOops::narrow_oop_value(new_s));
     return true;
   }
 };
 
-void StringTable::copy_shared_string_table(CompactHashtableWriter* writer) {
-  assert(HeapShared::is_heap_object_archiving_allowed(), "must be");
-
-  CopyToArchive copy(writer);
-  _local_table->do_safepoint_scan(copy);
-}
-
-void StringTable::write_to_archive() {
+void StringTable::write_to_archive(const DumpedInternedStrings* dumped_interned_strings) {
   assert(HeapShared::is_heap_object_archiving_allowed(), "must be");
 
   _shared_table.reset();
   CompactHashtableWriter writer(_items_count, &MetaspaceShared::stats()->string);
 
   // Copy the interned strings into the "string space" within the java heap
-  copy_shared_string_table(&writer);
+  CopyToArchive copier(&writer);
+  dumped_interned_strings->iterate(&copier);
+
   writer.dump(&_shared_table, "string");
 }
 

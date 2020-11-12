@@ -24,6 +24,7 @@
 
 #include "precompiled.hpp"
 #include "classfile/systemDictionary.hpp"
+#include "gc/shared/oopStorageSet.hpp"
 #include "memory/allocation.hpp"
 #include "memory/heapInspection.hpp"
 #include "memory/oopFactory.hpp"
@@ -67,6 +68,9 @@ ThreadDumpResult* ThreadService::_threaddump_list = NULL;
 
 static const int INITIAL_ARRAY_SIZE = 10;
 
+// OopStorage for thread stack sampling
+static OopStorage* _thread_service_storage = NULL;
+
 void ThreadService::init() {
   EXCEPTION_MARK;
 
@@ -95,6 +99,9 @@ void ThreadService::init() {
   }
 
   _thread_allocated_memory_enabled = true; // Always on, so enable it
+
+  // Initialize OopStorage for thread stack sampling walking
+  _thread_service_storage = OopStorageSet::create_strong("ThreadService OopStorage");
 }
 
 void ThreadService::reset_peak_thread_count() {
@@ -222,12 +229,12 @@ Handle ThreadService::get_current_contended_monitor(JavaThread* thread) {
   oop obj = NULL;
   if (wait_obj != NULL) {
     // thread is doing an Object.wait() call
-    obj = (oop) wait_obj->object();
+    obj = wait_obj->object();
   } else {
     ObjectMonitor *enter_obj = thread->current_pending_monitor();
     if (enter_obj != NULL) {
       // thread is trying to enter() an ObjectMonitor.
-      obj = (oop) enter_obj->object();
+      obj = enter_obj->object();
     }
   }
 
@@ -415,8 +422,7 @@ DeadlockCycle* ThreadService::find_deadlocks_at_safepoint(ThreadsList * t_list, 
         Thread* owner = waitingToLockRawMonitor->owner();
         if (owner != NULL && // the raw monitor could be released at any time
             owner->is_Java_thread()) {
-          // only JavaThreads can be reported here
-          currentThread = (JavaThread*) owner;
+          currentThread = owner->as_Java_thread();
         }
       } else if (waitingToLockMonitor != NULL) {
         address currentOwner = (address)waitingToLockMonitor->owner();
@@ -563,7 +569,7 @@ ThreadsList* ThreadDumpResult::t_list() {
 StackFrameInfo::StackFrameInfo(javaVFrame* jvf, bool with_lock_info) {
   _method = jvf->method();
   _bci = jvf->bci();
-  _class_holder = OopHandle(Universe::vm_global(), _method->method_holder()->klass_holder());
+  _class_holder = OopHandle(_thread_service_storage, _method->method_holder()->klass_holder());
   _locked_monitors = NULL;
   if (with_lock_info) {
     Thread* current_thread = Thread::current();
@@ -576,7 +582,7 @@ StackFrameInfo::StackFrameInfo(javaVFrame* jvf, bool with_lock_info) {
       for (int i = 0; i < length; i++) {
         MonitorInfo* monitor = list->at(i);
         assert(monitor->owner() != NULL, "This monitor must have an owning object");
-        _locked_monitors->append(OopHandle(Universe::vm_global(), monitor->owner()));
+        _locked_monitors->append(OopHandle(_thread_service_storage, monitor->owner()));
       }
     }
   }
@@ -585,11 +591,11 @@ StackFrameInfo::StackFrameInfo(javaVFrame* jvf, bool with_lock_info) {
 StackFrameInfo::~StackFrameInfo() {
   if (_locked_monitors != NULL) {
     for (int i = 0; i < _locked_monitors->length(); i++) {
-      _locked_monitors->at(i).release(Universe::vm_global());
+      _locked_monitors->at(i).release(_thread_service_storage);
     }
     delete _locked_monitors;
   }
-  _class_holder.release(Universe::vm_global());
+  _class_holder.release(_thread_service_storage);
 }
 
 void StackFrameInfo::metadata_do(void f(Metadata*)) {
@@ -619,7 +625,7 @@ public:
   }
   void do_monitor(ObjectMonitor* mid) {
     if (mid->owner() == _thread) {
-      oop object = (oop) mid->object();
+      oop object = mid->object();
       if (!_stack_trace->is_owned_monitor_on_stack(object)) {
         _stack_trace->add_jni_locked_monitor(object);
       }
@@ -640,7 +646,7 @@ ThreadStackTrace::ThreadStackTrace(JavaThread* t, bool with_locked_monitors) {
 }
 
 void ThreadStackTrace::add_jni_locked_monitor(oop object) {
-  _jni_locked_monitors->append(OopHandle(Universe::vm_global(), object));
+  _jni_locked_monitors->append(OopHandle(_thread_service_storage, object));
 }
 
 ThreadStackTrace::~ThreadStackTrace() {
@@ -650,7 +656,7 @@ ThreadStackTrace::~ThreadStackTrace() {
   delete _frames;
   if (_jni_locked_monitors != NULL) {
     for (int i = 0; i < _jni_locked_monitors->length(); i++) {
-      _jni_locked_monitors->at(i).release(Universe::vm_global());
+      _jni_locked_monitors->at(i).release(_thread_service_storage);
     }
     delete _jni_locked_monitors;
   }
@@ -834,13 +840,13 @@ ThreadConcurrentLocks::ThreadConcurrentLocks(JavaThread* thread) {
 
 ThreadConcurrentLocks::~ThreadConcurrentLocks() {
   for (int i = 0; i < _owned_locks->length(); i++) {
-    _owned_locks->at(i).release(Universe::vm_global());
+    _owned_locks->at(i).release(_thread_service_storage);
   }
   delete _owned_locks;
 }
 
 void ThreadConcurrentLocks::add_lock(instanceOop o) {
-  _owned_locks->append(OopHandle(Universe::vm_global(), o));
+  _owned_locks->append(OopHandle(_thread_service_storage, o));
 }
 
 ThreadStatistics::ThreadStatistics() {
@@ -857,7 +863,7 @@ oop ThreadSnapshot::threadObj() const { return _threadObj.resolve(); }
 void ThreadSnapshot::initialize(ThreadsList * t_list, JavaThread* thread) {
   _thread = thread;
   oop threadObj = thread->threadObj();
-  _threadObj = OopHandle(Universe::vm_global(), threadObj);
+  _threadObj = OopHandle(_thread_service_storage, threadObj);
 
   ThreadStatistics* stat = thread->get_thread_stat();
   _contended_enter_ticks = stat->contended_enter_ticks();
@@ -871,6 +877,8 @@ void ThreadSnapshot::initialize(ThreadsList * t_list, JavaThread* thread) {
   _is_ext_suspended = thread->is_being_ext_suspended();
   _is_in_native = (thread->thread_state() == _thread_in_native);
 
+  Handle obj = ThreadService::get_current_contended_monitor(thread);
+
   oop blocker_object = NULL;
   oop blocker_object_owner = NULL;
 
@@ -878,7 +886,6 @@ void ThreadSnapshot::initialize(ThreadsList * t_list, JavaThread* thread) {
       _thread_status == java_lang_Thread::IN_OBJECT_WAIT ||
       _thread_status == java_lang_Thread::IN_OBJECT_WAIT_TIMED) {
 
-    Handle obj = ThreadService::get_current_contended_monitor(thread);
     if (obj() == NULL) {
       // monitor no longer exists; thread is not blocked
       _thread_status = java_lang_Thread::RUNNABLE;
@@ -910,10 +917,10 @@ void ThreadSnapshot::initialize(ThreadsList * t_list, JavaThread* thread) {
   }
 
   if (blocker_object != NULL) {
-    _blocker_object = OopHandle(Universe::vm_global(), blocker_object);
+    _blocker_object = OopHandle(_thread_service_storage, blocker_object);
   }
   if (blocker_object_owner != NULL) {
-    _blocker_object_owner = OopHandle(Universe::vm_global(), blocker_object_owner);
+    _blocker_object_owner = OopHandle(_thread_service_storage, blocker_object_owner);
   }
 }
 
@@ -921,9 +928,9 @@ oop ThreadSnapshot::blocker_object() const           { return _blocker_object.re
 oop ThreadSnapshot::blocker_object_owner() const     { return _blocker_object_owner.resolve(); }
 
 ThreadSnapshot::~ThreadSnapshot() {
-  _blocker_object.release(Universe::vm_global());
-  _blocker_object_owner.release(Universe::vm_global());
-  _threadObj.release(Universe::vm_global());
+  _blocker_object.release(_thread_service_storage);
+  _blocker_object_owner.release(_thread_service_storage);
+  _threadObj.release(_thread_service_storage);
 
   delete _stack_trace;
   delete _concurrent_locks;
@@ -979,7 +986,7 @@ void DeadlockCycle::print_on_with(ThreadsList * t_list, outputStream* st) const 
       // Could be NULL as the raw monitor could be released at any time if held by non-JavaThread
       if (owner != NULL) {
         if (owner->is_Java_thread()) {
-          currentThread = (JavaThread*) owner;
+          currentThread = owner->as_Java_thread();
           st->print_cr("%s \"%s\"", owner_desc, currentThread->get_thread_name());
         } else {
           st->print_cr(",\n  which has now been released");
@@ -991,7 +998,7 @@ void DeadlockCycle::print_on_with(ThreadsList * t_list, outputStream* st) const 
 
     if (waitingToLockMonitor != NULL) {
       st->print("  waiting to lock monitor " INTPTR_FORMAT, p2i(waitingToLockMonitor));
-      oop obj = (oop)waitingToLockMonitor->object();
+      oop obj = waitingToLockMonitor->object();
       st->print(" (object " INTPTR_FORMAT ", a %s)", p2i(obj),
                  obj->klass()->external_name());
 

@@ -56,10 +56,10 @@ class STWGCTimer;
 class G1Policy: public CHeapObj<mtGC> {
  private:
 
-  static G1IHOPControl* create_ihop_control(const G1Predictions* predictor);
+  static G1IHOPControl* create_ihop_control(const G1OldGenAllocationTracker* old_gen_alloc_tracker,
+                                            const G1Predictions* predictor);
   // Update the IHOP control with necessary statistics.
   void update_ihop_prediction(double mutator_time_s,
-                              size_t mutator_alloc_bytes,
                               size_t young_gen_size,
                               bool this_gc_was_young_only);
   void report_ihop_statistics();
@@ -68,13 +68,15 @@ class G1Policy: public CHeapObj<mtGC> {
   G1Analytics* _analytics;
   G1RemSetTrackingPolicy _remset_tracker;
   G1MMUTracker* _mmu_tracker;
+
+  // Tracking the allocation in the old generation between
+  // two GCs.
+  G1OldGenAllocationTracker _old_gen_alloc_tracker;
   G1IHOPControl* _ihop_control;
 
   GCPolicyCounters* _policy_counters;
 
   double _full_collection_start_sec;
-
-  jlong _collection_pause_end_millis;
 
   uint _young_list_target_length;
   uint _young_list_fixed_length;
@@ -102,10 +104,6 @@ class G1Policy: public CHeapObj<mtGC> {
   size_t _rs_length_prediction;
 
   size_t _pending_cards_at_gc_start;
-
-  // Tracking the allocation in the old generation between
-  // two GCs.
-  G1OldGenAllocationTracker _old_gen_alloc_tracker;
 
   G1ConcurrentStartToMixedTimeTracker _concurrent_start_to_mixed;
 
@@ -260,20 +258,19 @@ public:
   // percentage of the current heap capacity.
   double reclaimable_bytes_percent(size_t reclaimable_bytes) const;
 
-  jlong collection_pause_end_millis() { return _collection_pause_end_millis; }
-
 private:
   void clear_collection_set_candidates();
   // Sets up marking if proper conditions are met.
   void maybe_start_marking();
 
   // The kind of STW pause.
-  enum PauseKind {
+  enum PauseKind : uint {
     FullGC,
     YoungOnlyGC,
     MixedGC,
     LastYoungGC,
-    ConcurrentStartGC,
+    ConcurrentStartMarkGC,
+    ConcurrentStartUndoGC,
     Cleanup,
     Remark
   };
@@ -283,9 +280,16 @@ private:
   static bool is_last_young_pause(PauseKind kind);
   static bool is_concurrent_start_pause(PauseKind kind);
   // Calculate PauseKind from internal state.
-  PauseKind young_gc_pause_kind() const;
+  PauseKind young_gc_pause_kind(bool concurrent_operation_is_full_mark) const;
+  // Manage time-to-mixed tracking.
+  void update_time_to_mixed_tracking(PauseKind pause, double start, double end);
   // Record the given STW pause with the given start and end times (in s).
   void record_pause(PauseKind kind, double start, double end);
+
+  bool should_update_gc_stats();
+
+  void update_gc_pause_time_ratios(PauseKind kind, double start_sec, double end_sec);
+
   // Indicate that we aborted marking before doing any mixed GCs.
   void abort_time_to_mixed_tracking();
 
@@ -318,18 +322,20 @@ public:
 
   bool need_to_start_conc_mark(const char* source, size_t alloc_word_size = 0);
 
+  bool concurrent_operation_is_full_mark(const char* msg = NULL);
+
   bool about_to_start_mixed_phase() const;
 
   // Record the start and end of an evacuation pause.
   void record_collection_pause_start(double start_time_sec);
-  virtual void record_collection_pause_end(double pause_time_ms);
+  virtual void record_collection_pause_end(double pause_time_ms, bool concurrent_operation_is_full_mark);
 
   // Record the start and end of a full collection.
   void record_full_collection_start();
   virtual void record_full_collection_end();
 
   // Must currently be called while the world is stopped.
-  void record_concurrent_mark_init_end(double mark_init_elapsed_time_ms);
+  void record_concurrent_mark_init_end();
 
   // Record start and end of remark.
   void record_concurrent_mark_remark_start();

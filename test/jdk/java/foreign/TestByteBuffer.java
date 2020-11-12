@@ -25,18 +25,12 @@
  * @test
  * @modules java.base/sun.nio.ch
  *          jdk.incubator.foreign/jdk.internal.foreign
- * @run testng TestByteBuffer
+ * @run testng/othervm -Dforeign.restricted=permit TestByteBuffer
  */
 
 
-import jdk.incubator.foreign.MappedMemorySegment;
-import jdk.incubator.foreign.MemoryAccess;
-import jdk.incubator.foreign.MemoryLayouts;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.*;
 import jdk.incubator.foreign.MemoryLayout.PathElement;
-import jdk.incubator.foreign.SequenceLayout;
 
 import java.io.File;
 import java.io.IOException;
@@ -61,7 +55,9 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -72,7 +68,6 @@ import java.util.stream.Stream;
 
 import jdk.internal.foreign.HeapMemorySegmentImpl;
 import jdk.internal.foreign.MappedMemorySegmentImpl;
-import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.NativeMemorySegmentImpl;
 import org.testng.SkipException;
 import org.testng.annotations.*;
@@ -227,12 +222,12 @@ public class TestByteBuffer {
 
     @Test
     public void testDefaultAccessModesMappedSegment() throws Throwable {
-        try (MappedMemorySegment segment = MemorySegment.mapFromPath(tempPath, 0L, 8, FileChannel.MapMode.READ_WRITE)) {
+        try (MemorySegment segment = MemorySegment.mapFromPath(tempPath, 0L, 8, FileChannel.MapMode.READ_WRITE)) {
             assertTrue(segment.hasAccessModes(ALL_ACCESS));
             assertEquals(segment.accessModes(), ALL_ACCESS);
         }
 
-        try (MappedMemorySegment segment = MemorySegment.mapFromPath(tempPath, 0L, 8, FileChannel.MapMode.READ_ONLY)) {
+        try (MemorySegment segment = MemorySegment.mapFromPath(tempPath, 0L, 8, FileChannel.MapMode.READ_ONLY)) {
             assertTrue(segment.hasAccessModes(ALL_ACCESS & ~WRITE));
             assertEquals(segment.accessModes(), ALL_ACCESS & ~WRITE);
         }
@@ -245,15 +240,27 @@ public class TestByteBuffer {
         f.deleteOnExit();
 
         //write to channel
-        try (MappedMemorySegment segment = MemorySegment.mapFromPath(f.toPath(), 0L, tuples.byteSize(), FileChannel.MapMode.READ_WRITE)) {
+        try (MemorySegment segment = MemorySegment.mapFromPath(f.toPath(), 0L, tuples.byteSize(), FileChannel.MapMode.READ_WRITE)) {
             initTuples(segment, tuples.elementCount().getAsLong());
-            segment.force();
+            MappedMemorySegments.force(segment);
         }
 
         //read from channel
         try (MemorySegment segment = MemorySegment.mapFromPath(f.toPath(), 0L, tuples.byteSize(), FileChannel.MapMode.READ_ONLY)) {
             checkTuples(segment, segment.asByteBuffer(), tuples.elementCount().getAsLong());
         }
+    }
+
+    @Test(dataProvider = "mappedOps", expectedExceptions = IllegalStateException.class)
+    public void testMappedSegmentOperations(MappedSegmentOp mappedBufferOp) throws Throwable {
+        File f = new File("test3.out");
+        f.createNewFile();
+        f.deleteOnExit();
+
+        MemorySegment segment = MemorySegment.mapFromPath(f.toPath(), 0L, 8, FileChannel.MapMode.READ_WRITE);
+        assertTrue(segment.fileDescriptor().isPresent());
+        segment.close();
+        mappedBufferOp.apply(segment);
     }
 
     @Test
@@ -267,9 +274,9 @@ public class TestByteBuffer {
         // write one at a time
         for (int i = 0 ; i < tuples.byteSize() ; i += tupleLayout.byteSize()) {
             //write to channel
-            try (MappedMemorySegment segment = MemorySegment.mapFromPath(f.toPath(), i, tuples.byteSize(), FileChannel.MapMode.READ_WRITE)) {
+            try (MemorySegment segment = MemorySegment.mapFromPath(f.toPath(), i, tuples.byteSize(), FileChannel.MapMode.READ_WRITE)) {
                 initTuples(segment, 1);
-                segment.force();
+                MappedMemorySegments.force(segment);
             }
         }
 
@@ -302,34 +309,27 @@ public class TestByteBuffer {
     }
 
     @Test(dataProvider = "bufferOps")
-    public void testScopedBuffer(Function<ByteBuffer, Buffer> bufferFactory, Map<Method, Object[]> members) {
+    public void testScopedBuffer(Function<ByteBuffer, Buffer> bufferFactory, @NoInjection Method method, Object[] args) {
         Buffer bb;
         try (MemorySegment segment = MemorySegment.allocateNative(bytes)) {
             bb = bufferFactory.apply(segment.asByteBuffer());
         }
         //outside of scope!!
-        for (Map.Entry<Method, Object[]> e : members.entrySet()) {
-            if (!e.getKey().getName().contains("get") &&
-                            !e.getKey().getName().contains("put")) {
-                //skip
-                return;
+        try {
+            method.invoke(bb, args);
+            fail("Exception expected");
+        } catch (InvocationTargetException ex) {
+            Throwable cause = ex.getCause();
+            if (cause instanceof IllegalStateException) {
+                //all get/set buffer operation should fail because of the scope check
+                assertTrue(ex.getCause().getMessage().contains("already closed"));
+            } else {
+                //all other exceptions were unexpected - fail
+                fail("Unexpected exception", cause);
             }
-            try {
-                e.getKey().invoke(bb, e.getValue());
-                assertTrue(false);
-            } catch (InvocationTargetException ex) {
-                Throwable cause = ex.getCause();
-                if (cause instanceof IllegalStateException) {
-                    //all get/set buffer operation should fail because of the scope check
-                    assertTrue(ex.getCause().getMessage().contains("already closed"));
-                } else {
-                    //all other exceptions were unexpected - fail
-                    assertTrue(false);
-                }
-            } catch (Throwable ex) {
-                //unexpected exception - fail
-                assertTrue(false);
-            }
+        } catch (Throwable ex) {
+            //unexpected exception - fail
+            fail("Unexpected exception", ex);
         }
     }
 
@@ -368,7 +368,7 @@ public class TestByteBuffer {
     }
 
     @Test(dataProvider = "bufferOps")
-    public void testDirectBuffer(Function<ByteBuffer, Buffer> bufferFactory, Map<Method, Object[]> members) {
+    public void testDirectBuffer(Function<ByteBuffer, Buffer> bufferFactory, @NoInjection Method method, Object[] args) {
         try (MemorySegment segment = MemorySegment.allocateNative(bytes)) {
             Buffer bb = bufferFactory.apply(segment.asByteBuffer());
             assertTrue(bb.isDirect());
@@ -435,10 +435,9 @@ public class TestByteBuffer {
         byteBuffer.get(); // should throw
     }
 
-    @Test(expectedExceptions = { UnsupportedOperationException.class,
-                                 IllegalArgumentException.class })
+    @Test(expectedExceptions = UnsupportedOperationException.class)
     public void testTooBigForByteBuffer() {
-        try (MemorySegment segment = MemorySegment.allocateNative((long)Integer.MAX_VALUE + 10L)) {
+        try (MemorySegment segment = MemoryAddress.NULL.asSegmentRestricted(Integer.MAX_VALUE + 10L)) {
             segment.asByteBuffer();
         }
     }
@@ -545,29 +544,29 @@ public class TestByteBuffer {
 
     @DataProvider(name = "bufferOps")
     public static Object[][] bufferOps() throws Throwable {
-        return new Object[][]{
-                { (Function<ByteBuffer, Buffer>) bb -> bb, bufferMembers(ByteBuffer.class)},
-                { (Function<ByteBuffer, Buffer>) ByteBuffer::asCharBuffer, bufferMembers(CharBuffer.class)},
-                { (Function<ByteBuffer, Buffer>) ByteBuffer::asShortBuffer, bufferMembers(ShortBuffer.class)},
-                { (Function<ByteBuffer, Buffer>) ByteBuffer::asIntBuffer, bufferMembers(IntBuffer.class)},
-                { (Function<ByteBuffer, Buffer>) ByteBuffer::asFloatBuffer, bufferMembers(FloatBuffer.class)},
-                { (Function<ByteBuffer, Buffer>) ByteBuffer::asLongBuffer, bufferMembers(LongBuffer.class)},
-                { (Function<ByteBuffer, Buffer>) ByteBuffer::asDoubleBuffer, bufferMembers(DoubleBuffer.class)},
-        };
+        List<Object[]> args = new ArrayList<>();
+        bufferOpsArgs(args, bb -> bb, ByteBuffer.class);
+        bufferOpsArgs(args, ByteBuffer::asCharBuffer, CharBuffer.class);
+        bufferOpsArgs(args, ByteBuffer::asShortBuffer, ShortBuffer.class);
+        bufferOpsArgs(args, ByteBuffer::asIntBuffer, IntBuffer.class);
+        bufferOpsArgs(args, ByteBuffer::asFloatBuffer, FloatBuffer.class);
+        bufferOpsArgs(args, ByteBuffer::asLongBuffer, LongBuffer.class);
+        bufferOpsArgs(args, ByteBuffer::asDoubleBuffer, DoubleBuffer.class);
+        return args.toArray(Object[][]::new);
     }
 
-    static Map<Method, Object[]> bufferMembers(Class<?> bufferClass) {
-        Map<Method, Object[]> members = new HashMap<>();
+    static void bufferOpsArgs(List<Object[]> argsList, Function<ByteBuffer, Buffer> factory, Class<?> bufferClass) {
         for (Method m : bufferClass.getMethods()) {
             //skip statics and method declared in j.l.Object
-            if (m.getDeclaringClass().equals(Object.class) ||
-                    (m.getModifiers() & Modifier.STATIC) != 0) continue;
+            if (m.getDeclaringClass().equals(Object.class)
+                || ((m.getModifiers() & Modifier.STATIC) != 0)
+                || (!m.getName().contains("get") && !m.getName().contains("put"))
+                || m.getParameterCount() > 2) continue;
             Object[] args = Stream.of(m.getParameterTypes())
                     .map(TestByteBuffer::defaultValue)
                     .toArray();
-            members.put(m, args);
+            argsList.add(new Object[] { factory, m, args });
         }
-        return members;
     }
 
     @DataProvider(name = "bufferHandleOps")
@@ -682,6 +681,22 @@ public class TestByteBuffer {
             } else {
                 throw new IllegalStateException();
             }
+        } else if (c == String.class) {
+            return "asdf";
+        } else if (c == ByteBuffer.class) {
+            return ByteBuffer.wrap(new byte[1]);
+        } else if (c == CharBuffer.class) {
+            return CharBuffer.wrap(new char[1]);
+        } else if (c == ShortBuffer.class) {
+            return ShortBuffer.wrap(new short[1]);
+        } else if (c == IntBuffer.class) {
+            return IntBuffer.wrap(new int[1]);
+        } else if (c == FloatBuffer.class) {
+            return FloatBuffer.wrap(new float[1]);
+        } else if (c == LongBuffer.class) {
+            return LongBuffer.wrap(new long[1]);
+        } else if (c == DoubleBuffer.class) {
+            return DoubleBuffer.wrap(new double[1]);
         } else {
             return null;
         }
@@ -708,5 +723,33 @@ public class TestByteBuffer {
         } catch (IOException ex) {
             throw new ExceptionInInitializerError(ex);
         }
+    }
+
+    enum MappedSegmentOp {
+        LOAD(MappedMemorySegments::load),
+        UNLOAD(MappedMemorySegments::unload),
+        IS_LOADED(MappedMemorySegments::isLoaded),
+        FORCE(MappedMemorySegments::force),
+        BUFFER_LOAD(m -> ((MappedByteBuffer)m.asByteBuffer()).load()),
+        BUFFER_IS_LOADED(m -> ((MappedByteBuffer)m.asByteBuffer()).isLoaded()),
+        BUFFER_FORCE(m -> ((MappedByteBuffer)m.asByteBuffer()).force());
+
+
+        private Consumer<MemorySegment> segmentOp;
+
+        MappedSegmentOp(Consumer<MemorySegment> segmentOp) {
+            this.segmentOp = segmentOp;
+        }
+
+        void apply(MemorySegment segment) {
+            segmentOp.accept(segment);
+        }
+    }
+
+    @DataProvider(name = "mappedOps")
+    public static Object[][] mappedOps() {
+        return Stream.of(MappedSegmentOp.values())
+                .map(op -> new Object[] { op })
+                .toArray(Object[][]::new);
     }
 }

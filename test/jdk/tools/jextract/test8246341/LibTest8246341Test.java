@@ -29,16 +29,24 @@ import test.jextract.test8246341.*;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertTrue;
 import static test.jextract.test8246341.test8246341_h.*;
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.incubator.foreign.CLinker.*;
 
 /*
- * @test
- * @library ..
- * @modules jdk.incubator.jextract
- * @modules jdk.incubator.foreign
+ * @test id=classes
  * @bug 8246341
  * @summary jextract should generate Cpointer utilities class
+ * @library ..
+ * @modules jdk.incubator.jextract
  * @run driver JtregJextract -l Test8246341 -t test.jextract.test8246341 -- test8246341.h
+ * @run testng/othervm -Dforeign.restricted=permit LibTest8246341Test
+ */
+/*
+ * @test id=sources
+ * @bug 8246341
+ * @summary jextract should generate Cpointer utilities class
+ * @library ..
+ * @modules jdk.incubator.jextract
+ * @run driver JtregJextractSources -l Test8246341 -t test.jextract.test8246341 -- test8246341.h
  * @run testng/othervm -Dforeign.restricted=permit LibTest8246341Test
  */
 public class LibTest8246341Test {
@@ -47,7 +55,7 @@ public class LibTest8246341Test {
         boolean[] callbackCalled = new boolean[1];
         try (var callback = func$callback.allocate((argc, argv) -> {
             callbackCalled[0] = true;
-            var addr = RuntimeHelper.asArrayRestricted(argv, C_POINTER, argc);
+            var addr = argv.asSegmentRestricted(C_POINTER.byteSize() * argc);
             assertEquals(argc, 4);
             assertEquals(toJavaStringRestricted(MemoryAccess.getAddressAtIndex(addr, 0)), "java");
             assertEquals(toJavaStringRestricted(MemoryAccess.getAddressAtIndex(addr, 1)), "python");

@@ -26,12 +26,22 @@ import static org.testng.Assert.assertEquals;
 import static test.jextract.test8244938.test8244938_h.*;
 
 /*
- * @test
+ * @test id=classes
  * @bug 8244938
  * @summary Crash in foreign ABI CallArranger class when a test native function returns a nested struct
  * @library ..
  * @modules jdk.incubator.jextract
  * @run driver JtregJextract -l Test8244938 -t test.jextract.test8244938 -- test8244938.h
+ * @run testng/othervm -Dforeign.restricted=permit Test8244938
+ */
+
+/*
+ * @test id=sources
+ * @bug 8244938
+ * @summary Crash in foreign ABI CallArranger class when a test native function returns a nested struct
+ * @library ..
+ * @modules jdk.incubator.jextract
+ * @run driver JtregJextractSources -l Test8244938 -t test.jextract.test8244938 -- test8244938.h
  * @run testng/othervm -Dforeign.restricted=permit Test8244938
  */
 public class Test8244938 {
@@ -40,8 +50,8 @@ public class Test8244938 {
          var seg = func();
          assertEquals(seg.byteSize(), Point.sizeof());
          assertEquals(Point.k$get(seg), 44);
-         var point2dAddr = Point.point2d$addr(seg);
-         assertEquals(Point2D.i$get(point2dAddr), 567);
-         assertEquals(Point2D.j$get(point2dAddr), 33);
+         var point2dSeg = Point.point2d$slice(seg);
+         assertEquals(Point2D.i$get(point2dSeg), 567);
+         assertEquals(Point2D.j$get(point2dSeg), 33);
     }
 }

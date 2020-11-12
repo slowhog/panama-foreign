@@ -27,13 +27,24 @@ import jdk.incubator.foreign.MemorySegment;
 
 import static org.testng.Assert.assertEquals;
 import static test.jextract.printf.printf_h.*;
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.incubator.foreign.CLinker.*;
 
 /*
- * @test
+ * @test id=classes
+ * @bug 8244959
+ * @summary Jextract's VarargsInvoker fails to link functions when passing integer types other than long
  * @library ..
  * @modules jdk.incubator.jextract
  * @run driver JtregJextract -t test.jextract.printf -l Printf -- printf.h
+ * @run testng/othervm -Dforeign.restricted=permit Test8244959
+ */
+/*
+ * @test id=sources
+ * @bug 8244959
+ * @summary Jextract's VarargsInvoker fails to link functions when passing integer types other than long
+ * @library ..
+ * @modules jdk.incubator.jextract
+ * @run driver JtregJextractSources -t test.jextract.printf -l Printf -- printf.h
  * @run testng/othervm -Dforeign.restricted=permit Test8244959
  */
 public class Test8244959 {

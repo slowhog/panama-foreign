@@ -34,8 +34,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Optional;
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.ForeignLinker;
+import java.util.stream.Stream;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
@@ -47,7 +47,8 @@ import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.SequenceLayout;
 
 public class RuntimeHelper {
-    private final static ForeignLinker ABI = CSupport.getSystemLinker();
+    private RuntimeHelper() { super(); }
+    private final static CLinker ABI = CLinker.getInstance();
     private final static ClassLoader LOADER = RuntimeHelper.class.getClassLoader();
 
     private final static MethodHandles.Lookup MH_LOOKUP = MethodHandles.lookup();
@@ -70,7 +71,7 @@ public class RuntimeHelper {
             return Arrays.stream(libNames).map(libName -> {
                 Optional<Path> absPath = findLibraryPath(paths, libName);
                 return absPath.isPresent() ?
-                        LibraryLookup.ofPath(absPath.get().toString()) :
+                        LibraryLookup.ofPath(absPath.get()) :
                         LibraryLookup.ofLibrary(libName);
             }).toArray(LibraryLookup[]::new);
         }
@@ -83,24 +84,20 @@ public class RuntimeHelper {
     }
 
     private static final Optional<Symbol> lookup(LibraryLookup[] LIBRARIES, String sym) {
-        for (LibraryLookup l : LIBRARIES) {
-            try {
-                return Optional.of(l.lookup(sym));
-            } catch (Throwable t) {
-            }
-        }
-        try {
-            return Optional.of(LibraryLookup.ofDefault().lookup(sym));
-        } catch (Throwable t) {
-            return Optional.empty();
-        }
+        Optional<Symbol> found = Stream.of(LIBRARIES)
+            .flatMap(l -> l.lookup(sym).stream())
+            .findFirst();
+        return found.isEmpty() ? LibraryLookup.ofDefault().lookup(sym) : found;
+    }
+
+    static final MemorySegment nonCloseableNonTransferableSegment(MemorySegment seg) {
+        return seg.withAccessModes(seg.accessModes() &  ~MemorySegment.CLOSE & ~MemorySegment.HANDOFF);
     }
 
     public static final MemorySegment lookupGlobalVariable(LibraryLookup[] LIBRARIES, String name, MemoryLayout layout) {
         return lookup(LIBRARIES, name).map(s ->
-            MemorySegment.ofNativeRestricted(
-                 s.address(), layout.byteSize(), null, null, s
-            ).withAccessModes(MemorySegment.READ | MemorySegment.WRITE)).orElse(null);
+            nonCloseableNonTransferableSegment(s.address().asSegmentRestricted(layout.byteSize())
+                    .share())).orElse(null);
     }
 
     public static final MethodHandle downcallHandle(LibraryLookup[] LIBRARIES, String name, String desc, FunctionDescriptor fdesc, boolean isVariadic) {

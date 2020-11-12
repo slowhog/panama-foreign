@@ -22,34 +22,21 @@
  *
  */
 
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.ForeignLinker;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.ValueLayout;
 
 public class NativeTestHelper {
 
-    public static final ForeignLinker ABI = CSupport.getSystemLinker();
+    static CLinker.TypeKind kind(MemoryLayout layout) {
+        return (CLinker.TypeKind)layout.attribute(CLinker.TypeKind.ATTR_NAME).orElseThrow(
+                () -> new IllegalStateException("Unexpected value layout: could not determine ABI class"));
+    }
 
     public static boolean isIntegral(MemoryLayout layout) {
-        return switch (ABI.name()) {
-            case CSupport.SysV.NAME -> layout.attribute(CSupport.SysV.CLASS_ATTRIBUTE_NAME).get() == CSupport.SysV.ArgumentClass.INTEGER;
-            case CSupport.Win64.NAME -> layout.attribute(CSupport.Win64.CLASS_ATTRIBUTE_NAME).get() == CSupport.Win64.ArgumentClass.INTEGER;
-            case CSupport.AArch64.NAME -> layout.attribute(CSupport.AArch64.CLASS_ATTRIBUTE_NAME).get() == CSupport.AArch64.ArgumentClass.INTEGER;
-            default -> throw new AssertionError("unexpected ABI: " + ABI.name());
-        };
+        return kind(layout).isIntegral();
     }
 
     public static boolean isPointer(MemoryLayout layout) {
-        return switch (ABI.name()) {
-            case CSupport.SysV.NAME -> layout.attribute(CSupport.SysV.CLASS_ATTRIBUTE_NAME).get() == CSupport.SysV.ArgumentClass.POINTER;
-            case CSupport.Win64.NAME -> layout.attribute(CSupport.Win64.CLASS_ATTRIBUTE_NAME).get() == CSupport.Win64.ArgumentClass.POINTER;
-            case CSupport.AArch64.NAME -> layout.attribute(CSupport.AArch64.CLASS_ATTRIBUTE_NAME).get() == CSupport.AArch64.ArgumentClass.POINTER;
-            default -> throw new AssertionError("unexpected ABI: " + ABI.name());
-        };
-    }
-
-    public static ValueLayout asVarArg(ValueLayout layout) {
-        return ABI.name().equals(CSupport.Win64.NAME) ? CSupport.Win64.asVarArg(layout) : layout;
+        return kind(layout).isPointer();
     }
 }

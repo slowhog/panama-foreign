@@ -50,12 +50,12 @@ import java.nio.file.Path;
 
 import static java.lang.invoke.MethodType.methodType;
 import static jdk.incubator.foreign.MemoryLayout.PathElement.sequenceElement;
-import static jdk.incubator.foreign.CSupport.C_CHAR;
-import static jdk.incubator.foreign.CSupport.C_DOUBLE;
-import static jdk.incubator.foreign.CSupport.C_FLOAT;
-import static jdk.incubator.foreign.CSupport.C_INT;
-import static jdk.incubator.foreign.CSupport.C_LONGLONG;
-import static jdk.incubator.foreign.CSupport.C_SHORT;
+import static jdk.incubator.foreign.CLinker.C_CHAR;
+import static jdk.incubator.foreign.CLinker.C_DOUBLE;
+import static jdk.incubator.foreign.CLinker.C_FLOAT;
+import static jdk.incubator.foreign.CLinker.C_INT;
+import static jdk.incubator.foreign.CLinker.C_LONGLONG;
+import static jdk.incubator.foreign.CLinker.C_SHORT;
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertNotNull;
 
@@ -178,7 +178,7 @@ public class TestClassGeneration extends JextractToolRunner {
         Method layout_getter = checkMethod(cls, name + "$LAYOUT", MemoryLayout.class);
         assertEquals(layout_getter.invoke(null), expectedLayout);
 
-        Method addr_getter = checkMethod(cls, name + "$ADDR", MemorySegment.class);
+        Method addr_getter = checkMethod(cls, name + "$SEGMENT", MemorySegment.class);
         MemorySegment segment = (MemorySegment)addr_getter.invoke(null);
 
         Method vh_getter = checkMethod(cls, name + "$VH", VarHandle.class);
