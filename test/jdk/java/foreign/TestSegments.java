@@ -23,10 +23,9 @@
 
 /*
  * @test
- * @run testng TestSegments
+ * @run testng/othervm -XX:MaxDirectMemorySize=1M TestSegments
  */
 
-import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemoryLayouts;
 import jdk.incubator.foreign.MemorySegment;
@@ -34,13 +33,13 @@ import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
 import java.lang.invoke.VarHandle;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Spliterator;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.LongFunction;
@@ -74,9 +73,6 @@ public class TestSegments {
             Thread t = new Thread(() -> {
                 try {
                     Object o = member.method.invoke(segment, member.params);
-                    if (member.method.getName().equals("acquire")) {
-                        ((MemorySegment)o).close();
-                    }
                 } catch (ReflectiveOperationException ex) {
                     throw new IllegalStateException(ex);
                 }
@@ -85,6 +81,29 @@ public class TestSegments {
             t.start();
             t.join();
             assertEquals(failed.get(), member.isConfined());
+        }
+    }
+
+    @Test(dataProvider = "segmentOperations")
+    public void testOpAfterClose(SegmentMember member) throws Throwable {
+        MemorySegment segment = MemorySegment.allocateNative(4);
+        segment.close();
+        try {
+            Object o = member.method.invoke(segment, member.params);
+            assertFalse(member.isConfined());
+        } catch (InvocationTargetException ex) {
+            assertTrue(member.isConfined());
+            Throwable target = ex.getTargetException();
+            assertTrue(target instanceof NullPointerException ||
+                          target instanceof UnsupportedOperationException ||
+                          target instanceof IllegalStateException);
+        }
+    }
+
+    @Test(expectedExceptions = OutOfMemoryError.class)
+    public void testNativeAllocationTooBig() {
+        try (MemorySegment segment = MemorySegment.allocateNative(1024 * 1024 * 8 * 2)) { // 2M
+            // do nothing
         }
     }
 
@@ -312,7 +331,11 @@ public class TestSegments {
         final static List<String> CONFINED_NAMES = List.of(
                 "address",
                 "close",
+                "share",
+                "handoff",
+                "registerCleaner",
                 "fill",
+                "spliterator",
                 "copyFrom",
                 "mismatch",
                 "toByteArray",
@@ -321,8 +344,7 @@ public class TestSegments {
                 "toIntArray",
                 "toFloatArray",
                 "toLongArray",
-                "toDoubleArray",
-                "withOwnerThread"
+                "toDoubleArray"
         );
 
         public SegmentMember(Method method, Object[] params) {
@@ -377,30 +399,10 @@ public class TestSegments {
     }
 
     enum AccessActions {
-        ACQUIRE(MemorySegment.ACQUIRE) {
+        SHARE(MemorySegment.SHARE) {
             @Override
             void run(MemorySegment segment) {
-                Spliterator<MemorySegment> spliterator =
-                        MemorySegment.spliterator(segment, MemoryLayout.ofSequence(segment.byteSize(), MemoryLayouts.JAVA_BYTE));
-                AtomicReference<RuntimeException> exception = new AtomicReference<>();
-                Runnable action = () -> {
-                    try {
-                        spliterator.tryAdvance(s -> { });
-                    } catch (RuntimeException e) {
-                        exception.set(e);
-                    }
-                };
-                Thread thread = new Thread(action);
-                thread.start();
-                try {
-                    thread.join();
-                } catch (InterruptedException ex) {
-                    throw new AssertionError(ex);
-                }
-                RuntimeException e = exception.get();
-                if (e != null) {
-                    throw e;
-                }
+                segment.share();
             }
         },
         CLOSE(MemorySegment.CLOSE) {
@@ -424,7 +426,7 @@ public class TestSegments {
         HANDOFF(MemorySegment.HANDOFF) {
             @Override
             void run(MemorySegment segment) {
-                segment.withOwnerThread(new Thread());
+                segment.handoff(new Thread());
             }
         };
 

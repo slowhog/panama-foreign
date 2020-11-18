@@ -24,6 +24,7 @@
 
 /*
  * @test
+ * @modules jdk.incubator.foreign/jdk.internal.foreign
  * @build NativeTestHelper CallGeneratorHelper TestDowncall
  *
  * @run testng/othervm
@@ -48,12 +49,10 @@
  *   TestDowncall
  */
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
-import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.ForeignLinker;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
@@ -67,14 +66,14 @@ import org.testng.annotations.*;
 public class TestDowncall extends CallGeneratorHelper {
 
     static LibraryLookup lib = LibraryLookup.ofLibrary("TestDowncall");
-    static ForeignLinker abi = CSupport.getSystemLinker();
+    static CLinker abi = CLinker.getInstance();
 
 
     @Test(dataProvider="functions", dataProviderClass=CallGeneratorHelper.class)
     public void testDowncall(String fName, Ret ret, List<ParamType> paramTypes, List<StructFieldType> fields) throws Throwable {
         List<Consumer<Object>> checks = new ArrayList<>();
         List<MemorySegment> segments = new ArrayList<>();
-        LibraryLookup.Symbol addr = lib.lookup(fName);
+        LibraryLookup.Symbol addr = lib.lookup(fName).get();
         MethodHandle mh = abi.downcallHandle(addr, methodType(ret, paramTypes, fields), function(ret, paramTypes, fields));
         Object[] args = makeArgs(paramTypes, fields, checks, segments);
         mh = mh.asSpreader(Object[].class, paramTypes.size());

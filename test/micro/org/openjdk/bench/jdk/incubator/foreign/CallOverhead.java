@@ -22,13 +22,12 @@
  */
 package org.openjdk.bench.jdk.incubator.foreign;
 
-import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
-import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.CLinker;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Fork;
@@ -42,20 +41,21 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodType;
 import java.util.concurrent.TimeUnit;
 
-import static jdk.incubator.foreign.CSupport.C_DOUBLE;
-import static jdk.incubator.foreign.CSupport.C_INT;
-import static jdk.incubator.foreign.CSupport.C_LONGLONG;
-import static jdk.incubator.foreign.CSupport.C_POINTER;
+import static jdk.incubator.foreign.CLinker.C_DOUBLE;
+import static jdk.incubator.foreign.CLinker.C_INT;
+import static jdk.incubator.foreign.CLinker.C_LONGLONG;
+import static jdk.incubator.foreign.CLinker.C_POINTER;
 
 @BenchmarkMode(Mode.AverageTime)
 @Warmup(iterations = 5, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @Measurement(iterations = 10, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @State(org.openjdk.jmh.annotations.Scope.Thread)
 @OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
+@Fork(value = 3, jvmArgsAppend = { "--add-modules=jdk.incubator.foreign", "-Dforeign.restricted=permit" })
 public class CallOverhead {
 
-    static final ForeignLinker abi = CSupport.getSystemLinker();
+    static final CLinker abi = CLinker.getInstance();
+
     static final MethodHandle func;
     static final MethodHandle identity;
     static final MethodHandle identity_struct;
@@ -74,39 +74,35 @@ public class CallOverhead {
     static {
         System.loadLibrary("CallOverheadJNI");
 
-        try {
-            LibraryLookup ll = LibraryLookup.ofLibrary("CallOverhead");
-            {
-                LibraryLookup.Symbol addr = ll.lookup("func");
-                MethodType mt = MethodType.methodType(void.class);
-                FunctionDescriptor fd = FunctionDescriptor.ofVoid();
-                func = abi.downcallHandle(addr, mt, fd);
-                func_trivial = abi.downcallHandle(addr, mt, fd.withAttribute(FunctionDescriptor.TRIVIAL_ATTRIBUTE_NAME, true));
-            }
-            {
-                LibraryLookup.Symbol addr = ll.lookup("identity");
-                MethodType mt = MethodType.methodType(int.class, int.class);
-                FunctionDescriptor fd = FunctionDescriptor.of(C_INT, C_INT);
-                identity = abi.downcallHandle(addr, mt, fd);
-                identity_trivial = abi.downcallHandle(addr, mt, fd.withAttribute(FunctionDescriptor.TRIVIAL_ATTRIBUTE_NAME, true));
-            }
-            identity_struct = abi.downcallHandle(ll.lookup("identity_struct"),
-                    MethodType.methodType(MemorySegment.class, MemorySegment.class),
-                    FunctionDescriptor.of(POINT_LAYOUT, POINT_LAYOUT));
-            identity_memory_address = abi.downcallHandle(ll.lookup("identity_memory_address"),
-                    MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
-                    FunctionDescriptor.of(C_POINTER, C_POINTER));
-            args5 = abi.downcallHandle(ll.lookup("args5"),
-                    MethodType.methodType(void.class, long.class, double.class, long.class, double.class, long.class),
-                    FunctionDescriptor.ofVoid(C_LONGLONG, C_DOUBLE, C_LONGLONG, C_DOUBLE, C_LONGLONG));
-            args10 = abi.downcallHandle(ll.lookup("args10"),
-                    MethodType.methodType(void.class, long.class, double.class, long.class, double.class, long.class,
-                                                      double.class, long.class, double.class, long.class, double.class),
-                    FunctionDescriptor.ofVoid(C_LONGLONG, C_DOUBLE, C_LONGLONG, C_DOUBLE, C_LONGLONG,
-                                              C_DOUBLE, C_LONGLONG, C_DOUBLE, C_LONGLONG, C_DOUBLE));
-        } catch (NoSuchMethodException e) {
-            throw new BootstrapMethodError(e);
+        LibraryLookup ll = LibraryLookup.ofLibrary("CallOverhead");
+        {
+            LibraryLookup.Symbol addr = ll.lookup("func").get();
+            MethodType mt = MethodType.methodType(void.class);
+            FunctionDescriptor fd = FunctionDescriptor.ofVoid();
+            func = abi.downcallHandle(addr, mt, fd);
+            func_trivial = abi.downcallHandle(addr, mt, fd.withAttribute(FunctionDescriptor.TRIVIAL_ATTRIBUTE_NAME, true));
         }
+        {
+            LibraryLookup.Symbol addr = ll.lookup("identity").get();
+            MethodType mt = MethodType.methodType(int.class, int.class);
+            FunctionDescriptor fd = FunctionDescriptor.of(C_INT, C_INT);
+            identity = abi.downcallHandle(addr, mt, fd);
+            identity_trivial = abi.downcallHandle(addr, mt, fd.withAttribute(FunctionDescriptor.TRIVIAL_ATTRIBUTE_NAME, true));
+        }
+        identity_struct = abi.downcallHandle(ll.lookup("identity_struct").get(),
+                MethodType.methodType(MemorySegment.class, MemorySegment.class),
+                FunctionDescriptor.of(POINT_LAYOUT, POINT_LAYOUT));
+        identity_memory_address = abi.downcallHandle(ll.lookup("identity_memory_address").get(),
+                MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
+                FunctionDescriptor.of(C_POINTER, C_POINTER));
+        args5 = abi.downcallHandle(ll.lookup("args5").get(),
+                MethodType.methodType(void.class, long.class, double.class, long.class, double.class, long.class),
+                FunctionDescriptor.ofVoid(C_LONGLONG, C_DOUBLE, C_LONGLONG, C_DOUBLE, C_LONGLONG));
+        args10 = abi.downcallHandle(ll.lookup("args10").get(),
+                MethodType.methodType(void.class, long.class, double.class, long.class, double.class, long.class,
+                                                  double.class, long.class, double.class, long.class, double.class),
+                FunctionDescriptor.ofVoid(C_LONGLONG, C_DOUBLE, C_LONGLONG, C_DOUBLE, C_LONGLONG,
+                                          C_DOUBLE, C_LONGLONG, C_DOUBLE, C_LONGLONG, C_DOUBLE));
     }
 
     static native void blank();
@@ -119,12 +115,6 @@ public class CallOverhead {
 
     @Benchmark
     public void panama_blank() throws Throwable {
-        func.invokeExact();
-    }
-
-    @Benchmark
-    @Fork(jvmArgsAppend = "-Djdk.internal.foreign.ProgrammableInvoker.NO_SPEC=true")
-    public void panama_blank_NO_SPEC() throws Throwable {
         func.invokeExact();
     }
 
@@ -144,12 +134,6 @@ public class CallOverhead {
     }
 
     @Benchmark
-    @Fork(jvmArgsAppend = "-Djdk.internal.foreign.ProgrammableInvoker.NO_SPEC=true")
-    public int panama_identity_NO_SPEC() throws Throwable {
-        return (int) identity.invokeExact(10);
-    }
-
-    @Benchmark
     public int panama_identity_trivial() throws Throwable {
         return (int) identity_trivial.invokeExact(10);
     }
@@ -160,19 +144,7 @@ public class CallOverhead {
     }
 
     @Benchmark
-    @Fork(jvmArgsAppend = "-Djdk.internal.foreign.ProgrammableInvoker.NO_SPEC=true")
-    public MemorySegment panama_identity_struct_NO_SPEC() throws Throwable {
-        return (MemorySegment) identity_struct.invokeExact(point);
-    }
-
-    @Benchmark
     public MemoryAddress panama_identity_memory_address() throws Throwable {
-        return (MemoryAddress) identity_memory_address.invokeExact(MemoryAddress.NULL);
-    }
-
-    @Benchmark
-    @Fork(jvmArgsAppend = "-Djdk.internal.foreign.ProgrammableInvoker.NO_SPEC=true")
-    public MemoryAddress panama_identity_memory_address_NO_SPEC() throws Throwable {
         return (MemoryAddress) identity_memory_address.invokeExact(MemoryAddress.NULL);
     }
 
@@ -182,20 +154,7 @@ public class CallOverhead {
     }
 
     @Benchmark
-    @Fork(jvmArgsAppend = "-Djdk.internal.foreign.ProgrammableInvoker.NO_SPEC=true")
-    public void panama_args5_NO_SPEC() throws Throwable {
-        args5.invokeExact(10L, 11D, 12L, 13D, 14L);
-    }
-
-    @Benchmark
     public void panama_args10() throws Throwable {
-        args10.invokeExact(10L, 11D, 12L, 13D, 14L,
-                           15D, 16L, 17D, 18L, 19D);
-    }
-
-    @Benchmark
-    @Fork(jvmArgsAppend = "-Djdk.internal.foreign.ProgrammableInvoker.NO_SPEC=true")
-    public void panama_args10_NO_SPEC() throws Throwable {
         args10.invokeExact(10L, 11D, 12L, 13D, 14L,
                            15D, 16L, 17D, 18L, 19D);
     }

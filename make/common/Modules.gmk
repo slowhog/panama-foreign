@@ -58,6 +58,7 @@ BOOT_MODULES += \
     java.rmi \
     java.security.sasl \
     java.xml \
+    jdk.incubator.vector \
     jdk.internal.vm.ci \
     jdk.jfr \
     jdk.management \
@@ -123,7 +124,7 @@ endif
 
 JRE_TOOL_MODULES += \
     jdk.jdwp.agent \
-    jdk.incubator.jpackage \
+    jdk.jpackage \
     #
 
 ################################################################################
@@ -143,7 +144,8 @@ DOCS_MODULES += \
     jdk.editpad \
     jdk.hotspot.agent \
     jdk.httpserver \
-    jdk.incubator.jpackage \
+    jdk.jpackage \
+    jdk.incubator.vector \
     jdk.jartool \
     jdk.javadoc \
     jdk.jcmd \
@@ -224,7 +226,7 @@ endif
 # jpackage is only on windows, macosx, and linux
 
 ifeq ($(call isTargetOs, windows macosx linux), false)
-  MODULES_FILTER += jdk.incubator.jpackage
+  MODULES_FILTER += jdk.jpackage
 endif
 
 ################################################################################
@@ -344,7 +346,7 @@ $(MODULE_DEPS_MAKEFILE): $(MODULE_INFOS) \
 	                          sub(/\/\*.*\*\//, ""); \
 	                          gsub(/^ +\*.*/, ""); \
 	                          gsub(/ /, ""); \
-                                  gsub(/\r/, ""); \
+	                          gsub(/\r/, ""); \
 	                          printf(" %s", $$0) } \
 	          END           { printf("\n") }' $m && \
 	      $(PRINTF) "TRANSITIVE_MODULES_$(call GetModuleNameFromModuleInfo, $m) :=" && \
@@ -358,7 +360,7 @@ $(MODULE_DEPS_MAKEFILE): $(MODULE_INFOS) \
 	                          sub(/\/\*.*\*\//, ""); \
 	                          gsub(/^ +\*.*/, ""); \
 	                          gsub(/ /, ""); \
-                                  gsub(/\r/, ""); \
+	                          gsub(/\r/, ""); \
 	                          printf(" %s", $$0) } \
 	          END           { printf("\n") }' $m \
 	    ) >> $@ $(NEWLINE))

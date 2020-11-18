@@ -22,20 +22,19 @@
  */
 package org.openjdk.bench.jdk.incubator.foreign.points.support;
 
-import jdk.incubator.foreign.CSupport;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.ForeignLinker;
+import jdk.incubator.foreign.CLinker;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 
 import static java.lang.invoke.MethodType.methodType;
-import static jdk.incubator.foreign.CSupport.*;
 import static jdk.incubator.foreign.MemoryLayout.PathElement.groupElement;
+import static jdk.incubator.foreign.CLinker.*;
 
 public class PanamaPoint implements AutoCloseable {
 
@@ -50,22 +49,18 @@ public class PanamaPoint implements AutoCloseable {
     private static final MethodHandle MH_distance_ptrs;
 
     static {
-        try {
-            ForeignLinker abi = CSupport.getSystemLinker();
-            LibraryLookup lookup = LibraryLookup.ofLibrary("Point");
-            MH_distance = abi.downcallHandle(
-                lookup.lookup("distance"),
-                methodType(double.class, MemorySegment.class, MemorySegment.class),
-                FunctionDescriptor.of(C_DOUBLE, LAYOUT, LAYOUT)
-            );
-            MH_distance_ptrs = abi.downcallHandle(
-                lookup.lookup("distance_ptrs"),
-                methodType(double.class, MemoryAddress.class, MemoryAddress.class),
-                FunctionDescriptor.of(C_DOUBLE, C_POINTER, C_POINTER)
-            );
-        } catch (NoSuchMethodException e) {
-            throw new BootstrapMethodError(e);
-        }
+        CLinker abi = CLinker.getInstance();
+        LibraryLookup lookup = LibraryLookup.ofLibrary("Point");
+        MH_distance = abi.downcallHandle(
+            lookup.lookup("distance").get(),
+            methodType(double.class, MemorySegment.class, MemorySegment.class),
+            FunctionDescriptor.of(C_DOUBLE, LAYOUT, LAYOUT)
+        );
+        MH_distance_ptrs = abi.downcallHandle(
+            lookup.lookup("distance_ptrs").get(),
+            methodType(double.class, MemoryAddress.class, MemoryAddress.class),
+            FunctionDescriptor.of(C_DOUBLE, C_POINTER, C_POINTER)
+        );
     }
 
     private final MemorySegment segment;

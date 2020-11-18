@@ -25,13 +25,7 @@
  */
 package jdk.internal.foreign.abi.aarch64;
 
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.GroupLayout;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryHandles;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.NativeScope;
+import jdk.incubator.foreign.*;
 import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.SharedUtils;
@@ -43,8 +37,8 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-import static jdk.incubator.foreign.CSupport.AArch64;
-import static jdk.incubator.foreign.CSupport.VaList;
+import static jdk.internal.foreign.PlatformLayouts.AArch64;
+import static jdk.incubator.foreign.CLinker.VaList;
 import static jdk.incubator.foreign.MemoryLayout.PathElement.groupElement;
 import static jdk.internal.foreign.abi.SharedUtils.SimpleVaArg;
 import static jdk.internal.foreign.abi.SharedUtils.checkCompatibleType;
@@ -103,7 +97,7 @@ public class AArch64VaList implements VaList {
         = LAYOUT.varHandle(int.class, groupElement("__vr_offs"));
 
     private static final Cleaner cleaner = Cleaner.create();
-    private static final CSupport.VaList EMPTY
+    private static final VaList EMPTY
         = new SharedUtils.EmptyVaList(emptyListAddress());
 
     private final MemorySegment segment;
@@ -120,21 +114,19 @@ public class AArch64VaList implements VaList {
     }
 
     private static AArch64VaList readFromSegment(MemorySegment segment) {
-        MemorySegment gpRegsArea = MemorySegment.ofNativeRestricted(
-            grTop(segment).addOffset(-MAX_GP_OFFSET), MAX_GP_OFFSET,
-            segment.ownerThread(), null, null);
+        MemorySegment gpRegsArea = handoffIfNeeded(grTop(segment).addOffset(-MAX_GP_OFFSET)
+                .asSegmentRestricted(MAX_GP_OFFSET), segment.ownerThread());
 
-        MemorySegment fpRegsArea = MemorySegment.ofNativeRestricted(
-            vrTop(segment).addOffset(-MAX_FP_OFFSET), MAX_FP_OFFSET,
-            segment.ownerThread(), null, null);
+        MemorySegment fpRegsArea = handoffIfNeeded(vrTop(segment).addOffset(-MAX_FP_OFFSET)
+                .asSegmentRestricted(MAX_FP_OFFSET), segment.ownerThread());
         return new AArch64VaList(segment, gpRegsArea, fpRegsArea, List.of(gpRegsArea, fpRegsArea));
     }
 
     private static MemoryAddress emptyListAddress() {
         long ptr = U.allocateMemory(LAYOUT.byteSize());
-        MemorySegment ms = NativeMemorySegmentImpl.makeNativeSegmentUnchecked(
-                MemoryAddress.ofLong(ptr), LAYOUT.byteSize(), null,
-                () -> U.freeMemory(ptr), null);
+        MemorySegment ms = MemoryAddress.ofLong(ptr)
+                .asSegmentRestricted(LAYOUT.byteSize(), () -> U.freeMemory(ptr), null)
+                .share();
         cleaner.register(AArch64VaList.class, ms::close);
         VH_stack.set(ms, MemoryAddress.NULL);
         VH_gr_top.set(ms, MemoryAddress.NULL);
@@ -144,7 +136,7 @@ public class AArch64VaList implements VaList {
         return ms.address();
     }
 
-    public static CSupport.VaList empty() {
+    public static VaList empty() {
         return EMPTY;
     }
 
@@ -262,9 +254,8 @@ public class AArch64VaList implements VaList {
             preAlignStack(layout);
             return switch (typeClass) {
                 case STRUCT_REGISTER, STRUCT_HFA, STRUCT_REFERENCE -> {
-                    try (MemorySegment slice = MemorySegment.ofNativeRestricted(
-                             stackPtr(), layout.byteSize(),
-                             segment.ownerThread(), null, null)) {
+                    try (MemorySegment slice = handoffIfNeeded(stackPtr()
+                            .asSegmentRestricted(layout.byteSize()), segment.ownerThread())) {
                         MemorySegment seg = allocator.allocate(layout);
                         seg.copyFrom(slice);
                         postAlignStack(layout);
@@ -273,9 +264,8 @@ public class AArch64VaList implements VaList {
                 }
                 case POINTER, INTEGER, FLOAT -> {
                     VarHandle reader = vhPrimitiveOrAddress(carrier, layout);
-                    try (MemorySegment slice = MemorySegment.ofNativeRestricted(
-                             stackPtr(), layout.byteSize(),
-                             segment.ownerThread(), null, null)) {
+                    try (MemorySegment slice = handoffIfNeeded(stackPtr()
+                            .asSegmentRestricted(layout.byteSize()), segment.ownerThread())) {
                         Object res = reader.get(slice);
                         postAlignStack(layout);
                         yield res;
@@ -321,8 +311,8 @@ public class AArch64VaList implements VaList {
                         gpRegsArea.asSlice(currentGPOffset()));
                     consumeGPSlots(1);
 
-                    try (MemorySegment slice = MemorySegment.ofNativeRestricted(
-                             ptr, layout.byteSize(), segment.ownerThread(), null, null)) {
+                    try (MemorySegment slice = handoffIfNeeded(ptr
+                            .asSegmentRestricted(layout.byteSize()), segment.ownerThread())) {
                         MemorySegment seg = allocator.allocate(layout);
                         seg.copyFrom(slice);
                         yield seg;
@@ -366,8 +356,7 @@ public class AArch64VaList implements VaList {
     }
 
     public static VaList ofAddress(MemoryAddress ma) {
-        return readFromSegment(MemorySegment.ofNativeRestricted(
-                ma, LAYOUT.byteSize(), Thread.currentThread(), null, null));
+        return readFromSegment(ma.asSegmentRestricted(LAYOUT.byteSize()));
     }
 
     @Override
@@ -428,7 +417,7 @@ public class AArch64VaList implements VaList {
             + '}';
     }
 
-    static class Builder implements CSupport.VaList.Builder {
+    static class Builder implements VaList.Builder {
         private final SharedUtils.Allocator allocator;
         private final MemorySegment gpRegs;
         private final MemorySegment fpRegs;
@@ -444,27 +433,27 @@ public class AArch64VaList implements VaList {
         }
 
         @Override
-        public Builder vargFromInt(MemoryLayout layout, int value) {
+        public Builder vargFromInt(ValueLayout layout, int value) {
             return arg(int.class, layout, value);
         }
 
         @Override
-        public Builder vargFromLong(MemoryLayout layout, long value) {
+        public Builder vargFromLong(ValueLayout layout, long value) {
             return arg(long.class, layout, value);
         }
 
         @Override
-        public Builder vargFromDouble(MemoryLayout layout, double value) {
+        public Builder vargFromDouble(ValueLayout layout, double value) {
             return arg(double.class, layout, value);
         }
 
         @Override
-        public Builder vargFromAddress(MemoryLayout layout, MemoryAddress value) {
-            return arg(MemoryAddress.class, layout, value);
+        public Builder vargFromAddress(ValueLayout layout, Addressable value) {
+            return arg(MemoryAddress.class, layout, value.address());
         }
 
         @Override
-        public Builder vargFromSegment(MemoryLayout layout, MemorySegment value) {
+        public Builder vargFromSegment(GroupLayout layout, MemorySegment value) {
             return arg(MemorySegment.class, layout, value);
         }
 
@@ -567,5 +556,10 @@ public class AArch64VaList implements VaList {
             assert fpRegs.ownerThread() == vaListSegment.ownerThread();
             return new AArch64VaList(vaListSegment, gpRegs, fpRegs, attachedSegments);
         }
+    }
+
+    private static MemorySegment handoffIfNeeded(MemorySegment segment, Thread thread) {
+        return segment.ownerThread() == thread ?
+                segment : segment.handoff(thread);
     }
 }

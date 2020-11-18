@@ -99,7 +99,9 @@ public class VMProps implements Callable<Map<String, String>> {
         // vm.hasJFR is "true" if JFR is included in the build of the VM and
         // so tests can be executed.
         map.put("vm.hasJFR", this::vmHasJFR);
+        map.put("vm.jvmti", this::vmHasJVMTI);
         map.put("vm.cpu.features", this::cpuFeatures);
+        map.put("vm.pageSize", this::vmPageSize);
         map.put("vm.rtm.cpu", this::vmRTMCPU);
         map.put("vm.rtm.compiler", this::vmRTMCompiler);
         map.put("vm.aot", this::vmAOT);
@@ -113,8 +115,9 @@ public class VMProps implements Callable<Map<String, String>> {
         map.put("vm.compiler1.enabled", this::isCompiler1Enabled);
         map.put("vm.compiler2.enabled", this::isCompiler2Enabled);
         map.put("docker.support", this::dockerSupport);
+        map.put("vm.musl", this::isMusl);
         map.put("release.implementor", this::implementor);
-        map.put("test.vm.gc.nvdimm", this::isNvdimmTestEnabled);
+        map.put("jdk.containerized", this::jdkContainerized);
         vmGC(map); // vm.gc.X = true/false
         vmOptFinalFlags(map);
 
@@ -342,6 +345,13 @@ public class VMProps implements Callable<Map<String, String>> {
     }
 
     /**
+     * @return "true" if the VM is compiled with JVMTI
+     */
+    protected String vmHasJVMTI() {
+        return "" + WB.isJVMTIIncluded();
+    }
+
+    /**
      * @return true if compiler in use supports RTM and false otherwise.
      */
     protected String vmRTMCompiler() {
@@ -429,6 +439,13 @@ public class VMProps implements Callable<Map<String, String>> {
     }
 
     /**
+     * @return System page size in bytes.
+     */
+    protected String vmPageSize() {
+        return "" + WB.getVMPageSize();
+    }
+
+    /**
      * Check if Graal is used as JIT compiler.
      *
      * @return true if Graal is used as JIT compiler.
@@ -498,6 +515,15 @@ public class VMProps implements Callable<Map<String, String>> {
         return (p.exitValue() == 0);
     }
 
+    /**
+     * Checks musl libc.
+     *
+     * @return true if musl libc is used.
+     */
+    protected String isMusl() {
+        return Boolean.toString(WB.getLibcName().contains("musl"));
+    }
+
     private String implementor() {
         try (InputStream in = new BufferedInputStream(new FileInputStream(
                 System.getProperty("java.home") + "/release"))) {
@@ -514,8 +540,8 @@ public class VMProps implements Callable<Map<String, String>> {
         }
     }
 
-    private String isNvdimmTestEnabled() {
-        String isEnabled = System.getenv("TEST_VM_GC_NVDIMM");
+    private String jdkContainerized() {
+        String isEnabled = System.getenv("TEST_JDK_CONTAINERIZED");
         return "" + "true".equalsIgnoreCase(isEnabled);
     }
 

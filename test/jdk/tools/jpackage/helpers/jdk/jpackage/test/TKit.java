@@ -81,7 +81,7 @@ final public class TKit {
     }).get();
 
     public static final Path SRC_ROOT = Functional.identity(() -> {
-        return TEST_SRC_ROOT.resolve("../../../../src/jdk.incubator.jpackage").normalize().toAbsolutePath();
+        return TEST_SRC_ROOT.resolve("../../../../src/jdk.jpackage").normalize().toAbsolutePath();
     }).get();
 
     public final static String ICON_SUFFIX = Functional.identity(() -> {
@@ -244,14 +244,14 @@ final public class TKit {
         return v.subpath(0, v.getNameCount());
     }
 
-    public static void createTextFile(Path propsFilename, Collection<String> lines) {
-        createTextFile(propsFilename, lines.stream());
+    public static void createTextFile(Path filename, Collection<String> lines) {
+        createTextFile(filename, lines.stream());
     }
 
-    public static void createTextFile(Path propsFilename, Stream<String> lines) {
+    public static void createTextFile(Path filename, Stream<String> lines) {
         trace(String.format("Create [%s] text file...",
-                propsFilename.toAbsolutePath().normalize()));
-        ThrowingRunnable.toRunnable(() -> Files.write(propsFilename,
+                filename.toAbsolutePath().normalize()));
+        ThrowingRunnable.toRunnable(() -> Files.write(filename,
                 lines.peek(TKit::trace).collect(Collectors.toList()))).run();
         trace("Done");
     }
@@ -698,7 +698,18 @@ final public class TKit {
         }
     }
 
-     public static void assertDirectoryExists(Path path) {
+    public static void assertPathNotEmptyDirectory(Path path) {
+        if (Files.isDirectory(path)) {
+            ThrowingRunnable.toRunnable(() -> {
+                try (var files = Files.list(path)) {
+                    TKit.assertFalse(files.findFirst().isEmpty(), String.format
+                            ("Check [%s] is not an empty directory", path));
+                }
+            }).run();
+         }
+    }
+
+    public static void assertDirectoryExists(Path path) {
         assertPathExists(path, true);
         assertTrue(path.toFile().isDirectory(), String.format(
                 "Check [%s] is a directory", path));

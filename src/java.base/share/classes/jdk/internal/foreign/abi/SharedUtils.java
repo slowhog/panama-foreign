@@ -24,8 +24,6 @@
  */
 package jdk.internal.foreign.abi;
 
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.MemoryAccess;
@@ -33,9 +31,13 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.NativeScope;
 import jdk.incubator.foreign.SequenceLayout;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.ValueLayout;
+import jdk.internal.foreign.AbstractNativeScope;
+import jdk.internal.foreign.CABI;
 import jdk.internal.foreign.MemoryAddressImpl;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.aarch64.AArch64Linker;
@@ -56,13 +58,15 @@ import static java.lang.invoke.MethodHandles.identity;
 import static java.lang.invoke.MethodHandles.insertArguments;
 import static java.lang.invoke.MethodHandles.permuteArguments;
 import static java.lang.invoke.MethodType.methodType;
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.incubator.foreign.CLinker.*;
 
 public class SharedUtils {
 
     private static final MethodHandle MH_ALLOC_BUFFER;
     private static final MethodHandle MH_BASEADDRESS;
     private static final MethodHandle MH_BUFFER_COPY;
+
+    static final Allocator DEFAULT_ALLOCATOR = MemorySegment::allocateNative;
 
     static {
         try {
@@ -234,19 +238,12 @@ public class SharedUtils {
         throw new IllegalArgumentException("Size too large: " + size);
     }
 
-    public static ForeignLinker getSystemLinker() {
-        String arch = System.getProperty("os.arch");
-        String os = System.getProperty("os.name");
-        if (arch.equals("amd64") || arch.equals("x86_64")) {
-            if (os.startsWith("Windows")) {
-                return Windowsx64Linker.getInstance();
-            } else {
-                return SysVx64Linker.getInstance();
-            }
-        } else if (arch.equals("aarch64")) {
-            return AArch64Linker.getInstance();
-        }
-        throw new UnsupportedOperationException("Unsupported os or arch: " + os + ", " + arch);
+    public static CLinker getSystemLinker() {
+        return switch (CABI.current()) {
+            case Win64 -> Windowsx64Linker.getInstance();
+            case SysV -> SysVx64Linker.getInstance();
+            case AArch64 -> AArch64Linker.getInstance();
+        };
     }
 
     public static String toJavaStringInternal(MemorySegment segment, long start, Charset charset) {
@@ -268,14 +265,62 @@ public class SharedUtils {
         throw new IllegalArgumentException("String too large");
     }
 
+    static long bufferCopySize(CallingSequence callingSequence) {
+        // FIXME: > 16 bytes alignment might need extra space since the
+        // starting address of the allocator might be un-aligned.
+        long size = 0;
+        for (int i = 0; i < callingSequence.argumentCount(); i++) {
+            List<Binding> bindings = callingSequence.argumentBindings(i);
+            for (Binding b : bindings) {
+                if (b instanceof Binding.Copy) {
+                    Binding.Copy c = (Binding.Copy) b;
+                    size = Utils.alignUp(size, c.alignment());
+                    size += c.size();
+                } else if (b instanceof Binding.Allocate) {
+                    Binding.Allocate c = (Binding.Allocate) b;
+                    size = Utils.alignUp(size, c.alignment());
+                    size += c.size();
+                }
+            }
+        }
+        return size;
+    }
+
+    // lazy init MH_ALLOC and MH_FREE handles
+    private static class AllocHolder {
+
+        final static LibraryLookup LOOKUP = LibraryLookup.ofDefault();
+
+        final static MethodHandle MH_MALLOC = getSystemLinker().downcallHandle(LOOKUP.lookup("malloc").get(),
+                        MethodType.methodType(MemoryAddress.class, long.class),
+                FunctionDescriptor.of(C_POINTER, C_LONGLONG));
+
+        final static MethodHandle MH_FREE = getSystemLinker().downcallHandle(LOOKUP.lookup("free").get(),
+                        MethodType.methodType(void.class, MemoryAddress.class),
+                FunctionDescriptor.ofVoid(C_POINTER));
+    }
+
+    public static MemoryAddress allocateMemoryInternal(long size) {
+        try {
+            return (MemoryAddress) AllocHolder.MH_MALLOC.invokeExact(size);
+        } catch (Throwable th) {
+            throw new RuntimeException(th);
+        }
+    }
+
+    public static void freeMemoryInternal(MemoryAddress addr) {
+        try {
+            AllocHolder.MH_FREE.invokeExact(addr);
+        } catch (Throwable th) {
+            throw new RuntimeException(th);
+        }
+    }
 
     public static VaList newVaList(Consumer<VaList.Builder> actions, Allocator allocator) {
-        String name = CSupport.getSystemLinker().name();
-        return switch(name) {
-            case Win64.NAME -> Windowsx64Linker.newVaList(actions, allocator);
-            case SysV.NAME -> SysVx64Linker.newVaList(actions, allocator);
-            case AArch64.NAME -> AArch64Linker.newVaList(actions, allocator);
-            default -> throw new IllegalStateException("Unknown linker name: " + name);
+        return switch (CABI.current()) {
+            case Win64 -> Windowsx64Linker.newVaList(actions, allocator);
+            case SysV -> SysVx64Linker.newVaList(actions, allocator);
+            case AArch64 -> AArch64Linker.newVaList(actions, allocator);
         };
     }
 
@@ -286,22 +331,18 @@ public class SharedUtils {
     }
 
     public static VaList newVaListOfAddress(MemoryAddress ma) {
-        String name = CSupport.getSystemLinker().name();
-        return switch(name) {
-            case Win64.NAME -> Windowsx64Linker.newVaListOfAddress(ma);
-            case SysV.NAME -> SysVx64Linker.newVaListOfAddress(ma);
-            case AArch64.NAME -> AArch64Linker.newVaListOfAddress(ma);
-            default -> throw new IllegalStateException("Unknown linker name: " + name);
+        return switch (CABI.current()) {
+            case Win64 -> Windowsx64Linker.newVaListOfAddress(ma);
+            case SysV -> SysVx64Linker.newVaListOfAddress(ma);
+            case AArch64 -> AArch64Linker.newVaListOfAddress(ma);
         };
     }
 
     public static VaList emptyVaList() {
-        String name = CSupport.getSystemLinker().name();
-        return switch(name) {
-            case Win64.NAME -> Windowsx64Linker.emptyVaList();
-            case SysV.NAME -> SysVx64Linker.emptyVaList();
-            case AArch64.NAME -> AArch64Linker.emptyVaList();
-            default -> throw new IllegalStateException("Unknown linker name: " + name);
+        return switch (CABI.current()) {
+            case Win64 -> Windowsx64Linker.emptyVaList();
+            case SysV -> SysVx64Linker.emptyVaList();
+            case AArch64 -> AArch64Linker.emptyVaList();
         };
     }
 
@@ -346,7 +387,13 @@ public class SharedUtils {
                 .orElse(false);
     }
 
-    public interface Allocator {
+    public interface Allocator extends AutoCloseable {
+        Allocator THROWING_ALLOCATOR = (size, align) -> { throw new UnsupportedOperationException("Null allocator"); };
+
+        static Allocator empty() {
+            return Allocator.ofScope(AbstractNativeScope.emptyScope());
+        }
+
         default MemorySegment allocate(MemoryLayout layout) {
             return allocate(layout.byteSize(), layout.byteAlignment());
         }
@@ -355,10 +402,32 @@ public class SharedUtils {
             return allocate(size, 1);
         }
 
+        @Override
+        default void close() {}
+
+        default MemorySegment handoff(MemorySegment ms) {
+            return ms;
+        }
+
         MemorySegment allocate(long size, long align);
 
         static Allocator ofScope(NativeScope scope) {
-            return scope::allocate;
+            return new Allocator() {
+                @Override
+                public MemorySegment allocate(long size, long align) {
+                    return scope.allocate(size, align);
+                }
+
+                @Override
+                public MemorySegment handoff(MemorySegment ms) {
+                    return ms.handoff(scope);
+                }
+
+                @Override
+                public void close() {
+                    scope.close();
+                }
+            };
         }
     }
 
@@ -380,7 +449,7 @@ public class SharedUtils {
         }
     }
 
-    public static class EmptyVaList implements CSupport.VaList {
+    public static class EmptyVaList implements VaList {
 
         private final MemoryAddress address;
 

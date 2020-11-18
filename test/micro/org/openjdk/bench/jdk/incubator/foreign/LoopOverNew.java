@@ -49,7 +49,7 @@ import static jdk.incubator.foreign.MemoryLayouts.JAVA_INT;
 @Measurement(iterations = 10, time = 500, timeUnit = TimeUnit.MILLISECONDS)
 @State(org.openjdk.jmh.annotations.Scope.Thread)
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
-@Fork(3)
+@Fork(value = 3, jvmArgsAppend = { "--add-modules=jdk.incubator.foreign" })
 public class LoopOverNew {
 
     static final Unsafe unsafe = Utils.unsafe;
@@ -72,6 +72,15 @@ public class LoopOverNew {
     @Benchmark
     public void segment_loop() {
         MemorySegment segment = MemorySegment.allocateNative(ALLOC_SIZE);
+        for (int i = 0; i < ELEM_SIZE; i++) {
+            VH_int.set(segment, (long) i, i);
+        }
+        segment.close();
+    }
+
+    @Benchmark
+    public void segment_loop_shared() {
+        MemorySegment segment = MemorySegment.allocateNative(ALLOC_SIZE).share();
         for (int i = 0; i < ELEM_SIZE; i++) {
             VH_int.set(segment, (long) i, i);
         }
