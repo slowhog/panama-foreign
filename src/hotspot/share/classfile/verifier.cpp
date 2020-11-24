@@ -45,6 +45,7 @@
 #include "oops/instanceKlass.hpp"
 #include "oops/oop.inline.hpp"
 #include "oops/typeArrayOop.hpp"
+#include "runtime/arguments.hpp"
 #include "runtime/fieldDescriptor.hpp"
 #include "runtime/handles.inline.hpp"
 #include "runtime/interfaceSupport.inline.hpp"
@@ -172,7 +173,7 @@ bool Verifier::verify(InstanceKlass* klass, bool should_verify_class, TRAPS) {
 
   // Timer includes any side effects of class verification (resolution,
   // etc), but not recursive calls to Verifier::verify().
-  JavaThread* jt = (JavaThread*)THREAD;
+  JavaThread* jt = THREAD->as_Java_thread();
   PerfClassTraceTime timer(ClassLoader::perf_class_verify_time(),
                            ClassLoader::perf_class_verify_selftime(),
                            ClassLoader::perf_classes_verified(),
@@ -295,7 +296,7 @@ bool Verifier::is_eligible_for_verification(InstanceKlass* klass, bool should_ve
 
 Symbol* Verifier::inference_verify(
     InstanceKlass* klass, char* message, size_t message_len, TRAPS) {
-  JavaThread* thread = (JavaThread*)THREAD;
+  JavaThread* thread = THREAD->as_Java_thread();
 
   verify_byte_codes_fn_t verify_func = verify_byte_codes_fn();
 
@@ -2116,7 +2117,7 @@ bool ClassVerifier::is_protected_access(InstanceKlass* this_class,
   InstanceKlass* target_instance = InstanceKlass::cast(target_class);
   fieldDescriptor fd;
   if (is_method) {
-    Method* m = target_instance->uncached_lookup_method(field_name, field_sig, Klass::find_overpass);
+    Method* m = target_instance->uncached_lookup_method(field_name, field_sig, Klass::OverpassLookupMode::find);
     if (m != NULL && m->is_protected()) {
       if (!this_class->is_same_class_package(m->method_holder())) {
         return true;
@@ -2709,7 +2710,7 @@ void ClassVerifier::verify_invoke_init(
       Method* m = InstanceKlass::cast(ref_klass)->uncached_lookup_method(
         vmSymbols::object_initializer_name(),
         cp->signature_ref_at(bcs->get_index_u2()),
-        Klass::find_overpass);
+        Klass::OverpassLookupMode::find);
       // Do nothing if method is not found.  Let resolution detect the error.
       if (m != NULL) {
         InstanceKlass* mh = m->method_holder();

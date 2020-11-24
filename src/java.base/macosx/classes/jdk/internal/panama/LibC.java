@@ -7,7 +7,7 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import jdk.incubator.foreign.*;
 import jdk.incubator.foreign.MemoryLayout.PathElement;
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.incubator.foreign.CLinker.*;
 
 
 public final class LibC {
@@ -21,7 +21,7 @@ public final class LibC {
             C_INT.withName("st_dev"),
             C_SHORT.withName("st_mode"),
             C_SHORT.withName("st_nlink"),
-            C_LONG.withName("st_ino"),
+            C_LONGLONG.withName("st_ino"),
             C_INT.withName("st_uid"),
             C_INT.withName("st_gid"),
             C_INT.withName("st_rdev"),
@@ -42,13 +42,13 @@ public final class LibC {
                 C_LONG.withName("tv_sec"),
                 C_LONG.withName("tv_nsec")
             ).withName("st_birthtimespec"),
-            C_LONG.withName("st_size"),
-            C_LONG.withName("st_blocks"),
+            C_LONGLONG.withName("st_size"),
+            C_LONGLONG.withName("st_blocks"),
             C_INT.withName("st_blksize"),
             C_INT.withName("st_flags"),
             C_INT.withName("st_gen"),
             C_INT.withName("st_lspare"),
-            MemoryLayout.ofSequence(2, C_LONG).withName("st_qspare")
+            MemoryLayout.ofSequence(2, C_LONGLONG).withName("st_qspare")
         ).withName("stat");
         public static final stat allocate(NativeScope scope) { return new stat(scope.allocate($LAYOUT)); }
         public static final stat allocate(NativeScope scope, long count) { return new stat(scope.allocateArray($LAYOUT, count)); }
@@ -318,7 +318,7 @@ public final class LibC {
             C_INT.withName("st_dev"),
             C_SHORT.withName("st_mode"),
             C_SHORT.withName("st_nlink"),
-            C_LONG.withName("st_ino"),
+            C_LONGLONG.withName("st_ino"),
             C_INT.withName("st_uid"),
             C_INT.withName("st_gid"),
             C_INT.withName("st_rdev"),
@@ -339,13 +339,13 @@ public final class LibC {
                 C_LONG.withName("tv_sec"),
                 C_LONG.withName("tv_nsec")
             ).withName("st_birthtimespec"),
-            C_LONG.withName("st_size"),
-            C_LONG.withName("st_blocks"),
+            C_LONGLONG.withName("st_size"),
+            C_LONGLONG.withName("st_blocks"),
             C_INT.withName("st_blksize"),
             C_INT.withName("st_flags"),
             C_INT.withName("st_gen"),
             C_INT.withName("st_lspare"),
-            MemoryLayout.ofSequence(2, C_LONG).withName("st_qspare")
+            MemoryLayout.ofSequence(2, C_LONGLONG).withName("st_qspare")
         ).withName("stat64");
         public static final stat64 allocate(NativeScope scope) { return new stat64(scope.allocate($LAYOUT)); }
         public static final stat64 allocate(NativeScope scope, long count) { return new stat64(scope.allocateArray($LAYOUT, count)); }
@@ -572,8 +572,8 @@ public final class LibC {
         public final flock offset(int count) { return at(segment().asSlice(sizeof() * count)); }
 
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
-            C_LONG.withName("l_start"),
-            C_LONG.withName("l_len"),
+            C_LONGLONG.withName("l_start"),
+            C_LONGLONG.withName("l_len"),
             C_INT.withName("l_pid"),
             C_SHORT.withName("l_type"),
             C_SHORT.withName("l_whence")
@@ -676,8 +676,8 @@ public final class LibC {
             ).withName("_ub"),
             C_POINTER.withName("_extra"),
             C_INT.withName("_ur"),
-            MemoryLayout.ofSequence(3, C_BOOL).withName("_ubuf"),
-            MemoryLayout.ofSequence(1, C_BOOL).withName("_nbuf"),
+            MemoryLayout.ofSequence(3, C_CHAR).withName("_ubuf"),
+            MemoryLayout.ofSequence(1, C_CHAR).withName("_nbuf"),
             MemoryLayout.ofStruct(
                 C_POINTER.withName("_base"),
                 C_INT.withName("_size"),
@@ -685,7 +685,7 @@ public final class LibC {
             ).withName("_lb"),
             C_INT.withName("_blksize"),
             MemoryLayout.ofPaddingBits(32),
-            C_LONG.withName("_offset")
+            C_LONGLONG.withName("_offset")
         ).withName("__sFILE");
         public static final __sFILE allocate(NativeScope scope) { return new __sFILE(scope.allocate($LAYOUT)); }
         public static final __sFILE allocate(NativeScope scope, long count) { return new __sFILE(scope.allocateArray($LAYOUT, count)); }
@@ -1294,6 +1294,155 @@ public final class LibC {
             tv_usec$VH.set(tv_usec$ptr(), value);
         }
     }
+    public static final class DIR extends Struct<DIR> {
+        protected DIR(MemorySegment ms) { super(ms); }
+        public static final DIR at(MemorySegment ms) { return new DIR(ms); }
+        public final DIR offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_INT.withName("__dd_fd"),
+            MemoryLayout.ofPaddingBits(32),
+            C_LONG.withName("__dd_loc"),
+            C_LONG.withName("__dd_size"),
+            C_POINTER.withName("__dd_buf"),
+            C_INT.withName("__dd_len"),
+            MemoryLayout.ofPaddingBits(32),
+            C_LONG.withName("__dd_seek"),
+            C_LONG.withName("__padding"),
+            C_INT.withName("__dd_flags"),
+            MemoryLayout.ofPaddingBits(32),
+            MemoryLayout.ofStruct(
+                C_LONG.withName("__sig"),
+                MemoryLayout.ofSequence(56, C_CHAR).withName("__opaque")
+            ).withName("__dd_lock"),
+            C_POINTER.withName("__dd_td")
+        );
+        public static final DIR allocate(NativeScope scope) { return new DIR(scope.allocate($LAYOUT)); }
+        public static final DIR allocate(NativeScope scope, long count) { return new DIR(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle __dd_fd$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_fd")));
+        public static final long __dd_fd$OFFSET = 0L;
+        public final MemorySegment __dd_fd$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int __dd_fd$get() {
+            return (int) __dd_fd$VH.get(__dd_fd$ptr());
+        }
+        public final void __dd_fd$set(int value) {
+            __dd_fd$VH.set(__dd_fd$ptr(), value);
+        }
+
+        public static final VarHandle __dd_loc$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_loc")));
+        public static final long __dd_loc$OFFSET = 8L;
+        public final MemorySegment __dd_loc$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final long __dd_loc$get() {
+            return (long) __dd_loc$VH.get(__dd_loc$ptr());
+        }
+        public final void __dd_loc$set(long value) {
+            __dd_loc$VH.set(__dd_loc$ptr(), value);
+        }
+
+        public static final VarHandle __dd_size$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_size")));
+        public static final long __dd_size$OFFSET = 16L;
+        public final MemorySegment __dd_size$ptr() {
+            return segment().asSlice(16L);
+        }
+        public final long __dd_size$get() {
+            return (long) __dd_size$VH.get(__dd_size$ptr());
+        }
+        public final void __dd_size$set(long value) {
+            __dd_size$VH.set(__dd_size$ptr(), value);
+        }
+
+        public static final VarHandle __dd_buf$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_buf")));
+        public static final long __dd_buf$OFFSET = 24L;
+        public final MemorySegment __dd_buf$ptr() {
+            return segment().asSlice(24L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress __dd_buf$get() {
+            return (jdk.incubator.foreign.MemoryAddress) __dd_buf$VH.get(__dd_buf$ptr());
+        }
+        public final void __dd_buf$set(jdk.incubator.foreign.MemoryAddress value) {
+            __dd_buf$VH.set(__dd_buf$ptr(), value);
+        }
+
+        public static final VarHandle __dd_len$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_len")));
+        public static final long __dd_len$OFFSET = 32L;
+        public final MemorySegment __dd_len$ptr() {
+            return segment().asSlice(32L);
+        }
+        public final int __dd_len$get() {
+            return (int) __dd_len$VH.get(__dd_len$ptr());
+        }
+        public final void __dd_len$set(int value) {
+            __dd_len$VH.set(__dd_len$ptr(), value);
+        }
+
+        public static final VarHandle __dd_seek$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_seek")));
+        public static final long __dd_seek$OFFSET = 40L;
+        public final MemorySegment __dd_seek$ptr() {
+            return segment().asSlice(40L);
+        }
+        public final long __dd_seek$get() {
+            return (long) __dd_seek$VH.get(__dd_seek$ptr());
+        }
+        public final void __dd_seek$set(long value) {
+            __dd_seek$VH.set(__dd_seek$ptr(), value);
+        }
+
+        public static final VarHandle __padding$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__padding")));
+        public static final long __padding$OFFSET = 48L;
+        public final MemorySegment __padding$ptr() {
+            return segment().asSlice(48L);
+        }
+        public final long __padding$get() {
+            return (long) __padding$VH.get(__padding$ptr());
+        }
+        public final void __padding$set(long value) {
+            __padding$VH.set(__padding$ptr(), value);
+        }
+
+        public static final VarHandle __dd_flags$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_flags")));
+        public static final long __dd_flags$OFFSET = 56L;
+        public final MemorySegment __dd_flags$ptr() {
+            return segment().asSlice(56L);
+        }
+        public final int __dd_flags$get() {
+            return (int) __dd_flags$VH.get(__dd_flags$ptr());
+        }
+        public final void __dd_flags$set(int value) {
+            __dd_flags$VH.set(__dd_flags$ptr(), value);
+        }
+
+        public static final long __dd_lock$OFFSET = 64L;
+        public final MemorySegment __dd_lock$ptr() {
+            return segment().asSlice(64L);
+        }
+        public final _opaque_pthread_mutex_t __dd_lock$get() {
+            return _opaque_pthread_mutex_t.at(__dd_lock$ptr());
+        }
+        public final void __dd_lock$set(_opaque_pthread_mutex_t value) {
+            _opaque_pthread_mutex_t.at(__dd_lock$ptr()).asSegment().copyFrom(value.asSegment());
+        }
+
+        public static final VarHandle __dd_td$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("__dd_td")));
+        public static final long __dd_td$OFFSET = 128L;
+        public final MemorySegment __dd_td$ptr() {
+            return segment().asSlice(128L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress __dd_td$get() {
+            return (jdk.incubator.foreign.MemoryAddress) __dd_td$VH.get(__dd_td$ptr());
+        }
+        public final void __dd_td$set(jdk.incubator.foreign.MemoryAddress value) {
+            __dd_td$VH.set(__dd_td$ptr(), value);
+        }
+    }
     public static final class _opaque_pthread_mutex_t extends Struct<_opaque_pthread_mutex_t> {
         protected _opaque_pthread_mutex_t(MemorySegment ms) { super(ms); }
         public static final _opaque_pthread_mutex_t at(MemorySegment ms) { return new _opaque_pthread_mutex_t(ms); }
@@ -1301,7 +1450,7 @@ public final class LibC {
 
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
             C_LONG.withName("__sig"),
-            MemoryLayout.ofSequence(56, C_BOOL).withName("__opaque")
+            MemoryLayout.ofSequence(56, C_CHAR).withName("__opaque")
         ).withName("_opaque_pthread_mutex_t");
         public static final _opaque_pthread_mutex_t allocate(NativeScope scope) { return new _opaque_pthread_mutex_t(scope.allocate($LAYOUT)); }
         public static final _opaque_pthread_mutex_t allocate(NativeScope scope, long count) { return new _opaque_pthread_mutex_t(scope.allocateArray($LAYOUT, count)); }
@@ -1340,12 +1489,12 @@ public final class LibC {
         public final dirent offset(int count) { return at(segment().asSlice(sizeof() * count)); }
 
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
-            C_LONG.withName("d_ino"),
-            C_LONG.withName("d_seekoff"),
+            C_LONGLONG.withName("d_ino"),
+            C_LONGLONG.withName("d_seekoff"),
             C_SHORT.withName("d_reclen"),
             C_SHORT.withName("d_namlen"),
-            C_BOOL.withName("d_type"),
-            MemoryLayout.ofSequence(1024, C_BOOL).withName("d_name"),
+            C_CHAR.withName("d_type"),
+            MemoryLayout.ofSequence(1024, C_CHAR).withName("d_name"),
             MemoryLayout.ofPaddingBits(24)
         ).withName("dirent");
         public static final dirent allocate(NativeScope scope) { return new dirent(scope.allocate($LAYOUT)); }
@@ -1803,11 +1952,11 @@ public final class LibC {
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
             C_INT.withName("f_bsize"),
             C_INT.withName("f_iosize"),
-            C_LONG.withName("f_blocks"),
-            C_LONG.withName("f_bfree"),
-            C_LONG.withName("f_bavail"),
-            C_LONG.withName("f_files"),
-            C_LONG.withName("f_ffree"),
+            C_LONGLONG.withName("f_blocks"),
+            C_LONGLONG.withName("f_bfree"),
+            C_LONGLONG.withName("f_bavail"),
+            C_LONGLONG.withName("f_files"),
+            C_LONGLONG.withName("f_ffree"),
             MemoryLayout.ofStruct(
                 MemoryLayout.ofSequence(2, C_INT).withName("val")
             ).withName("f_fsid"),
@@ -1815,9 +1964,9 @@ public final class LibC {
             C_INT.withName("f_type"),
             C_INT.withName("f_flags"),
             C_INT.withName("f_fssubtype"),
-            MemoryLayout.ofSequence(16, C_BOOL).withName("f_fstypename"),
-            MemoryLayout.ofSequence(1024, C_BOOL).withName("f_mntonname"),
-            MemoryLayout.ofSequence(1024, C_BOOL).withName("f_mntfromname"),
+            MemoryLayout.ofSequence(16, C_CHAR).withName("f_fstypename"),
+            MemoryLayout.ofSequence(1024, C_CHAR).withName("f_mntonname"),
+            MemoryLayout.ofSequence(1024, C_CHAR).withName("f_mntfromname"),
             C_INT.withName("f_flags_ext"),
             MemoryLayout.ofSequence(7, C_INT).withName("f_reserved")
         ).withName("statfs");
@@ -2158,7 +2307,7 @@ public final class LibC {
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
             C_LONG.withName("__sig"),
             C_POINTER.withName("__cleanup_stack"),
-            MemoryLayout.ofSequence(8176, C_BOOL).withName("__opaque")
+            MemoryLayout.ofSequence(8176, C_CHAR).withName("__opaque")
         ).withName("_opaque_pthread_t");
         public static final _opaque_pthread_t allocate(NativeScope scope) { return new _opaque_pthread_t(scope.allocate($LAYOUT)); }
         public static final _opaque_pthread_t allocate(NativeScope scope, long count) { return new _opaque_pthread_t(scope.allocateArray($LAYOUT, count)); }
@@ -2629,9 +2778,9 @@ public final class LibC {
     public static final MethodHandle mh_lseek = RuntimeHelper.downcallHandle(
         LIBRARIES, "lseek",
         "(IJI)J",
-        FunctionDescriptor.of(C_LONG,
+        FunctionDescriptor.of(C_LONGLONG,
             C_INT,
-            C_LONG,
+            C_LONGLONG,
             C_INT
         ), false
     );
@@ -2754,7 +2903,7 @@ public final class LibC {
             C_INT,
             C_POINTER,
             C_LONG,
-            C_LONG
+            C_LONGLONG
         ), false
     );
     public static final long pread(int __fd, jdk.incubator.foreign.Addressable __buf, long __nbyte, long __offset) {
@@ -2771,7 +2920,7 @@ public final class LibC {
             C_INT,
             C_POINTER,
             C_LONG,
-            C_LONG
+            C_LONGLONG
         ), false
     );
     public static final long pwrite(int __fd, jdk.incubator.foreign.Addressable __buf, long __nbyte, long __offset) {
@@ -2800,7 +2949,7 @@ public final class LibC {
         "(IJ)I",
         FunctionDescriptor.of(C_INT,
             C_INT,
-            C_LONG
+            C_LONGLONG
         ), false
     );
     public static final int ftruncate(int x0, long x1) {

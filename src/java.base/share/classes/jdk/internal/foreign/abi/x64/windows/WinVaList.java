@@ -25,13 +25,8 @@
  */
 package jdk.internal.foreign.abi.x64.windows;
 
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.CSupport.VaList;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryHandles;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.NativeScope;
+import jdk.incubator.foreign.*;
+import jdk.incubator.foreign.CLinker.VaList;
 import jdk.internal.foreign.abi.SharedUtils;
 import jdk.internal.foreign.abi.SharedUtils.SimpleVaArg;
 
@@ -39,7 +34,7 @@ import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.List;
 
-import static jdk.incubator.foreign.CSupport.Win64.C_POINTER;
+import static jdk.internal.foreign.PlatformLayouts.Win64.C_POINTER;
 
 // see vadefs.h (VC header)
 //
@@ -120,8 +115,8 @@ class WinVaList implements VaList {
             res = switch (typeClass) {
                 case STRUCT_REFERENCE -> {
                     MemoryAddress structAddr = (MemoryAddress) VH_address.get(segment);
-                    try (MemorySegment struct = MemorySegment.ofNativeRestricted(structAddr, layout.byteSize(),
-                                                                            segment.ownerThread(), null, null)) {
+                    try (MemorySegment struct = handoffIfNeeded(structAddr.asSegmentRestricted(layout.byteSize()),
+                         segment.ownerThread())) {
                         MemorySegment seg = allocator.allocate(layout.byteSize());
                         seg.copyFrom(struct);
                         yield seg;
@@ -148,7 +143,7 @@ class WinVaList implements VaList {
     }
 
     static WinVaList ofAddress(MemoryAddress addr) {
-        MemorySegment segment = MemorySegment.ofNativeRestricted(addr, Long.MAX_VALUE, Thread.currentThread(), null, null);
+        MemorySegment segment = addr.asSegmentRestricted(Long.MAX_VALUE);
         return new WinVaList(segment, List.of(segment), null);
     }
 
@@ -165,16 +160,16 @@ class WinVaList implements VaList {
 
     @Override
     public VaList copy() {
-        MemorySegment liveness = MemorySegment.ofNativeRestricted(
-                MemoryAddress.NULL, 1, segment.ownerThread(), null, null);
+        MemorySegment liveness = handoffIfNeeded(MemoryAddress.NULL.asSegmentRestricted(1),
+                segment.ownerThread());
         return new WinVaList(segment, List.of(), liveness);
     }
 
     @Override
     public VaList copy(NativeScope scope) {
-        MemorySegment liveness = MemorySegment.ofNativeRestricted(
-                MemoryAddress.NULL, 1, segment.ownerThread(), null, null);
-        liveness = scope.register(liveness);
+        MemorySegment liveness = handoffIfNeeded(MemoryAddress.NULL.asSegmentRestricted(1),
+                segment.ownerThread());
+        liveness = liveness.handoff(scope);
         return new WinVaList(segment, List.of(), liveness);
     }
 
@@ -206,27 +201,27 @@ class WinVaList implements VaList {
         }
 
         @Override
-        public Builder vargFromInt(MemoryLayout layout, int value) {
+        public Builder vargFromInt(ValueLayout layout, int value) {
             return arg(int.class, layout, value);
         }
 
         @Override
-        public Builder vargFromLong(MemoryLayout layout, long value) {
+        public Builder vargFromLong(ValueLayout layout, long value) {
             return arg(long.class, layout, value);
         }
 
         @Override
-        public Builder vargFromDouble(MemoryLayout layout, double value) {
+        public Builder vargFromDouble(ValueLayout layout, double value) {
             return arg(double.class, layout, value);
         }
 
         @Override
-        public Builder vargFromAddress(MemoryLayout layout, MemoryAddress value) {
-            return arg(MemoryAddress.class, layout, value);
+        public Builder vargFromAddress(ValueLayout layout, Addressable value) {
+            return arg(MemoryAddress.class, layout, value.address());
         }
 
         @Override
-        public Builder vargFromSegment(MemoryLayout layout, MemorySegment value) {
+        public Builder vargFromSegment(GroupLayout layout, MemorySegment value) {
             return arg(MemorySegment.class, layout, value);
         }
 
@@ -265,5 +260,10 @@ class WinVaList implements VaList {
 
             return new WinVaList(segment, attachedSegments, null);
         }
+    }
+
+    private static MemorySegment handoffIfNeeded(MemorySegment segment, Thread thread) {
+        return segment.ownerThread() == thread ?
+                segment : segment.handoff(thread);
     }
 }

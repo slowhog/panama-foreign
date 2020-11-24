@@ -34,7 +34,6 @@
 #include "jfr/leakprofiler/chains/edgeQueue.hpp"
 #include "jfr/leakprofiler/chains/rootSetClosure.hpp"
 #include "jfr/leakprofiler/utilities/unifiedOopRef.inline.hpp"
-#include "memory/universe.hpp"
 #include "oops/access.inline.hpp"
 #include "oops/oop.inline.hpp"
 #include "runtime/synchronizer.hpp"
@@ -58,7 +57,7 @@ template <typename Delegate>
 void RootSetClosure<Delegate>::do_oop(narrowOop* ref) {
   assert(ref != NULL, "invariant");
   assert(is_aligned(ref, sizeof(narrowOop)), "invariant");
-  if (*ref != 0) {
+  if (CompressedOops::is_null(*ref)) {
     _delegate->do_root(UnifiedOopRef::encode_in_native(ref));
   }
 }
@@ -72,8 +71,6 @@ void RootSetClosure<Delegate>::process() {
   ClassLoaderDataGraph::always_strong_cld_do(&cldt_closure);
   // We don't follow code blob oops, because they have misaligned oops.
   Threads::oops_do(this, NULL);
-  ObjectSynchronizer::oops_do(this);
-  Universe::oops_do(this);
   OopStorageSet::strong_oops_do(this);
   AOTLoader::oops_do(this);
 }

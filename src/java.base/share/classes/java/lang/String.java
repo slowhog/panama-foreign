@@ -49,7 +49,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
-import jdk.internal.HotSpotIntrinsicCandidate;
+import jdk.internal.vm.annotation.IntrinsicCandidate;
 import jdk.internal.vm.annotation.Stable;
 
 import static java.util.function.Predicate.not;
@@ -248,7 +248,7 @@ public final class String
      * @param  original
      *         A {@code String}
      */
-    @HotSpotIntrinsicCandidate
+    @IntrinsicCandidate
     public String(String original) {
         this.value = original.value;
         this.coder = original.coder;
@@ -1236,6 +1236,10 @@ public final class String
      */
     public static final Comparator<String> CASE_INSENSITIVE_ORDER
                                          = new CaseInsensitiveComparator();
+
+    /**
+     * CaseInsensitiveComparator for Strings.
+     */
     private static class CaseInsensitiveComparator
             implements Comparator<String>, java.io.Serializable {
         // use serialVersionUID from JDK 1.2.2 for interoperability
@@ -1936,7 +1940,6 @@ public final class String
      *          or if {@code beginIndex} is greater than {@code endIndex}
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public CharSequence subSequence(int beginIndex, int endIndex) {
         return this.substring(beginIndex, endIndex);
@@ -2034,7 +2037,6 @@ public final class String
      * @see java.util.regex.Pattern
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public boolean matches(String regex) {
         return Pattern.matches(regex, this);
@@ -2091,7 +2093,6 @@ public final class String
      * @see java.util.regex.Pattern
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public String replaceFirst(String regex, String replacement) {
         return Pattern.compile(regex).matcher(this).replaceFirst(replacement);
@@ -2136,7 +2137,6 @@ public final class String
      * @see java.util.regex.Pattern
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public String replaceAll(String regex, String replacement) {
         return Pattern.compile(regex).matcher(this).replaceAll(replacement);
@@ -2297,7 +2297,6 @@ public final class String
      * @see java.util.regex.Pattern
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public String[] split(String regex, int limit) {
         /* fastpath if the regex is a
@@ -2395,7 +2394,6 @@ public final class String
      * @see java.util.regex.Pattern
      *
      * @since 1.4
-     * @spec JSR-51
      */
     public String[] split(String regex) {
         return split(regex, 0);
@@ -3176,12 +3174,12 @@ public final class String
      * string. The function should expect a single String argument
      * and produce an {@code R} result.
      * <p>
-     * Any exception thrown by {@code f()} will be propagated to the
+     * Any exception thrown by {@code f.apply()} will be propagated to the
      * caller.
      *
-     * @param f    functional interface to a apply
+     * @param f    a function to apply
      *
-     * @param <R>  class of the result
+     * @param <R>  the type of the result
      *
      * @return     the result of applying the function to this string
      *

@@ -27,10 +27,7 @@
  * @run testng/othervm -Dforeign.restricted=permit TestSharedAccess
  */
 
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.MemoryLayouts;
-import jdk.incubator.foreign.SequenceLayout;
+import jdk.incubator.foreign.*;
 import org.testng.annotations.*;
 
 import java.lang.invoke.VarHandle;
@@ -42,7 +39,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 import static org.testng.Assert.*;
 
@@ -61,11 +57,11 @@ public class TestSharedAccess {
         for (int i = 0 ; i < 1000 ; i++) {
             threads.add(new Thread(() -> {
                 assertEquals(getInt(confined.get()), 42);
-                confined.set(confined.get().withOwnerThread(owner));
+                confined.set(confined.get().handoff(owner));
             }));
         }
         threads.forEach(t -> {
-            confined.set(confined.get().withOwnerThread(t));
+            confined.set(confined.get().handoff(t));
             t.start();
             try {
                 t.join();
@@ -79,13 +75,13 @@ public class TestSharedAccess {
     @Test
     public void testShared() throws Throwable {
         SequenceLayout layout = MemoryLayout.ofSequence(1024, MemoryLayouts.JAVA_INT);
-        try (MemorySegment s = MemorySegment.allocateNative(layout)) {
+        try (MemorySegment s = MemorySegment.allocateNative(layout).share()) {
             for (int i = 0 ; i < layout.elementCount().getAsLong() ; i++) {
                 setInt(s.asSlice(i * 4), 42);
             }
             List<Thread> threads = new ArrayList<>();
             List<Spliterator<MemorySegment>> spliterators = new ArrayList<>();
-            spliterators.add(MemorySegment.spliterator(s, layout));
+            spliterators.add(s.spliterator(layout));
             while (true) {
                 boolean progress = false;
                 List<Spliterator<MemorySegment>> newSpliterators = new ArrayList<>();
@@ -127,8 +123,7 @@ public class TestSharedAccess {
             setInt(s, 42);
             assertEquals(getInt(s), 42);
             List<Thread> threads = new ArrayList<>();
-            MemorySegment sharedSegment = MemorySegment.ofNativeRestricted(
-                    s.address(), s.byteSize(), null, null, null);
+            MemorySegment sharedSegment = s.address().asSegmentRestricted(s.byteSize()).share();
             for (int i = 0 ; i < 1000 ; i++) {
                 threads.add(new Thread(() -> {
                     assertEquals(getInt(sharedSegment), 42);
@@ -145,65 +140,32 @@ public class TestSharedAccess {
         }
     }
 
-    @Test(expectedExceptions=IllegalStateException.class)
-    public void testBadCloseWithPendingAcquire() {
-        withAcquired(MemorySegment::close);
+    @Test
+    public void testHandoffToSelf() {
+        MemorySegment s1 = MemorySegment.ofArray(new int[4]);
+        MemorySegment s2 = s1.handoff(Thread.currentThread());
+        assertFalse(s1.isAlive());
+        assertTrue(s2.isAlive());
     }
 
-    @Test(expectedExceptions=IllegalStateException.class)
-    public void testBadCloseWithPendingAcquireBuffer() {
-        withAcquired(segment -> {
-            segment = MemorySegment.ofByteBuffer(segment.asByteBuffer()); // original segment is lost
-            segment.close(); // this should still fail
-        });
+    @Test
+    public void testShareTwice() {
+        MemorySegment s1 = MemorySegment.ofArray(new int[4]).share();
+        MemorySegment s2 = s1.share();
+        assertFalse(s1.isAlive());
+        assertTrue(s2.isAlive());
     }
 
-    @Test(expectedExceptions=IllegalStateException.class)
-    public void testBadHandoffWithPendingAcquire() {
-        withAcquired(segment -> segment.withOwnerThread(new Thread()));
+    @Test(expectedExceptions=UnsupportedOperationException.class)
+    public void testBadHandoffNoAccess() {
+        MemorySegment.ofArray(new int[4])
+            .withAccessModes(MemorySegment.CLOSE).handoff(new Thread());
     }
 
-    @Test(expectedExceptions=IllegalStateException.class)
-    public void testBadHandoffWithPendingAcquireBuffer() {
-        withAcquired(segment -> {
-            segment = MemorySegment.ofByteBuffer(segment.asByteBuffer()); // original segment is lost
-            segment.withOwnerThread(new Thread()); // this should still fail
-        });
-    }
-
-    @Test(expectedExceptions=IllegalArgumentException.class)
-    public void testBadHandoffSameThread() {
-        MemorySegment.ofArray(new int[4]).withOwnerThread(Thread.currentThread());
-    }
-
-    @Test(expectedExceptions=NullPointerException.class)
-    public void testBadHandoffNullThread() {
-        MemorySegment.ofArray(new int[4]).withOwnerThread(null);
-    }
-
-    private void withAcquired(Consumer<MemorySegment> acquiredAction) {
-        CountDownLatch holder = new CountDownLatch(1);
-        MemorySegment segment = MemorySegment.allocateNative(16);
-        Spliterator<MemorySegment> spliterator = MemorySegment.spliterator(segment,
-                MemoryLayout.ofSequence(16, MemoryLayouts.JAVA_BYTE));
-        CountDownLatch acquired = new CountDownLatch(1);
-        Runnable r = () -> spliterator.tryAdvance(s -> {
-            try {
-                acquired.countDown();
-                holder.await();
-            } catch (InterruptedException ex) {
-                throw new AssertionError(ex);
-            }
-        });
-        new Thread(r).start();
-        try {
-            acquired.await();
-            acquiredAction.accept(segment);
-        } catch (InterruptedException ex) {
-            throw new AssertionError(ex);
-        } finally {
-            holder.countDown();
-        }
+    @Test(expectedExceptions=UnsupportedOperationException.class)
+    public void testBadShareNoAccess() {
+        MemorySegment.ofArray(new int[4])
+                .withAccessModes(MemorySegment.CLOSE).share();
     }
 
     @Test

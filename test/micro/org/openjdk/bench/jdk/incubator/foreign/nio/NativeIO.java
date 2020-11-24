@@ -40,7 +40,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.util.concurrent.TimeUnit;
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.NativeScope;
 import jdk.incubator.foreign.MemoryAddress;
 import org.openjdk.bench.jdk.incubator.foreign.nio.support.LibC;
@@ -70,7 +70,7 @@ public class NativeIO {
     public void getcwdinfoLibC() {
         long usage = 0;
         try (NativeScope scope = NativeScope.unboundedScope()) {
-            MemoryAddress pDIR = LibC.opendir(CSupport.toCString(".", scope));
+            MemoryAddress pDIR = LibC.opendir(CLinker.toCString(".", scope));
             MemoryAddress pent = LibC.readdir(pDIR);
             var buffer = scope.allocate(LibC.stat64.$LAYOUT);
             while (pent != MemoryAddress.NULL) {

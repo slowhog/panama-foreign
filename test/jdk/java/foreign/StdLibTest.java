@@ -23,7 +23,6 @@
 
 /*
  * @test
- * @build NativeTestHelper StdLibTest
  * @run testng/othervm -Dforeign.restricted=permit StdLibTest
  */
 
@@ -44,27 +43,19 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.ForeignLinker;
-import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.LibraryLookup;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.NativeScope;
-import jdk.incubator.foreign.SequenceLayout;
+import jdk.incubator.foreign.*;
 
 import static jdk.incubator.foreign.MemoryAccess.*;
 
 import org.testng.annotations.*;
 
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.incubator.foreign.CLinker.*;
 import static org.testng.Assert.*;
 
 @Test
-public class StdLibTest extends NativeTestHelper {
+public class StdLibTest {
 
-    final static ForeignLinker abi = CSupport.getSystemLinker();
+    final static CLinker abi = CLinker.getInstance();
 
     private StdLibHelper stdLibHelper = new StdLibHelper();
 
@@ -161,65 +152,54 @@ public class StdLibTest extends NativeTestHelper {
 
     static class StdLibHelper {
 
-        final static MethodHandle strcat;
-        final static MethodHandle strcmp;
-        final static MethodHandle puts;
-        final static MethodHandle strlen;
-        final static MethodHandle gmtime;
-        final static MethodHandle qsort;
+        static final LibraryLookup lookup = LibraryLookup.ofDefault();
+
+        final static MethodHandle strcat = abi.downcallHandle(lookup.lookup("strcat").get(),
+                MethodType.methodType(MemoryAddress.class, MemoryAddress.class, MemoryAddress.class),
+                FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER));
+
+        final static MethodHandle strcmp = abi.downcallHandle(lookup.lookup("strcmp").get(),
+                MethodType.methodType(int.class, MemoryAddress.class, MemoryAddress.class),
+                FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER));
+
+        final static MethodHandle puts = abi.downcallHandle(lookup.lookup("puts").get(),
+                MethodType.methodType(int.class, MemoryAddress.class),
+                FunctionDescriptor.of(C_INT, C_POINTER));
+
+        final static MethodHandle strlen = abi.downcallHandle(lookup.lookup("strlen").get(),
+                MethodType.methodType(int.class, MemoryAddress.class),
+                FunctionDescriptor.of(C_INT, C_POINTER));
+
+        final static MethodHandle gmtime = abi.downcallHandle(lookup.lookup("gmtime").get(),
+                MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
+                FunctionDescriptor.of(C_POINTER, C_POINTER));
+
+        final static MethodHandle qsort = abi.downcallHandle(lookup.lookup("qsort").get(),
+                MethodType.methodType(void.class, MemoryAddress.class, long.class, long.class, MemoryAddress.class),
+                FunctionDescriptor.ofVoid(C_POINTER, C_LONGLONG, C_LONGLONG, C_POINTER));
+
+        final static FunctionDescriptor qsortComparFunction = FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER);
+
         final static MethodHandle qsortCompar;
-        final static FunctionDescriptor qsortComparFunction;
-        final static MethodHandle rand;
-        final static MethodHandle vprintf;
-        final static LibraryLookup.Symbol printfAddr;
-        final static FunctionDescriptor printfBase;
+
+        final static MethodHandle rand = abi.downcallHandle(lookup.lookup("rand").get(),
+                MethodType.methodType(int.class),
+                FunctionDescriptor.of(C_INT));
+
+        final static MethodHandle vprintf = abi.downcallHandle(lookup.lookup("vprintf").get(),
+                MethodType.methodType(int.class, MemoryAddress.class, VaList.class),
+                FunctionDescriptor.of(C_INT, C_POINTER, C_VA_LIST));
+
+        final static LibraryLookup.Symbol printfAddr = lookup.lookup("printf").get();
+
+        final static FunctionDescriptor printfBase = FunctionDescriptor.of(C_INT, C_POINTER);
 
         static {
             try {
-                LibraryLookup lookup = LibraryLookup.ofDefault();
-
-                strcat = abi.downcallHandle(lookup.lookup("strcat"),
-                        MethodType.methodType(MemoryAddress.class, MemoryAddress.class, MemoryAddress.class),
-                        FunctionDescriptor.of(C_POINTER, C_POINTER, C_POINTER));
-
-                strcmp = abi.downcallHandle(lookup.lookup("strcmp"),
-                        MethodType.methodType(int.class, MemoryAddress.class, MemoryAddress.class),
-                        FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER));
-
-                puts = abi.downcallHandle(lookup.lookup("puts"),
-                        MethodType.methodType(int.class, MemoryAddress.class),
-                        FunctionDescriptor.of(C_INT, C_POINTER));
-
-                strlen = abi.downcallHandle(lookup.lookup("strlen"),
-                        MethodType.methodType(int.class, MemoryAddress.class),
-                        FunctionDescriptor.of(C_INT, C_POINTER));
-
-                gmtime = abi.downcallHandle(lookup.lookup("gmtime"),
-                        MethodType.methodType(MemoryAddress.class, MemoryAddress.class),
-                        FunctionDescriptor.of(C_POINTER, C_POINTER));
-
-                qsortComparFunction = FunctionDescriptor.of(C_INT, C_POINTER, C_POINTER);
-
-                qsort = abi.downcallHandle(lookup.lookup("qsort"),
-                        MethodType.methodType(void.class, MemoryAddress.class, long.class, long.class, MemoryAddress.class),
-                        FunctionDescriptor.ofVoid(C_POINTER, C_LONGLONG, C_LONGLONG, C_POINTER));
-
                 //qsort upcall handle
                 qsortCompar = MethodHandles.lookup().findStatic(StdLibTest.StdLibHelper.class, "qsortCompare",
                         MethodType.methodType(int.class, MemorySegment.class, MemoryAddress.class, MemoryAddress.class));
-
-                rand = abi.downcallHandle(lookup.lookup("rand"),
-                        MethodType.methodType(int.class),
-                        FunctionDescriptor.of(C_INT));
-
-                vprintf = abi.downcallHandle(lookup.lookup("vprintf"),
-                        MethodType.methodType(int.class, MemoryAddress.class, VaList.class),
-                        FunctionDescriptor.of(C_INT, C_POINTER, C_VA_LIST));
-
-                printfAddr = lookup.lookup("printf");
-
-                printfBase = FunctionDescriptor.of(C_INT, C_POINTER);
-            } catch (Throwable ex) {
+            } catch (ReflectiveOperationException ex) {
                 throw new IllegalStateException(ex);
             }
         }
@@ -270,8 +250,7 @@ public class StdLibTest extends NativeTestHelper {
             static final long SIZE = 56;
 
             Tm(MemoryAddress addr) {
-                this.base = MemorySegment.ofNativeRestricted(addr, SIZE, Thread.currentThread(),
-                        null, null);
+                this.base = addr.asSegmentRestricted(SIZE);
             }
 
             int sec() {
@@ -312,7 +291,7 @@ public class StdLibTest extends NativeTestHelper {
 
                 //call qsort
                 MemorySegment qsortUpcallStub = abi.upcallStub(qsortCompar.bindTo(nativeArr), qsortComparFunction);
-                qsortUpcallStub = scope.register(qsortUpcallStub);
+                qsortUpcallStub = qsortUpcallStub.handoff(scope);
 
                 qsort.invokeExact(nativeArr.address(), (long)arr.length, C_INT.byteSize(), qsortUpcallStub.address());
 
@@ -426,14 +405,14 @@ public class StdLibTest extends NativeTestHelper {
         DOUBLE(double.class, asVarArg(C_DOUBLE), "%.4f", 1.2345d, 1.2345d, VaList.Builder::vargFromDouble);
 
         final Class<?> carrier;
-        final MemoryLayout layout;
+        final ValueLayout layout;
         final String format;
         final Object nativeValue;
         final Object javaValue;
         @SuppressWarnings("rawtypes")
         final VaListBuilderCall builderCall;
 
-        <Z> PrintfArg(Class<?> carrier, MemoryLayout layout, String format, Z nativeValue, Object javaValue, VaListBuilderCall<Z> builderCall) {
+        <Z> PrintfArg(Class<?> carrier, ValueLayout layout, String format, Z nativeValue, Object javaValue, VaListBuilderCall<Z> builderCall) {
             this.carrier = carrier;
             this.layout = layout;
             this.format = format;
@@ -449,7 +428,7 @@ public class StdLibTest extends NativeTestHelper {
         }
 
         interface VaListBuilderCall<V> {
-            void build(VaList.Builder builder, MemoryLayout layout, V value);
+            void build(VaList.Builder builder, ValueLayout layout, V value);
         }
     }
 

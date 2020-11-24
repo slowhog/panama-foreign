@@ -41,7 +41,7 @@ import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.NativeScope;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.CSupport.C_CHAR;
+import static jdk.incubator.foreign.CLinker.C_CHAR;
 import static jdk.internal.foreign.NativeMemorySegmentImpl.EVERYTHING;
 import static jdk.internal.panama.LibC.ECANCELED;
 import static sun.nio.FFIUtils.errno;

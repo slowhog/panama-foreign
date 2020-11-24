@@ -31,7 +31,6 @@
 #include "utilities/globalDefinitions.hpp"
 #include "utilities/ostream.hpp"
 #include "utilities/powerOfTwo.hpp"
-#include "utilities/ostream.hpp"
 
 // A growable array.
 
@@ -311,17 +310,13 @@ public:
     return min;
   }
 
-  void print_on(outputStream *st) const {
-    st->print("Growable Array " INTPTR_FORMAT, (intptr_t) this);
-    st->print(": length %d (_max %d) { ", _len, _max);
-    for (int i = 0; i < _len; i++) {
-      st->print(INTPTR_FORMAT " ", *(intptr_t*)&(_data[i]));
-    }
-    st->print("}\n");
-  }
-
   void print() {
-    print_on(tty);
+    tty->print("Growable Array " INTPTR_FORMAT, p2i(this));
+    tty->print(": length %d (_max %d) { ", _len, _max);
+    for (int i = 0; i < _len; i++) {
+      tty->print(INTPTR_FORMAT " ", *(intptr_t*)&(_data[i]));
+    }
+    tty->print("}\n");
   }
 };
 
@@ -453,6 +448,12 @@ public:
       insert_before(location, key);
     }
     return this->at(location);
+  }
+
+  void swap(GrowableArrayWithAllocator<E, Derived>* other) {
+    ::swap(this->_data, other->_data);
+    ::swap(this->_len, other->_len);
+    ::swap(this->_max, other->_max);
   }
 
   void clear_and_deallocate();
@@ -707,7 +708,7 @@ class GrowableArrayCHeap : public GrowableArrayWithAllocator<E, GrowableArrayCHe
   }
 
 public:
-  GrowableArrayCHeap(int initial_max) :
+  GrowableArrayCHeap(int initial_max = 0) :
       GrowableArrayWithAllocator<E, GrowableArrayCHeap<E, F> >(
           allocate(initial_max, F),
           initial_max) {}

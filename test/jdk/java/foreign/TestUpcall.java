@@ -24,6 +24,7 @@
 
 /*
  * @test
+ * @modules jdk.incubator.foreign/jdk.internal.foreign
  * @build NativeTestHelper CallGeneratorHelper TestUpcall
  *
  * @run testng/othervm
@@ -48,14 +49,12 @@
  *   TestUpcall
  */
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.GroupLayout;
 import jdk.incubator.foreign.LibraryLookup;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
 import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.ForeignLinker;
 import jdk.incubator.foreign.ValueLayout;
 import org.testng.annotations.AfterClass;
 import org.testng.annotations.BeforeClass;
@@ -64,7 +63,6 @@ import org.testng.annotations.Test;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
-import java.lang.invoke.VarHandle;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
@@ -72,14 +70,14 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static java.lang.invoke.MethodHandles.insertArguments;
-import static jdk.incubator.foreign.CSupport.C_POINTER;
+import static jdk.incubator.foreign.CLinker.C_POINTER;
 import static org.testng.Assert.assertEquals;
 
 
 public class TestUpcall extends CallGeneratorHelper {
 
     static LibraryLookup lib = LibraryLookup.ofLibrary("TestUpcall");
-    static ForeignLinker abi = CSupport.getSystemLinker();
+    static CLinker abi = CLinker.getInstance();
 
     static MethodHandle DUMMY;
     static MethodHandle PASS_AND_SAVE;
@@ -87,7 +85,8 @@ public class TestUpcall extends CallGeneratorHelper {
     static {
         try {
             DUMMY = MethodHandles.lookup().findStatic(TestUpcall.class, "dummy", MethodType.methodType(void.class));
-            PASS_AND_SAVE = MethodHandles.lookup().findStatic(TestUpcall.class, "passAndSave", MethodType.methodType(Object.class, Object[].class, AtomicReference.class));
+            PASS_AND_SAVE = MethodHandles.lookup().findStatic(TestUpcall.class, "passAndSave",
+                    MethodType.methodType(Object.class, Object[].class, AtomicReference.class, List.class));
         } catch (Throwable ex) {
             throw new IllegalStateException(ex);
         }
@@ -110,7 +109,7 @@ public class TestUpcall extends CallGeneratorHelper {
         List<MemorySegment> segments = new ArrayList<>();
         List<Consumer<Object>> returnChecks = new ArrayList<>();
         List<Consumer<Object[]>> argChecks = new ArrayList<>();
-        LibraryLookup.Symbol addr = lib.lookup(fName);
+        LibraryLookup.Symbol addr = lib.lookup(fName).get();
         MethodHandle mh = abi.downcallHandle(addr, methodType(ret, paramTypes, fields), function(ret, paramTypes, fields));
         Object[] args = makeArgs(ret, paramTypes, fields, returnChecks, argChecks, segments);
         mh = mh.asSpreader(Object[].class, paramTypes.size() + 1);
@@ -157,7 +156,7 @@ public class TestUpcall extends CallGeneratorHelper {
         }
 
         AtomicReference<Object[]> box = new AtomicReference<>();
-        MethodHandle mh = insertArguments(PASS_AND_SAVE, 1, box);
+        MethodHandle mh = insertArguments(PASS_AND_SAVE, 1, box, segments);
         mh = mh.asCollector(Object[].class, params.size());
 
         for (int i = 0; i < params.size(); i++) {
@@ -195,34 +194,16 @@ public class TestUpcall extends CallGeneratorHelper {
         return stub.address();
     }
 
-    private static void assertStructEquals(MemorySegment actual, MemorySegment expected, MemoryLayout layout) {
-        assertEquals(actual.byteSize(), expected.byteSize());
-        GroupLayout g = (GroupLayout) layout;
-        for (MemoryLayout field : g.memberLayouts()) {
-            if (field instanceof ValueLayout) {
-                VarHandle vh = g.varHandle(vhCarrier(field), MemoryLayout.PathElement.groupElement(field.name().orElseThrow()));
-                assertEquals(vh.get(actual), vh.get(expected));
+    static Object passAndSave(Object[] o, AtomicReference<Object[]> ref, List<MemorySegment> copies) {
+        for (int i = 0; i < o.length; i++) {
+            if (o[i] instanceof MemorySegment) {
+                MemorySegment ms = (MemorySegment) o[i];
+                MemorySegment copy = MemorySegment.allocateNative(ms.byteSize());
+                copy.copyFrom(ms);
+                o[i] = copy;
+                copies.add(copy);
             }
         }
-    }
-
-    private static Class<?> vhCarrier(MemoryLayout layout) {
-        if (layout instanceof ValueLayout) {
-            if (isIntegral(layout)) {
-                if (layout.bitSize() == 64) {
-                    return long.class;
-                }
-                return int.class;
-            } else if (layout.bitSize() == 32) {
-                return float.class;
-            }
-            return double.class;
-        } else {
-            throw new IllegalStateException("Unexpected layout: " + layout);
-        }
-    }
-
-    static Object passAndSave(Object[] o, AtomicReference<Object[]> ref) {
         ref.set(o);
         return o[0];
     }

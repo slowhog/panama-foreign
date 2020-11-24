@@ -32,7 +32,7 @@ import jdk.incubator.foreign.MemorySegment;
 import jdk.internal.panama.LibMacOS;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.CSupport.C_SHORT;
+import static jdk.incubator.foreign.CLinker.C_SHORT;
 
 /**
  * File type detector that uses a file extension to look up its MIME type

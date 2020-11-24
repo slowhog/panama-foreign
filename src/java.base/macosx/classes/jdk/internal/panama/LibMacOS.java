@@ -7,11 +7,474 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import jdk.incubator.foreign.*;
 import jdk.incubator.foreign.MemoryLayout.PathElement;
-import static jdk.incubator.foreign.CSupport.*;
+import static jdk.incubator.foreign.CLinker.*;
 
 
 public final class LibMacOS {
     private static final LibraryLookup[] LIBRARIES = RuntimeHelper.libraries(new String[] {});
+    public static final class CFRange extends Struct<CFRange> {
+        protected CFRange(MemorySegment ms) { super(ms); }
+        public static final CFRange at(MemorySegment ms) { return new CFRange(ms); }
+        public final CFRange offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_LONG.withName("location"),
+            C_LONG.withName("length")
+        );
+        public static final CFRange allocate(NativeScope scope) { return new CFRange(scope.allocate($LAYOUT)); }
+        public static final CFRange allocate(NativeScope scope, long count) { return new CFRange(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle location$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("location")));
+        public static final long location$OFFSET = 0L;
+        public final MemorySegment location$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final long location$get() {
+            return (long) location$VH.get(location$ptr());
+        }
+        public final void location$set(long value) {
+            location$VH.set(location$ptr(), value);
+        }
+
+        public static final VarHandle length$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("length")));
+        public static final long length$OFFSET = 8L;
+        public final MemorySegment length$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final long length$get() {
+            return (long) length$VH.get(length$ptr());
+        }
+        public final void length$set(long value) {
+            length$VH.set(length$ptr(), value);
+        }
+    }
+    public static final class MACH_MSG_BODY_NULL_struct_405_9 extends Struct<MACH_MSG_BODY_NULL_struct_405_9> {
+        protected MACH_MSG_BODY_NULL_struct_405_9(MemorySegment ms) { super(ms); }
+        public static final MACH_MSG_BODY_NULL_struct_405_9 at(MemorySegment ms) { return new MACH_MSG_BODY_NULL_struct_405_9(ms); }
+        public final MACH_MSG_BODY_NULL_struct_405_9 offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_INT.withName("msgh_descriptor_count")
+        );
+        public static final MACH_MSG_BODY_NULL_struct_405_9 allocate(NativeScope scope) { return new MACH_MSG_BODY_NULL_struct_405_9(scope.allocate($LAYOUT)); }
+        public static final MACH_MSG_BODY_NULL_struct_405_9 allocate(NativeScope scope, long count) { return new MACH_MSG_BODY_NULL_struct_405_9(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle msgh_descriptor_count$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_descriptor_count")));
+        public static final long msgh_descriptor_count$OFFSET = 0L;
+        public final MemorySegment msgh_descriptor_count$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int msgh_descriptor_count$get() {
+            return (int) msgh_descriptor_count$VH.get(msgh_descriptor_count$ptr());
+        }
+        public final void msgh_descriptor_count$set(int value) {
+            msgh_descriptor_count$VH.set(msgh_descriptor_count$ptr(), value);
+        }
+    }
+    public static final class MACH_MSG_DESCRIPTOR_NULL_union_397_9 extends Struct<MACH_MSG_DESCRIPTOR_NULL_union_397_9> {
+        protected MACH_MSG_DESCRIPTOR_NULL_union_397_9(MemorySegment ms) { super(ms); }
+        public static final MACH_MSG_DESCRIPTOR_NULL_union_397_9 at(MemorySegment ms) { return new MACH_MSG_DESCRIPTOR_NULL_union_397_9(ms); }
+        public final MACH_MSG_DESCRIPTOR_NULL_union_397_9 offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofUnion(
+            MemoryLayout.ofStruct(
+                C_INT.withName("name"),
+                C_INT.withName("pad1"),
+                C_INT
+            ).withName("port"),
+            MemoryLayout.ofStruct(
+                C_POINTER.withName("address"),
+                C_INT,
+                C_INT.withName("size")
+            ).withName("out_of_line"),
+            MemoryLayout.ofStruct(
+                C_POINTER.withName("address"),
+                C_INT,
+                C_INT.withName("count")
+            ).withName("ool_ports"),
+            MemoryLayout.ofStruct(
+                C_INT.withName("pad1"),
+                C_INT.withName("pad2"),
+                C_INT
+            ).withName("type"),
+            MemoryLayout.ofStruct(
+                C_LONGLONG.withName("context"),
+                C_INT,
+                C_INT.withName("name")
+            ).withName("guarded_port")
+        );
+        public static final MACH_MSG_DESCRIPTOR_NULL_union_397_9 allocate(NativeScope scope) { return new MACH_MSG_DESCRIPTOR_NULL_union_397_9(scope.allocate($LAYOUT)); }
+        public static final MACH_MSG_DESCRIPTOR_NULL_union_397_9 allocate(NativeScope scope, long count) { return new MACH_MSG_DESCRIPTOR_NULL_union_397_9(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final long port$OFFSET = 0L;
+        public final MemorySegment port$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final mach_msg_port_descriptor_t port$get() {
+            return mach_msg_port_descriptor_t.at(port$ptr());
+        }
+        public final void port$set(mach_msg_port_descriptor_t value) {
+            mach_msg_port_descriptor_t.at(port$ptr()).asSegment().copyFrom(value.asSegment());
+        }
+
+        public static final long out_of_line$OFFSET = 0L;
+        public final MemorySegment out_of_line$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final mach_msg_ool_descriptor_t out_of_line$get() {
+            return mach_msg_ool_descriptor_t.at(out_of_line$ptr());
+        }
+        public final void out_of_line$set(mach_msg_ool_descriptor_t value) {
+            mach_msg_ool_descriptor_t.at(out_of_line$ptr()).asSegment().copyFrom(value.asSegment());
+        }
+
+        public static final long ool_ports$OFFSET = 0L;
+        public final MemorySegment ool_ports$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final mach_msg_ool_ports_descriptor_t ool_ports$get() {
+            return mach_msg_ool_ports_descriptor_t.at(ool_ports$ptr());
+        }
+        public final void ool_ports$set(mach_msg_ool_ports_descriptor_t value) {
+            mach_msg_ool_ports_descriptor_t.at(ool_ports$ptr()).asSegment().copyFrom(value.asSegment());
+        }
+
+        public static final long type$OFFSET = 0L;
+        public final MemorySegment type$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final mach_msg_type_descriptor_t type$get() {
+            return mach_msg_type_descriptor_t.at(type$ptr());
+        }
+        public final void type$set(mach_msg_type_descriptor_t value) {
+            mach_msg_type_descriptor_t.at(type$ptr()).asSegment().copyFrom(value.asSegment());
+        }
+
+        public static final long guarded_port$OFFSET = 0L;
+        public final MemorySegment guarded_port$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final mach_msg_guarded_port_descriptor_t guarded_port$get() {
+            return mach_msg_guarded_port_descriptor_t.at(guarded_port$ptr());
+        }
+        public final void guarded_port$set(mach_msg_guarded_port_descriptor_t value) {
+            mach_msg_guarded_port_descriptor_t.at(guarded_port$ptr()).asSegment().copyFrom(value.asSegment());
+        }
+    }
+    public static final class mach_msg_port_descriptor_t extends Struct<mach_msg_port_descriptor_t> {
+        protected mach_msg_port_descriptor_t(MemorySegment ms) { super(ms); }
+        public static final mach_msg_port_descriptor_t at(MemorySegment ms) { return new mach_msg_port_descriptor_t(ms); }
+        public final mach_msg_port_descriptor_t offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_INT.withName("name"),
+            C_INT.withName("pad1"),
+            C_INT
+        );
+        public static final mach_msg_port_descriptor_t allocate(NativeScope scope) { return new mach_msg_port_descriptor_t(scope.allocate($LAYOUT)); }
+        public static final mach_msg_port_descriptor_t allocate(NativeScope scope, long count) { return new mach_msg_port_descriptor_t(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+
+        public static final VarHandle name$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("name")));
+        public static final long name$OFFSET = 0L;
+        public final MemorySegment name$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int name$get() {
+            return (int) name$VH.get(name$ptr());
+        }
+        public final void name$set(int value) {
+            name$VH.set(name$ptr(), value);
+        }
+
+        public static final VarHandle pad1$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("pad1")));
+        public static final long pad1$OFFSET = 4L;
+        public final MemorySegment pad1$ptr() {
+            return segment().asSlice(4L);
+        }
+        public final int pad1$get() {
+            return (int) pad1$VH.get(pad1$ptr());
+        }
+        public final void pad1$set(int value) {
+            pad1$VH.set(pad1$ptr(), value);
+        }
+    }
+    public static final class mach_msg_ool_descriptor_t extends Struct<mach_msg_ool_descriptor_t> {
+        protected mach_msg_ool_descriptor_t(MemorySegment ms) { super(ms); }
+        public static final mach_msg_ool_descriptor_t at(MemorySegment ms) { return new mach_msg_ool_descriptor_t(ms); }
+        public final mach_msg_ool_descriptor_t offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_POINTER.withName("address"),
+            C_INT,
+            C_INT.withName("size")
+        );
+        public static final mach_msg_ool_descriptor_t allocate(NativeScope scope) { return new mach_msg_ool_descriptor_t(scope.allocate($LAYOUT)); }
+        public static final mach_msg_ool_descriptor_t allocate(NativeScope scope, long count) { return new mach_msg_ool_descriptor_t(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+
+        public static final VarHandle address$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("address")));
+        public static final long address$OFFSET = 0L;
+        public final MemorySegment address$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress address$get() {
+            return (jdk.incubator.foreign.MemoryAddress) address$VH.get(address$ptr());
+        }
+        public final void address$set(jdk.incubator.foreign.MemoryAddress value) {
+            address$VH.set(address$ptr(), value);
+        }
+
+        public static final VarHandle size$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("size")));
+        public static final long size$OFFSET = 12L;
+        public final MemorySegment size$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int size$get() {
+            return (int) size$VH.get(size$ptr());
+        }
+        public final void size$set(int value) {
+            size$VH.set(size$ptr(), value);
+        }
+    }
+    public static final class mach_msg_ool_ports_descriptor_t extends Struct<mach_msg_ool_ports_descriptor_t> {
+        protected mach_msg_ool_ports_descriptor_t(MemorySegment ms) { super(ms); }
+        public static final mach_msg_ool_ports_descriptor_t at(MemorySegment ms) { return new mach_msg_ool_ports_descriptor_t(ms); }
+        public final mach_msg_ool_ports_descriptor_t offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_POINTER.withName("address"),
+            C_INT,
+            C_INT.withName("count")
+        );
+        public static final mach_msg_ool_ports_descriptor_t allocate(NativeScope scope) { return new mach_msg_ool_ports_descriptor_t(scope.allocate($LAYOUT)); }
+        public static final mach_msg_ool_ports_descriptor_t allocate(NativeScope scope, long count) { return new mach_msg_ool_ports_descriptor_t(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+
+        public static final VarHandle address$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("address")));
+        public static final long address$OFFSET = 0L;
+        public final MemorySegment address$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress address$get() {
+            return (jdk.incubator.foreign.MemoryAddress) address$VH.get(address$ptr());
+        }
+        public final void address$set(jdk.incubator.foreign.MemoryAddress value) {
+            address$VH.set(address$ptr(), value);
+        }
+
+        public static final VarHandle count$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("count")));
+        public static final long count$OFFSET = 12L;
+        public final MemorySegment count$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int count$get() {
+            return (int) count$VH.get(count$ptr());
+        }
+        public final void count$set(int value) {
+            count$VH.set(count$ptr(), value);
+        }
+    }
+    public static final class mach_msg_type_descriptor_t extends Struct<mach_msg_type_descriptor_t> {
+        protected mach_msg_type_descriptor_t(MemorySegment ms) { super(ms); }
+        public static final mach_msg_type_descriptor_t at(MemorySegment ms) { return new mach_msg_type_descriptor_t(ms); }
+        public final mach_msg_type_descriptor_t offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_INT.withName("pad1"),
+            C_INT.withName("pad2"),
+            C_INT
+        );
+        public static final mach_msg_type_descriptor_t allocate(NativeScope scope) { return new mach_msg_type_descriptor_t(scope.allocate($LAYOUT)); }
+        public static final mach_msg_type_descriptor_t allocate(NativeScope scope, long count) { return new mach_msg_type_descriptor_t(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+
+        public static final VarHandle pad1$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("pad1")));
+        public static final long pad1$OFFSET = 0L;
+        public final MemorySegment pad1$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int pad1$get() {
+            return (int) pad1$VH.get(pad1$ptr());
+        }
+        public final void pad1$set(int value) {
+            pad1$VH.set(pad1$ptr(), value);
+        }
+
+        public static final VarHandle pad2$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("pad2")));
+        public static final long pad2$OFFSET = 4L;
+        public final MemorySegment pad2$ptr() {
+            return segment().asSlice(4L);
+        }
+        public final int pad2$get() {
+            return (int) pad2$VH.get(pad2$ptr());
+        }
+        public final void pad2$set(int value) {
+            pad2$VH.set(pad2$ptr(), value);
+        }
+    }
+    public static final class mach_msg_guarded_port_descriptor_t extends Struct<mach_msg_guarded_port_descriptor_t> {
+        protected mach_msg_guarded_port_descriptor_t(MemorySegment ms) { super(ms); }
+        public static final mach_msg_guarded_port_descriptor_t at(MemorySegment ms) { return new mach_msg_guarded_port_descriptor_t(ms); }
+        public final mach_msg_guarded_port_descriptor_t offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_LONGLONG.withName("context"),
+            C_INT,
+            C_INT.withName("name")
+        );
+        public static final mach_msg_guarded_port_descriptor_t allocate(NativeScope scope) { return new mach_msg_guarded_port_descriptor_t(scope.allocate($LAYOUT)); }
+        public static final mach_msg_guarded_port_descriptor_t allocate(NativeScope scope, long count) { return new mach_msg_guarded_port_descriptor_t(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+
+        public static final VarHandle context$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("context")));
+        public static final long context$OFFSET = 0L;
+        public final MemorySegment context$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final long context$get() {
+            return (long) context$VH.get(context$ptr());
+        }
+        public final void context$set(long value) {
+            context$VH.set(context$ptr(), value);
+        }
+
+        public static final VarHandle name$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("name")));
+        public static final long name$OFFSET = 12L;
+        public final MemorySegment name$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int name$get() {
+            return (int) name$VH.get(name$ptr());
+        }
+        public final void name$set(int value) {
+            name$VH.set(name$ptr(), value);
+        }
+    }
+    public static final class MACH_MSG_NULL_struct_412_9 extends Struct<MACH_MSG_NULL_struct_412_9> {
+        protected MACH_MSG_NULL_struct_412_9(MemorySegment ms) { super(ms); }
+        public static final MACH_MSG_NULL_struct_412_9 at(MemorySegment ms) { return new MACH_MSG_NULL_struct_412_9(ms); }
+        public final MACH_MSG_NULL_struct_412_9 offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_INT.withName("msgh_bits"),
+            C_INT.withName("msgh_size"),
+            C_INT.withName("msgh_remote_port"),
+            C_INT.withName("msgh_local_port"),
+            C_INT.withName("msgh_voucher_port"),
+            C_INT.withName("msgh_id")
+        );
+        public static final MACH_MSG_NULL_struct_412_9 allocate(NativeScope scope) { return new MACH_MSG_NULL_struct_412_9(scope.allocate($LAYOUT)); }
+        public static final MACH_MSG_NULL_struct_412_9 allocate(NativeScope scope, long count) { return new MACH_MSG_NULL_struct_412_9(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle msgh_bits$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_bits")));
+        public static final long msgh_bits$OFFSET = 0L;
+        public final MemorySegment msgh_bits$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int msgh_bits$get() {
+            return (int) msgh_bits$VH.get(msgh_bits$ptr());
+        }
+        public final void msgh_bits$set(int value) {
+            msgh_bits$VH.set(msgh_bits$ptr(), value);
+        }
+
+        public static final VarHandle msgh_size$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_size")));
+        public static final long msgh_size$OFFSET = 4L;
+        public final MemorySegment msgh_size$ptr() {
+            return segment().asSlice(4L);
+        }
+        public final int msgh_size$get() {
+            return (int) msgh_size$VH.get(msgh_size$ptr());
+        }
+        public final void msgh_size$set(int value) {
+            msgh_size$VH.set(msgh_size$ptr(), value);
+        }
+
+        public static final VarHandle msgh_remote_port$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_remote_port")));
+        public static final long msgh_remote_port$OFFSET = 8L;
+        public final MemorySegment msgh_remote_port$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final int msgh_remote_port$get() {
+            return (int) msgh_remote_port$VH.get(msgh_remote_port$ptr());
+        }
+        public final void msgh_remote_port$set(int value) {
+            msgh_remote_port$VH.set(msgh_remote_port$ptr(), value);
+        }
+
+        public static final VarHandle msgh_local_port$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_local_port")));
+        public static final long msgh_local_port$OFFSET = 12L;
+        public final MemorySegment msgh_local_port$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int msgh_local_port$get() {
+            return (int) msgh_local_port$VH.get(msgh_local_port$ptr());
+        }
+        public final void msgh_local_port$set(int value) {
+            msgh_local_port$VH.set(msgh_local_port$ptr(), value);
+        }
+
+        public static final VarHandle msgh_voucher_port$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_voucher_port")));
+        public static final long msgh_voucher_port$OFFSET = 16L;
+        public final MemorySegment msgh_voucher_port$ptr() {
+            return segment().asSlice(16L);
+        }
+        public final int msgh_voucher_port$get() {
+            return (int) msgh_voucher_port$VH.get(msgh_voucher_port$ptr());
+        }
+        public final void msgh_voucher_port$set(int value) {
+            msgh_voucher_port$VH.set(msgh_voucher_port$ptr(), value);
+        }
+
+        public static final VarHandle msgh_id$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("msgh_id")));
+        public static final long msgh_id$OFFSET = 20L;
+        public final MemorySegment msgh_id$ptr() {
+            return segment().asSlice(20L);
+        }
+        public final int msgh_id$get() {
+            return (int) msgh_id$VH.get(msgh_id$ptr());
+        }
+        public final void msgh_id$set(int value) {
+            msgh_id$VH.set(msgh_id$ptr(), value);
+        }
+    }
     public static final class kauth_filesec extends Struct<kauth_filesec> {
         protected kauth_filesec(MemorySegment ms) { super(ms); }
         public static final kauth_filesec at(MemorySegment ms) { return new kauth_filesec(ms); }
@@ -20,11 +483,11 @@ public final class LibMacOS {
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
             C_INT.withName("fsec_magic"),
             MemoryLayout.ofUnion(
-                MemoryLayout.ofSequence(16, C_BOOL).withName("g_guid"),
+                MemoryLayout.ofSequence(16, C_CHAR).withName("g_guid"),
                 MemoryLayout.ofSequence(4, C_INT).withName("g_guid_asint")
             ).withName("fsec_owner"),
             MemoryLayout.ofUnion(
-                MemoryLayout.ofSequence(16, C_BOOL).withName("g_guid"),
+                MemoryLayout.ofSequence(16, C_CHAR).withName("g_guid"),
                 MemoryLayout.ofSequence(4, C_INT).withName("g_guid_asint")
             ).withName("fsec_group"),
             MemoryLayout.ofStruct(
@@ -32,7 +495,7 @@ public final class LibMacOS {
                 C_INT.withName("acl_flags"),
                 MemoryLayout.ofSequence(1, MemoryLayout.ofStruct(
                     MemoryLayout.ofUnion(
-                        MemoryLayout.ofSequence(16, C_BOOL).withName("g_guid"),
+                        MemoryLayout.ofSequence(16, C_CHAR).withName("g_guid"),
                         MemoryLayout.ofSequence(4, C_INT).withName("g_guid_asint")
                     ).withName("ace_applicable"),
                     C_INT.withName("ace_flags"),
@@ -59,7 +522,27 @@ public final class LibMacOS {
             fsec_magic$VH.set(fsec_magic$ptr(), value);
         }
 
+        public static final long fsec_owner$OFFSET = 4L;
+        public final MemorySegment fsec_owner$ptr() {
+            return segment().asSlice(4L);
+        }
+        public final guid_t fsec_owner$get() {
+            return guid_t.at(fsec_owner$ptr());
+        }
+        public final void fsec_owner$set(guid_t value) {
+            guid_t.at(fsec_owner$ptr()).asSegment().copyFrom(value.asSegment());
+        }
 
+        public static final long fsec_group$OFFSET = 20L;
+        public final MemorySegment fsec_group$ptr() {
+            return segment().asSlice(20L);
+        }
+        public final guid_t fsec_group$get() {
+            return guid_t.at(fsec_group$ptr());
+        }
+        public final void fsec_group$set(guid_t value) {
+            guid_t.at(fsec_group$ptr()).asSegment().copyFrom(value.asSegment());
+        }
 
         public static final long fsec_acl$OFFSET = 36L;
         public final MemorySegment fsec_acl$ptr() {
@@ -72,6 +555,46 @@ public final class LibMacOS {
             kauth_acl.at(fsec_acl$ptr()).asSegment().copyFrom(value.asSegment());
         }
     }
+    public static final class guid_t extends Struct<guid_t> {
+        protected guid_t(MemorySegment ms) { super(ms); }
+        public static final guid_t at(MemorySegment ms) { return new guid_t(ms); }
+        public final guid_t offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofUnion(
+            MemoryLayout.ofSequence(16, C_CHAR).withName("g_guid"),
+            MemoryLayout.ofSequence(4, C_INT).withName("g_guid_asint")
+        );
+        public static final guid_t allocate(NativeScope scope) { return new guid_t(scope.allocate($LAYOUT)); }
+        public static final guid_t allocate(NativeScope scope, long count) { return new guid_t(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle g_guid$VH = RuntimeHelper.varHandle(byte.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("g_guid")));
+        public static final long g_guid$OFFSET = 0L;
+        public final MemorySegment g_guid$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final byte g_guid$get(long idx0) {
+            return (byte) g_guid$VH.get(g_guid$ptr(), idx0);
+        }
+        public final void g_guid$set(long idx0, byte value) {
+            g_guid$VH.set(g_guid$ptr(), idx0, value);
+        }
+
+        public static final VarHandle g_guid_asint$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("g_guid_asint")));
+        public static final long g_guid_asint$OFFSET = 0L;
+        public final MemorySegment g_guid_asint$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int g_guid_asint$get(long idx0) {
+            return (int) g_guid_asint$VH.get(g_guid_asint$ptr(), idx0);
+        }
+        public final void g_guid_asint$set(long idx0, int value) {
+            g_guid_asint$VH.set(g_guid_asint$ptr(), idx0, value);
+        }
+    }
     public static final class kauth_acl extends Struct<kauth_acl> {
         protected kauth_acl(MemorySegment ms) { super(ms); }
         public static final kauth_acl at(MemorySegment ms) { return new kauth_acl(ms); }
@@ -82,7 +605,7 @@ public final class LibMacOS {
             C_INT.withName("acl_flags"),
             MemoryLayout.ofSequence(1, MemoryLayout.ofStruct(
                 MemoryLayout.ofUnion(
-                    MemoryLayout.ofSequence(16, C_BOOL).withName("g_guid"),
+                    MemoryLayout.ofSequence(16, C_CHAR).withName("g_guid"),
                     MemoryLayout.ofSequence(4, C_INT).withName("g_guid_asint")
                 ).withName("ace_applicable"),
                 C_INT.withName("ace_flags"),
@@ -146,7 +669,7 @@ public final class LibMacOS {
 
         public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
             MemoryLayout.ofUnion(
-                MemoryLayout.ofSequence(16, C_BOOL).withName("g_guid"),
+                MemoryLayout.ofSequence(16, C_CHAR).withName("g_guid"),
                 MemoryLayout.ofSequence(4, C_INT).withName("g_guid_asint")
             ).withName("ace_applicable"),
             C_INT.withName("ace_flags"),
@@ -159,6 +682,16 @@ public final class LibMacOS {
         @Override
         public final GroupLayout getLayout() { return $LAYOUT; }
 
+        public static final long ace_applicable$OFFSET = 0L;
+        public final MemorySegment ace_applicable$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final guid_t ace_applicable$get() {
+            return guid_t.at(ace_applicable$ptr());
+        }
+        public final void ace_applicable$set(guid_t value) {
+            guid_t.at(ace_applicable$ptr()).asSegment().copyFrom(value.asSegment());
+        }
 
         public static final VarHandle ace_flags$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("ace_flags")));
         public static final long ace_flags$OFFSET = 16L;
@@ -182,6 +715,499 @@ public final class LibMacOS {
         }
         public final void ace_rights$set(int value) {
             ace_rights$VH.set(ace_rights$ptr(), value);
+        }
+    }
+    public static final class routine_descriptor extends Struct<routine_descriptor> {
+        protected routine_descriptor(MemorySegment ms) { super(ms); }
+        public static final routine_descriptor at(MemorySegment ms) { return new routine_descriptor(ms); }
+        public final routine_descriptor offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_POINTER.withName("impl_routine"),
+            C_POINTER.withName("stub_routine"),
+            C_INT.withName("argc"),
+            C_INT.withName("descr_count"),
+            C_POINTER.withName("arg_descr"),
+            C_INT.withName("max_reply_msg"),
+            MemoryLayout.ofPaddingBits(32)
+        ).withName("routine_descriptor");
+        public static final routine_descriptor allocate(NativeScope scope) { return new routine_descriptor(scope.allocate($LAYOUT)); }
+        public static final routine_descriptor allocate(NativeScope scope, long count) { return new routine_descriptor(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle impl_routine$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("impl_routine")));
+        public static final long impl_routine$OFFSET = 0L;
+        public final MemorySegment impl_routine$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress impl_routine$get() {
+            return (jdk.incubator.foreign.MemoryAddress) impl_routine$VH.get(impl_routine$ptr());
+        }
+        public final void impl_routine$set(jdk.incubator.foreign.MemoryAddress value) {
+            impl_routine$VH.set(impl_routine$ptr(), value);
+        }
+
+        public static final VarHandle stub_routine$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("stub_routine")));
+        public static final long stub_routine$OFFSET = 8L;
+        public final MemorySegment stub_routine$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress stub_routine$get() {
+            return (jdk.incubator.foreign.MemoryAddress) stub_routine$VH.get(stub_routine$ptr());
+        }
+        public final void stub_routine$set(jdk.incubator.foreign.MemoryAddress value) {
+            stub_routine$VH.set(stub_routine$ptr(), value);
+        }
+
+        public static final VarHandle argc$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("argc")));
+        public static final long argc$OFFSET = 16L;
+        public final MemorySegment argc$ptr() {
+            return segment().asSlice(16L);
+        }
+        public final int argc$get() {
+            return (int) argc$VH.get(argc$ptr());
+        }
+        public final void argc$set(int value) {
+            argc$VH.set(argc$ptr(), value);
+        }
+
+        public static final VarHandle descr_count$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("descr_count")));
+        public static final long descr_count$OFFSET = 20L;
+        public final MemorySegment descr_count$ptr() {
+            return segment().asSlice(20L);
+        }
+        public final int descr_count$get() {
+            return (int) descr_count$VH.get(descr_count$ptr());
+        }
+        public final void descr_count$set(int value) {
+            descr_count$VH.set(descr_count$ptr(), value);
+        }
+
+        public static final VarHandle arg_descr$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("arg_descr")));
+        public static final long arg_descr$OFFSET = 24L;
+        public final MemorySegment arg_descr$ptr() {
+            return segment().asSlice(24L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress arg_descr$get() {
+            return (jdk.incubator.foreign.MemoryAddress) arg_descr$VH.get(arg_descr$ptr());
+        }
+        public final void arg_descr$set(jdk.incubator.foreign.MemoryAddress value) {
+            arg_descr$VH.set(arg_descr$ptr(), value);
+        }
+
+        public static final VarHandle max_reply_msg$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("max_reply_msg")));
+        public static final long max_reply_msg$OFFSET = 32L;
+        public final MemorySegment max_reply_msg$ptr() {
+            return segment().asSlice(32L);
+        }
+        public final int max_reply_msg$get() {
+            return (int) max_reply_msg$VH.get(max_reply_msg$ptr());
+        }
+        public final void max_reply_msg$set(int value) {
+            max_reply_msg$VH.set(max_reply_msg$ptr(), value);
+        }
+    }
+    public static final class mig_subsystem extends Struct<mig_subsystem> {
+        protected mig_subsystem(MemorySegment ms) { super(ms); }
+        public static final mig_subsystem at(MemorySegment ms) { return new mig_subsystem(ms); }
+        public final mig_subsystem offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_POINTER.withName("server"),
+            C_INT.withName("start"),
+            C_INT.withName("end"),
+            C_INT.withName("maxsize"),
+            MemoryLayout.ofPaddingBits(32),
+            C_LONG.withName("reserved"),
+            MemoryLayout.ofSequence(1, MemoryLayout.ofStruct(
+                C_POINTER.withName("impl_routine"),
+                C_POINTER.withName("stub_routine"),
+                C_INT.withName("argc"),
+                C_INT.withName("descr_count"),
+                C_POINTER.withName("arg_descr"),
+                C_INT.withName("max_reply_msg"),
+                MemoryLayout.ofPaddingBits(32)
+            ).withName("routine_descriptor")).withName("routine")
+        ).withName("mig_subsystem");
+        public static final mig_subsystem allocate(NativeScope scope) { return new mig_subsystem(scope.allocate($LAYOUT)); }
+        public static final mig_subsystem allocate(NativeScope scope, long count) { return new mig_subsystem(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle server$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("server")));
+        public static final long server$OFFSET = 0L;
+        public final MemorySegment server$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress server$get() {
+            return (jdk.incubator.foreign.MemoryAddress) server$VH.get(server$ptr());
+        }
+        public final void server$set(jdk.incubator.foreign.MemoryAddress value) {
+            server$VH.set(server$ptr(), value);
+        }
+
+        public static final VarHandle start$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("start")));
+        public static final long start$OFFSET = 8L;
+        public final MemorySegment start$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final int start$get() {
+            return (int) start$VH.get(start$ptr());
+        }
+        public final void start$set(int value) {
+            start$VH.set(start$ptr(), value);
+        }
+
+        public static final VarHandle end$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("end")));
+        public static final long end$OFFSET = 12L;
+        public final MemorySegment end$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int end$get() {
+            return (int) end$VH.get(end$ptr());
+        }
+        public final void end$set(int value) {
+            end$VH.set(end$ptr(), value);
+        }
+
+        public static final VarHandle maxsize$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("maxsize")));
+        public static final long maxsize$OFFSET = 16L;
+        public final MemorySegment maxsize$ptr() {
+            return segment().asSlice(16L);
+        }
+        public final int maxsize$get() {
+            return (int) maxsize$VH.get(maxsize$ptr());
+        }
+        public final void maxsize$set(int value) {
+            maxsize$VH.set(maxsize$ptr(), value);
+        }
+
+        public static final VarHandle reserved$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("reserved")));
+        public static final long reserved$OFFSET = 24L;
+        public final MemorySegment reserved$ptr() {
+            return segment().asSlice(24L);
+        }
+        public final long reserved$get() {
+            return (long) reserved$VH.get(reserved$ptr());
+        }
+        public final void reserved$set(long value) {
+            reserved$VH.set(reserved$ptr(), value);
+        }
+
+        public static final long routine$OFFSET = 32L;
+        public final MemorySegment routine$ptr() {
+            return segment().asSlice(32L);
+        }
+        public final routine_descriptor routine$get(long idx0) {
+            MemorySegment addr = routine$ptr();
+            long offset = $LAYOUT.select(MemoryLayout.PathElement.groupElement("routine")).byteOffset(
+                MemoryLayout.PathElement.sequenceElement(idx0));
+            addr = addr.asSlice(offset);
+            return routine_descriptor.at(addr);
+        }
+        public final void routine$set(long idx0, routine_descriptor value) {
+            MemorySegment addr = routine$ptr();
+            long offset = $LAYOUT.select(MemoryLayout.PathElement.groupElement("routine")).byteOffset(
+                MemoryLayout.PathElement.sequenceElement(idx0));
+            addr = addr.asSlice(offset);
+            routine_descriptor.at(addr).asSegment().copyFrom(value.asSegment());
+        }
+    }
+    public static final class rpc_subsystem extends Struct<rpc_subsystem> {
+        protected rpc_subsystem(MemorySegment ms) { super(ms); }
+        public static final rpc_subsystem at(MemorySegment ms) { return new rpc_subsystem(ms); }
+        public final rpc_subsystem offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_POINTER.withName("reserved"),
+            C_INT.withName("start"),
+            C_INT.withName("end"),
+            C_INT.withName("maxsize"),
+            MemoryLayout.ofPaddingBits(32),
+            C_LONG.withName("base_addr"),
+            MemoryLayout.ofSequence(1, MemoryLayout.ofStruct(
+                C_POINTER.withName("impl_routine"),
+                C_POINTER.withName("stub_routine"),
+                C_INT.withName("argc"),
+                C_INT.withName("descr_count"),
+                C_POINTER.withName("arg_descr"),
+                C_INT.withName("max_reply_msg"),
+                MemoryLayout.ofPaddingBits(32)
+            ).withName("rpc_routine_descriptor")).withName("routine"),
+            MemoryLayout.ofSequence(1, MemoryLayout.ofStruct(
+                C_INT.withName("type"),
+                C_INT.withName("size"),
+                C_INT.withName("count"),
+                C_INT.withName("offset")
+            ).withName("rpc_routine_arg_descriptor")).withName("arg_descriptor")
+        ).withName("rpc_subsystem");
+        public static final rpc_subsystem allocate(NativeScope scope) { return new rpc_subsystem(scope.allocate($LAYOUT)); }
+        public static final rpc_subsystem allocate(NativeScope scope, long count) { return new rpc_subsystem(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle reserved$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("reserved")));
+        public static final long reserved$OFFSET = 0L;
+        public final MemorySegment reserved$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress reserved$get() {
+            return (jdk.incubator.foreign.MemoryAddress) reserved$VH.get(reserved$ptr());
+        }
+        public final void reserved$set(jdk.incubator.foreign.MemoryAddress value) {
+            reserved$VH.set(reserved$ptr(), value);
+        }
+
+        public static final VarHandle start$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("start")));
+        public static final long start$OFFSET = 8L;
+        public final MemorySegment start$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final int start$get() {
+            return (int) start$VH.get(start$ptr());
+        }
+        public final void start$set(int value) {
+            start$VH.set(start$ptr(), value);
+        }
+
+        public static final VarHandle end$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("end")));
+        public static final long end$OFFSET = 12L;
+        public final MemorySegment end$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int end$get() {
+            return (int) end$VH.get(end$ptr());
+        }
+        public final void end$set(int value) {
+            end$VH.set(end$ptr(), value);
+        }
+
+        public static final VarHandle maxsize$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("maxsize")));
+        public static final long maxsize$OFFSET = 16L;
+        public final MemorySegment maxsize$ptr() {
+            return segment().asSlice(16L);
+        }
+        public final int maxsize$get() {
+            return (int) maxsize$VH.get(maxsize$ptr());
+        }
+        public final void maxsize$set(int value) {
+            maxsize$VH.set(maxsize$ptr(), value);
+        }
+
+        public static final VarHandle base_addr$VH = RuntimeHelper.varHandle(long.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("base_addr")));
+        public static final long base_addr$OFFSET = 24L;
+        public final MemorySegment base_addr$ptr() {
+            return segment().asSlice(24L);
+        }
+        public final long base_addr$get() {
+            return (long) base_addr$VH.get(base_addr$ptr());
+        }
+        public final void base_addr$set(long value) {
+            base_addr$VH.set(base_addr$ptr(), value);
+        }
+
+        public static final long routine$OFFSET = 32L;
+        public final MemorySegment routine$ptr() {
+            return segment().asSlice(32L);
+        }
+        public final rpc_routine_descriptor routine$get(long idx0) {
+            MemorySegment addr = routine$ptr();
+            long offset = $LAYOUT.select(MemoryLayout.PathElement.groupElement("routine")).byteOffset(
+                MemoryLayout.PathElement.sequenceElement(idx0));
+            addr = addr.asSlice(offset);
+            return rpc_routine_descriptor.at(addr);
+        }
+        public final void routine$set(long idx0, rpc_routine_descriptor value) {
+            MemorySegment addr = routine$ptr();
+            long offset = $LAYOUT.select(MemoryLayout.PathElement.groupElement("routine")).byteOffset(
+                MemoryLayout.PathElement.sequenceElement(idx0));
+            addr = addr.asSlice(offset);
+            rpc_routine_descriptor.at(addr).asSegment().copyFrom(value.asSegment());
+        }
+
+        public static final long arg_descriptor$OFFSET = 72L;
+        public final MemorySegment arg_descriptor$ptr() {
+            return segment().asSlice(72L);
+        }
+        public final rpc_routine_arg_descriptor arg_descriptor$get(long idx0) {
+            MemorySegment addr = arg_descriptor$ptr();
+            long offset = $LAYOUT.select(MemoryLayout.PathElement.groupElement("arg_descriptor")).byteOffset(
+                MemoryLayout.PathElement.sequenceElement(idx0));
+            addr = addr.asSlice(offset);
+            return rpc_routine_arg_descriptor.at(addr);
+        }
+        public final void arg_descriptor$set(long idx0, rpc_routine_arg_descriptor value) {
+            MemorySegment addr = arg_descriptor$ptr();
+            long offset = $LAYOUT.select(MemoryLayout.PathElement.groupElement("arg_descriptor")).byteOffset(
+                MemoryLayout.PathElement.sequenceElement(idx0));
+            addr = addr.asSlice(offset);
+            rpc_routine_arg_descriptor.at(addr).asSegment().copyFrom(value.asSegment());
+        }
+    }
+    public static final class rpc_routine_descriptor extends Struct<rpc_routine_descriptor> {
+        protected rpc_routine_descriptor(MemorySegment ms) { super(ms); }
+        public static final rpc_routine_descriptor at(MemorySegment ms) { return new rpc_routine_descriptor(ms); }
+        public final rpc_routine_descriptor offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_POINTER.withName("impl_routine"),
+            C_POINTER.withName("stub_routine"),
+            C_INT.withName("argc"),
+            C_INT.withName("descr_count"),
+            C_POINTER.withName("arg_descr"),
+            C_INT.withName("max_reply_msg"),
+            MemoryLayout.ofPaddingBits(32)
+        ).withName("rpc_routine_descriptor");
+        public static final rpc_routine_descriptor allocate(NativeScope scope) { return new rpc_routine_descriptor(scope.allocate($LAYOUT)); }
+        public static final rpc_routine_descriptor allocate(NativeScope scope, long count) { return new rpc_routine_descriptor(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle impl_routine$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("impl_routine")));
+        public static final long impl_routine$OFFSET = 0L;
+        public final MemorySegment impl_routine$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress impl_routine$get() {
+            return (jdk.incubator.foreign.MemoryAddress) impl_routine$VH.get(impl_routine$ptr());
+        }
+        public final void impl_routine$set(jdk.incubator.foreign.MemoryAddress value) {
+            impl_routine$VH.set(impl_routine$ptr(), value);
+        }
+
+        public static final VarHandle stub_routine$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("stub_routine")));
+        public static final long stub_routine$OFFSET = 8L;
+        public final MemorySegment stub_routine$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress stub_routine$get() {
+            return (jdk.incubator.foreign.MemoryAddress) stub_routine$VH.get(stub_routine$ptr());
+        }
+        public final void stub_routine$set(jdk.incubator.foreign.MemoryAddress value) {
+            stub_routine$VH.set(stub_routine$ptr(), value);
+        }
+
+        public static final VarHandle argc$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("argc")));
+        public static final long argc$OFFSET = 16L;
+        public final MemorySegment argc$ptr() {
+            return segment().asSlice(16L);
+        }
+        public final int argc$get() {
+            return (int) argc$VH.get(argc$ptr());
+        }
+        public final void argc$set(int value) {
+            argc$VH.set(argc$ptr(), value);
+        }
+
+        public static final VarHandle descr_count$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("descr_count")));
+        public static final long descr_count$OFFSET = 20L;
+        public final MemorySegment descr_count$ptr() {
+            return segment().asSlice(20L);
+        }
+        public final int descr_count$get() {
+            return (int) descr_count$VH.get(descr_count$ptr());
+        }
+        public final void descr_count$set(int value) {
+            descr_count$VH.set(descr_count$ptr(), value);
+        }
+
+        public static final VarHandle arg_descr$VH = RuntimeHelper.varHandle(jdk.incubator.foreign.MemoryAddress.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("arg_descr")));
+        public static final long arg_descr$OFFSET = 24L;
+        public final MemorySegment arg_descr$ptr() {
+            return segment().asSlice(24L);
+        }
+        public final jdk.incubator.foreign.MemoryAddress arg_descr$get() {
+            return (jdk.incubator.foreign.MemoryAddress) arg_descr$VH.get(arg_descr$ptr());
+        }
+        public final void arg_descr$set(jdk.incubator.foreign.MemoryAddress value) {
+            arg_descr$VH.set(arg_descr$ptr(), value);
+        }
+
+        public static final VarHandle max_reply_msg$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("max_reply_msg")));
+        public static final long max_reply_msg$OFFSET = 32L;
+        public final MemorySegment max_reply_msg$ptr() {
+            return segment().asSlice(32L);
+        }
+        public final int max_reply_msg$get() {
+            return (int) max_reply_msg$VH.get(max_reply_msg$ptr());
+        }
+        public final void max_reply_msg$set(int value) {
+            max_reply_msg$VH.set(max_reply_msg$ptr(), value);
+        }
+    }
+    public static final class rpc_routine_arg_descriptor extends Struct<rpc_routine_arg_descriptor> {
+        protected rpc_routine_arg_descriptor(MemorySegment ms) { super(ms); }
+        public static final rpc_routine_arg_descriptor at(MemorySegment ms) { return new rpc_routine_arg_descriptor(ms); }
+        public final rpc_routine_arg_descriptor offset(int count) { return at(segment().asSlice(sizeof() * count)); }
+
+        public static final GroupLayout $LAYOUT = MemoryLayout.ofStruct(
+            C_INT.withName("type"),
+            C_INT.withName("size"),
+            C_INT.withName("count"),
+            C_INT.withName("offset")
+        ).withName("rpc_routine_arg_descriptor");
+        public static final rpc_routine_arg_descriptor allocate(NativeScope scope) { return new rpc_routine_arg_descriptor(scope.allocate($LAYOUT)); }
+        public static final rpc_routine_arg_descriptor allocate(NativeScope scope, long count) { return new rpc_routine_arg_descriptor(scope.allocateArray($LAYOUT, count)); }
+        public static final long sizeof() { return $LAYOUT.byteSize(); }
+        public static final long offsetof(String fieldName) { return $LAYOUT.byteOffset(MemoryLayout.PathElement.groupElement(fieldName)); }
+        @Override
+        public final GroupLayout getLayout() { return $LAYOUT; }
+
+        public static final VarHandle type$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("type")));
+        public static final long type$OFFSET = 0L;
+        public final MemorySegment type$ptr() {
+            return segment().asSlice(0L);
+        }
+        public final int type$get() {
+            return (int) type$VH.get(type$ptr());
+        }
+        public final void type$set(int value) {
+            type$VH.set(type$ptr(), value);
+        }
+
+        public static final VarHandle size$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("size")));
+        public static final long size$OFFSET = 4L;
+        public final MemorySegment size$ptr() {
+            return segment().asSlice(4L);
+        }
+        public final int size$get() {
+            return (int) size$VH.get(size$ptr());
+        }
+        public final void size$set(int value) {
+            size$VH.set(size$ptr(), value);
+        }
+
+        public static final VarHandle count$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("count")));
+        public static final long count$OFFSET = 8L;
+        public final MemorySegment count$ptr() {
+            return segment().asSlice(8L);
+        }
+        public final int count$get() {
+            return (int) count$VH.get(count$ptr());
+        }
+        public final void count$set(int value) {
+            count$VH.set(count$ptr(), value);
+        }
+
+        public static final VarHandle offset$VH = RuntimeHelper.varHandle(int.class, $LAYOUT.select(MemoryLayout.PathElement.groupElement("offset")));
+        public static final long offset$OFFSET = 12L;
+        public final MemorySegment offset$ptr() {
+            return segment().asSlice(12L);
+        }
+        public final int offset$get() {
+            return (int) offset$VH.get(offset$ptr());
+        }
+        public final void offset$set(int value) {
+            offset$VH.set(offset$ptr(), value);
         }
     }
     public static final int kCFStringEncodingUTF16 = (int)256L;
@@ -304,7 +1330,7 @@ public final class LibMacOS {
     public static final MethodHandle mh_CFStringGetCString = RuntimeHelper.downcallHandle(
         LIBRARIES, "CFStringGetCString",
         "(Ljdk/incubator/foreign/MemoryAddress;Ljdk/incubator/foreign/MemoryAddress;JI)B",
-        FunctionDescriptor.of(C_BOOL,
+        FunctionDescriptor.of(C_CHAR,
             C_POINTER,
             C_POINTER,
             C_LONG,

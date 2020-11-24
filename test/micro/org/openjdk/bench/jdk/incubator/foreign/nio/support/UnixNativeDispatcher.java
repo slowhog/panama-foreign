@@ -27,7 +27,7 @@ package org.openjdk.bench.jdk.incubator.foreign.nio.support;
 
 import java.nio.file.DirectoryStream;
 
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.NativeScope;
@@ -64,8 +64,8 @@ public abstract class UnixNativeDispatcher {
 
     public static UnixFileAttributes statFFI(String path) {
         try (NativeScope scope = NativeScope.unboundedScope()) {
-            var file = CSupport.toCString(path, scope);
-            LibC.stat64 buffer = LibC.stat64.allocate(scope::allocate);
+            var file = CLinker.toCString(path, scope);
+            LibC.stat64 buffer = LibC.stat64.allocate(scope);
             LibC.stat64(file, buffer);
             return new UnixFileAttributes(buffer);
         }
@@ -73,7 +73,7 @@ public abstract class UnixNativeDispatcher {
 
     public static long opendirFFI(String path) {
         try (NativeScope scope = NativeScope.unboundedScope()) {
-            MemoryAddress dir = LibC.opendir(CSupport.toCString(path, scope));
+            MemoryAddress dir = LibC.opendir(CLinker.toCString(path, scope));
             if (dir.equals(MemoryAddress.NULL)) {
                 throw new RuntimeException();
             }
@@ -102,7 +102,7 @@ public abstract class UnixNativeDispatcher {
         }
         MemorySegment pDir = MemorySegment.ofNativeRestricted()
                 .asSlice(pdir.toRawLongValue(), LibC.dirent.sizeof());
-        return CSupport.toJavaString(LibC.dirent.at(pDir).d_name$ptr());
+        return CLinker.toJavaString(LibC.dirent.at(pDir).d_name$ptr());
     }
 
     public static native long opendirJNI(String path);

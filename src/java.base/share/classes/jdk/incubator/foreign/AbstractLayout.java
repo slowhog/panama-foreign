@@ -43,6 +43,7 @@ import java.util.OptionalLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static java.lang.constant.ConstantDescs.BSM_GET_STATIC_FINAL;
 import static java.lang.constant.ConstantDescs.BSM_INVOKE;
 import static java.lang.constant.ConstantDescs.CD_String;
 import static java.lang.constant.ConstantDescs.CD_long;
@@ -192,10 +193,6 @@ abstract class AbstractLayout implements MemoryLayout {
 
     /*** Helper constants for implementing Layout::describeConstable ***/
 
-    static final DirectMethodHandleDesc BSM_GET_STATIC_FINAL
-            = ConstantDescs.ofConstantBootstrap(ConstantDescs.CD_ConstantBootstraps, "getStaticFinal",
-            ConstantDescs.CD_Object, ConstantDescs.CD_Class);
-
     static final ClassDesc CD_MEMORY_LAYOUT = MemoryLayout.class.describeConstable().get();
 
     static final ClassDesc CD_VALUE_LAYOUT = ValueLayout.class.describeConstable().get();
@@ -213,10 +210,6 @@ abstract class AbstractLayout implements MemoryLayout {
     static final ConstantDesc BIG_ENDIAN = DynamicConstantDesc.ofNamed(BSM_GET_STATIC_FINAL, "BIG_ENDIAN", CD_BYTEORDER, CD_BYTEORDER);
 
     static final ConstantDesc LITTLE_ENDIAN = DynamicConstantDesc.ofNamed(BSM_GET_STATIC_FINAL, "LITTLE_ENDIAN", CD_BYTEORDER, CD_BYTEORDER);
-
-    static final ConstantDesc TRUE = DynamicConstantDesc.ofNamed(BSM_GET_STATIC_FINAL, "TRUE", ConstantDescs.CD_Boolean, ConstantDescs.CD_Boolean);
-
-    static final ConstantDesc FALSE = DynamicConstantDesc.ofNamed(BSM_GET_STATIC_FINAL, "FALSE", ConstantDescs.CD_Boolean, ConstantDescs.CD_Boolean);
 
     static final MethodHandleDesc MH_PADDING = MethodHandleDesc.ofMethod(DirectMethodHandleDesc.Kind.INTERFACE_STATIC, CD_MEMORY_LAYOUT, "ofPaddingBits",
                 MethodTypeDesc.of(CD_MEMORY_LAYOUT, CD_long));

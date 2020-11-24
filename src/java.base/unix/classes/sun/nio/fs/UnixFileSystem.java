@@ -262,6 +262,7 @@ abstract class UnixFileSystem
 
     @Override
     public final Path getPath(String first, String... more) {
+        Objects.requireNonNull(first);
         String path;
         if (more.length == 0) {
             path = first;

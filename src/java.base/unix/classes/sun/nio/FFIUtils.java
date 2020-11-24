@@ -45,10 +45,10 @@ import jdk.internal.panama.LibC;
 import jdk.internal.vm.annotation.ForceInline;
 import sun.nio.ch.IOStatus;
 
-import static jdk.incubator.foreign.CSupport.C_CHAR;
-import static jdk.incubator.foreign.CSupport.C_INT;
-import static jdk.incubator.foreign.CSupport.C_LONG;
-import static jdk.incubator.foreign.CSupport.C_POINTER;
+import static jdk.incubator.foreign.CLinker.C_CHAR;
+import static jdk.incubator.foreign.CLinker.C_INT;
+import static jdk.incubator.foreign.CLinker.C_LONG;
+import static jdk.incubator.foreign.CLinker.C_POINTER;
 import static jdk.internal.foreign.NativeMemorySegmentImpl.EVERYTHING;
 import static jdk.internal.panama.LibC.EAGAIN;
 import static jdk.internal.panama.LibC.EINTR;

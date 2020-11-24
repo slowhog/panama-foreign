@@ -68,7 +68,6 @@ import jdk.internal.module.ModuleBootstrap;
 import jdk.internal.module.ServicesCatalog;
 import jdk.internal.reflect.CallerSensitive;
 import jdk.internal.reflect.Reflection;
-import jdk.internal.HotSpotIntrinsicCandidate;
 import jdk.internal.access.JavaLangAccess;
 import jdk.internal.access.SharedSecrets;
 import jdk.internal.misc.VM;
@@ -76,6 +75,7 @@ import jdk.internal.logger.LoggerFinderLoader;
 import jdk.internal.logger.LazyLoggers;
 import jdk.internal.logger.LocalizedLoggerWrapper;
 import jdk.internal.util.SystemProps;
+import jdk.internal.vm.annotation.IntrinsicCandidate;
 import jdk.internal.vm.annotation.Stable;
 import sun.nio.fs.DefaultFileSystemProvider;
 import sun.reflect.annotation.AnnotationType;
@@ -426,7 +426,7 @@ public final class System {
      *          the current time and midnight, January 1, 1970 UTC.
      * @see     java.util.Date
      */
-    @HotSpotIntrinsicCandidate
+    @IntrinsicCandidate
     public static native long currentTimeMillis();
 
     /**
@@ -470,7 +470,7 @@ public final class System {
      *         high-resolution time source, in nanoseconds
      * @since 1.5
      */
-    @HotSpotIntrinsicCandidate
+    @IntrinsicCandidate
     public static native long nanoTime();
 
     /**
@@ -565,7 +565,7 @@ public final class System {
      * @throws     NullPointerException if either {@code src} or
      *             {@code dest} is {@code null}.
      */
-    @HotSpotIntrinsicCandidate
+    @IntrinsicCandidate
     public static native void arraycopy(Object src,  int  srcPos,
                                         Object dest, int destPos,
                                         int length);
@@ -583,7 +583,7 @@ public final class System {
      * @see Object#hashCode
      * @see java.util.Objects#hashCode(Object)
      */
-    @HotSpotIntrinsicCandidate
+    @IntrinsicCandidate
     public static native int identityHashCode(Object x);
 
     /**
@@ -2237,6 +2237,9 @@ public final class System {
             }
             public ServicesCatalog getServicesCatalog(ModuleLayer layer) {
                 return layer.getServicesCatalog();
+            }
+            public void bindToLoader(ModuleLayer layer, ClassLoader loader) {
+                layer.bindToLoader(loader);
             }
             public Stream<ModuleLayer> layers(ModuleLayer layer) {
                 return layer.layers();

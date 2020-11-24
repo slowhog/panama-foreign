@@ -29,7 +29,7 @@ import java.nio.ByteOrder;
 import java.util.function.Supplier;
 
 import jdk.incubator.foreign.Addressable;
-import jdk.incubator.foreign.CSupport;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.MemoryAccess;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryHandles;
@@ -38,9 +38,9 @@ import jdk.incubator.foreign.NativeScope;
 import jdk.internal.panama.LibC;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.CSupport.C_CHAR;
-import static jdk.incubator.foreign.CSupport.C_POINTER;
-import static jdk.incubator.foreign.CSupport.C_LONG;
+import static jdk.incubator.foreign.CLinker.C_CHAR;
+import static jdk.incubator.foreign.CLinker.C_POINTER;
+import static jdk.incubator.foreign.CLinker.C_LONG;
 import static jdk.internal.foreign.NativeMemorySegmentImpl.EVERYTHING;
 import static jdk.internal.panama.LibC.dirent;
 import static jdk.internal.panama.LibC.group;
@@ -181,7 +181,7 @@ class UnixNativeDispatcher {
         try (NativeScope s = NativeScope.unboundedScope()) {
             MemoryAddress file;
             do {
-                file = LibC.fopen(copyToNativeBytes(filename, s), CSupport.toCString(mode, s));
+                file = LibC.fopen(copyToNativeBytes(filename, s), CLinker.toCString(mode, s));
                 if (file == MemoryAddress.NULL) {
                     checkErrno(EINTR);
                 }
@@ -734,7 +734,7 @@ class UnixNativeDispatcher {
             passwd pwent = passwd.allocate(s);
             var result = s.allocate(C_POINTER);
             setErrno(0);
-            int rv = restartable(() -> LibC.getpwnam_r(CSupport.toCString(name, s),
+            int rv = restartable(() -> LibC.getpwnam_r(CLinker.toCString(name, s),
                     pwent, buf, bufLen, result));
             MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : MemoryAccess.getAddress(result);
             if (FFIUtils.isNull(ptr)) {
@@ -771,7 +771,7 @@ class UnixNativeDispatcher {
                 var result = s.allocate(C_POINTER);
                 setErrno(0);
                 final long len = bufLen;
-                int rv = restartable(() -> LibC.getgrnam_r(CSupport.toCString(name, s),
+                int rv = restartable(() -> LibC.getgrnam_r(CLinker.toCString(name, s),
                         grent, buf, len, result));
                 MemoryAddress ptr = (rv != 0) ? MemoryAddress.NULL : MemoryAccess.getAddress(result);
                 if (FFIUtils.isNull(ptr)) {

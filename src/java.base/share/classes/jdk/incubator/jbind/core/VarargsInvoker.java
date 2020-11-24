@@ -23,16 +23,16 @@
 
 package jdk.incubator.jbind.core;
 
-import static jdk.incubator.foreign.CSupport.C_DOUBLE;
-import static jdk.incubator.foreign.CSupport.C_LONGLONG;
-import static jdk.incubator.foreign.CSupport.C_POINTER;
+import static jdk.incubator.foreign.CLinker.C_DOUBLE;
+import static jdk.incubator.foreign.CLinker.C_LONGLONG;
+import static jdk.incubator.foreign.CLinker.C_POINTER;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 
 import jdk.incubator.foreign.Addressable;
-import jdk.incubator.foreign.ForeignLinker;
+import jdk.incubator.foreign.CLinker;
 import jdk.incubator.foreign.FunctionDescriptor;
 import jdk.incubator.foreign.MemoryAddress;
 import jdk.incubator.foreign.MemoryLayout;
@@ -40,13 +40,14 @@ import jdk.incubator.foreign.MemorySegment;
 import jdk.internal.foreign.abi.SharedUtils;
 
 public class VarargsInvoker {
-    private static final ForeignLinker ABI = SharedUtils.getSystemLinker();
+    private static final CLinker ABI = SharedUtils.getSystemLinker();
     private static final MethodHandle INVOKE_MH;
     private final MemoryAddress symbol;
     private final MethodType varargs;
     private final FunctionDescriptor function;
 
     private VarargsInvoker(MemoryAddress symbol, MethodType type, FunctionDescriptor function) {
+        super();
         // This MemoryAddress might be on a different thread than where lookup happened
         this.symbol = symbol;
         this.varargs = type;

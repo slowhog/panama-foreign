@@ -41,7 +41,7 @@ import jdk.internal.panama.LibC.stat64;
 import jdk.internal.panama.LibC.statvfs;
 import sun.nio.FFIUtils;
 
-import static jdk.incubator.foreign.CSupport.C_INT;
+import static jdk.incubator.foreign.CLinker.C_INT;
 import static jdk.internal.panama.LibC.SEEK_CUR;
 import static jdk.internal.panama.LibC.SEEK_SET;
 import static jdk.internal.panama.LibC.EACCES;

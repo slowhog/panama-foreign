@@ -25,13 +25,7 @@
  */
 package jdk.internal.foreign.abi.x64.sysv;
 
-import jdk.incubator.foreign.CSupport;
-import jdk.incubator.foreign.GroupLayout;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryHandles;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.NativeScope;
+import jdk.incubator.foreign.*;
 import jdk.internal.foreign.NativeMemorySegmentImpl;
 import jdk.internal.foreign.Utils;
 import jdk.internal.foreign.abi.SharedUtils;
@@ -43,8 +37,8 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.List;
 
-import static jdk.incubator.foreign.CSupport.SysV;
-import static jdk.incubator.foreign.CSupport.VaList;
+import static jdk.internal.foreign.PlatformLayouts.SysV;
+import static jdk.incubator.foreign.CLinker.VaList;
 import static jdk.incubator.foreign.MemoryLayout.PathElement.groupElement;
 import static jdk.internal.foreign.abi.SharedUtils.SimpleVaArg;
 import static jdk.internal.foreign.abi.SharedUtils.checkCompatibleType;
@@ -118,7 +112,7 @@ public class SysVVaList implements VaList {
         = MemoryHandles.asAddressVarHandle(LAYOUT.varHandle(long.class, groupElement("reg_save_area")));
 
     private static final Cleaner cleaner = Cleaner.create();
-    private static final CSupport.VaList EMPTY = new SharedUtils.EmptyVaList(emptyListAddress());
+    private static final VaList EMPTY = new SharedUtils.EmptyVaList(emptyListAddress());
 
     private final MemorySegment segment;
     private final MemorySegment regSaveArea;
@@ -138,7 +132,9 @@ public class SysVVaList implements VaList {
     private static MemoryAddress emptyListAddress() {
         long ptr = U.allocateMemory(LAYOUT.byteSize());
         MemorySegment base = NativeMemorySegmentImpl.makeNativeSegmentUnchecked(
-                MemoryAddress.ofLong(ptr), LAYOUT.byteSize(), null, () -> U.freeMemory(ptr), null);
+                MemoryAddress.ofLong(ptr), LAYOUT.byteSize(), 
+                () -> U.freeMemory(ptr), null)
+            .share();
         cleaner.register(SysVVaList.class, base::close);
         VH_gp_offset.set(base, MAX_GP_OFFSET);
         VH_fp_offset.set(base, MAX_FP_OFFSET);
@@ -147,7 +143,7 @@ public class SysVVaList implements VaList {
         return base.withAccessModes(0).address();
     }
 
-    public static CSupport.VaList empty() {
+    public static VaList empty() {
         return EMPTY;
     }
 
@@ -180,8 +176,8 @@ public class SysVVaList implements VaList {
     }
 
     private static MemorySegment getRegSaveArea(MemorySegment segment) {
-        return MemorySegment.ofNativeRestricted((MemoryAddress) VH_reg_save_area.get(segment),
-            LAYOUT_REG_SAVE_AREA.byteSize(), segment.ownerThread(), null, null);
+        return handoffIfNeeded(((MemoryAddress)VH_reg_save_area.get(segment))
+                .asSegmentRestricted(LAYOUT_REG_SAVE_AREA.byteSize()), segment.ownerThread());
     }
 
     private void preAlignStack(MemoryLayout layout) {
@@ -236,8 +232,8 @@ public class SysVVaList implements VaList {
             preAlignStack(layout);
             return switch (typeClass.kind()) {
                 case STRUCT -> {
-                    try (MemorySegment slice = MemorySegment.ofNativeRestricted(stackPtr(), layout.byteSize(),
-                                                                                segment.ownerThread(), null, null)) {
+                    try (MemorySegment slice = handoffIfNeeded(stackPtr()
+                            .asSegmentRestricted(layout.byteSize()), segment.ownerThread())) {
                         MemorySegment seg = allocator.allocate(layout);
                         seg.copyFrom(slice);
                         postAlignStack(layout);
@@ -246,8 +242,8 @@ public class SysVVaList implements VaList {
                 }
                 case POINTER, INTEGER, FLOAT -> {
                     VarHandle reader = vhPrimitiveOrAddress(carrier, layout);
-                    try (MemorySegment slice = MemorySegment.ofNativeRestricted(stackPtr(), layout.byteSize(),
-                                                                                segment.ownerThread(), null, null)) {
+                    try (MemorySegment slice = handoffIfNeeded(stackPtr()
+                            .asSegmentRestricted(layout.byteSize()), segment.ownerThread())) {
                         Object res = reader.get(slice);
                         postAlignStack(layout);
                         yield res;
@@ -310,9 +306,7 @@ public class SysVVaList implements VaList {
     }
 
     public static VaList ofAddress(MemoryAddress ma) {
-        MemorySegment vaListSegment
-            = MemorySegment.ofNativeRestricted(ma, LAYOUT.byteSize(), Thread.currentThread(), null, null);
-        return readFromSegment(vaListSegment);
+        return readFromSegment(ma.asSegmentRestricted(LAYOUT.byteSize()));
     }
 
     @Override
@@ -362,7 +356,7 @@ public class SysVVaList implements VaList {
                + '}';
     }
 
-    static class Builder implements CSupport.VaList.Builder {
+    static class Builder implements VaList.Builder {
         private final SharedUtils.Allocator allocator;
         private final MemorySegment reg_save_area;
         private long currentGPOffset = 0;
@@ -375,27 +369,27 @@ public class SysVVaList implements VaList {
         }
 
         @Override
-        public Builder vargFromInt(MemoryLayout layout, int value) {
+        public Builder vargFromInt(ValueLayout layout, int value) {
             return arg(int.class, layout, value);
         }
 
         @Override
-        public Builder vargFromLong(MemoryLayout layout, long value) {
+        public Builder vargFromLong(ValueLayout layout, long value) {
             return arg(long.class, layout, value);
         }
 
         @Override
-        public Builder vargFromDouble(MemoryLayout layout, double value) {
+        public Builder vargFromDouble(ValueLayout layout, double value) {
             return arg(double.class, layout, value);
         }
 
         @Override
-        public Builder vargFromAddress(MemoryLayout layout, MemoryAddress value) {
-            return arg(MemoryAddress.class, layout, value);
+        public Builder vargFromAddress(ValueLayout layout, Addressable value) {
+            return arg(MemoryAddress.class, layout, value.address());
         }
 
         @Override
-        public Builder vargFromSegment(MemoryLayout layout, MemorySegment value) {
+        public Builder vargFromSegment(GroupLayout layout, MemorySegment value) {
             return arg(MemorySegment.class, layout, value);
         }
 
@@ -480,5 +474,10 @@ public class SysVVaList implements VaList {
             assert reg_save_area.ownerThread() == vaListSegment.ownerThread();
             return new SysVVaList(vaListSegment, reg_save_area, attachedSegments);
         }
+    }
+
+    private static MemorySegment handoffIfNeeded(MemorySegment segment, Thread thread) {
+        return segment.ownerThread() == thread ?
+            segment : segment.handoff(thread);
     }
 }
