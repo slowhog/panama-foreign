@@ -24,10 +24,10 @@
 
 /*
  * @test
- * @modules jdk.incubator.foreign/jdk.internal.foreign
- *          jdk.incubator.foreign/jdk.internal.foreign.abi
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.x64
- *          jdk.incubator.foreign/jdk.internal.foreign.abi.x64.windows
+ * @modules java.base/jdk.internal.foreign
+ *          java.base/jdk.internal.foreign.abi
+ *          java.base/jdk.internal.foreign.abi.x64
+ *          java.base/jdk.internal.foreign.abi.x64.windows
  * @build CallArrangerTestBase
  * @run testng TestWindowsCallArranger
  */

@@ -23,8 +23,7 @@
 
 /*
  * @test
- * @modules jdk.incubator.foreign
- *          java.base/jdk.internal.access.foreign
+ * @modules java.base/jdk.internal.access.foreign
  *
  * @run testng/othervm -Xverify:all
  *   -Djdk.internal.foreign.SHOULD_ADAPT_HANDLES=false
