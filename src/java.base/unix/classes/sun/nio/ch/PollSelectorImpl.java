@@ -35,8 +35,13 @@ import java.util.Deque;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
-
+import jdk.incubator.foreign.MemoryAddress;
 import jdk.internal.misc.Unsafe;
+import jdk.internal.panama.LibC;
+import sun.nio.FFIUtils;
+
+import static jdk.internal.panama.LibC.EINTR;
+import static sun.nio.FFIUtils.errno;
 
 /**
  * Selector implementation based on poll
@@ -377,7 +382,18 @@ class PollSelectorImpl extends SelectorImpl {
         return pollArray.getShort(offset);
     }
 
-    private static native int poll(long pollAddress, int numfds, int timeout);
+    private static int poll(long pollAddress, int numfds, int timeout) throws IOException {
+        int res = LibC.poll(MemoryAddress.ofLong(pollAddress), numfds, timeout);
+        if (res < 0) {
+            int errno = errno();
+            if (errno == EINTR) {
+                return IOStatus.INTERRUPTED;
+            } else {
+                throw new IOException(FFIUtils.getErrorMsg(errno, "poll failed"));
+            }
+        }
+        return res;
+    }
 
     static {
         IOUtil.load();

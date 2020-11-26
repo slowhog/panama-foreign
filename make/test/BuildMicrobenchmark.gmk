@@ -94,6 +94,7 @@ $(eval $(call SetupJavaCompilation, BUILD_JDK_MICROBENCHMARK, \
     SRC := $(MICROBENCHMARK_SRC), \
     BIN := $(MICROBENCHMARK_CLASSES), \
     JAVA_FLAGS := --add-modules jdk.unsupported --limit-modules java.management, \
+    JAVAC_FLAGS := --enable-preview --add-exports java.base/jdk.incubator.jbind.core=ALL-UNNAMED \
 ))
 
 $(BUILD_JDK_MICROBENCHMARK): $(JMH_COMPILE_JARS)

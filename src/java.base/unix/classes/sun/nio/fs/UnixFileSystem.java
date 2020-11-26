@@ -62,15 +62,20 @@ abstract class UnixFileSystem
         if (chdirAllowed) {
             this.needToResolveAgainstDefaultDirectory = true;
         } else {
-            byte[] cwd = UnixNativeDispatcher.getcwd();
-            boolean defaultIsCwd = (cwd.length == defaultDirectory.length);
-            if (defaultIsCwd) {
-                for (int i=0; i<cwd.length; i++) {
-                    if (cwd[i] != defaultDirectory[i]) {
-                        defaultIsCwd = false;
-                        break;
+            boolean defaultIsCwd;
+            try {
+                byte[] cwd = UnixNativeDispatcher.getcwd();
+                defaultIsCwd = (cwd.length == defaultDirectory.length);
+                if (defaultIsCwd) {
+                    for (int i = 0; i < cwd.length; i++) {
+                        if (cwd[i] != defaultDirectory[i]) {
+                            defaultIsCwd = false;
+                            break;
+                        }
                     }
                 }
+            } catch (UnixException ue) {
+                defaultIsCwd = false;
             }
             this.needToResolveAgainstDefaultDirectory = !defaultIsCwd;
         }

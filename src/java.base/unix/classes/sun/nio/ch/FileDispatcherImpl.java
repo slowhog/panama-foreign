@@ -27,11 +27,41 @@ package sun.nio.ch;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-
+import java.io.UncheckedIOException;
+import java.lang.invoke.VarHandle;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.NativeScope;
 import jdk.internal.access.JavaIOFileDescriptorAccess;
 import jdk.internal.access.SharedSecrets;
+import jdk.internal.panama.LibC;
+import jdk.internal.panama.LibC.flock;
+import jdk.internal.panama.LibC.stat64;
+import jdk.internal.panama.LibC.statvfs;
+import sun.nio.FFIUtils;
+
+import static jdk.incubator.foreign.CLinker.C_INT;
+import static jdk.internal.panama.LibC.SEEK_CUR;
+import static jdk.internal.panama.LibC.SEEK_SET;
+import static jdk.internal.panama.LibC.EACCES;
+import static jdk.internal.panama.LibC.EAGAIN;
+import static jdk.internal.panama.LibC.EINTR;
+import static jdk.internal.panama.LibC.ENOTSUP;
+import static jdk.internal.panama.LibC.F_FULLFSYNC;
+import static jdk.internal.panama.LibC.F_NOCACHE;
+import static jdk.internal.panama.LibC.F_RDLCK;
+import static jdk.internal.panama.LibC.F_SETLK;
+import static jdk.internal.panama.LibC.F_SETLKW;
+import static jdk.internal.panama.LibC.F_UNLCK;
+import static jdk.internal.panama.LibC.F_WRLCK;
+import static jdk.internal.panama.LibC.AF_UNIX;
+import static jdk.internal.panama.LibC.SOCK_STREAM;
+import static sun.nio.FFIUtils.errno;
 
 class FileDispatcherImpl extends FileDispatcher {
+
+    private static int preCloseFD = -1;
 
     static {
         IOUtil.load();
@@ -137,55 +167,215 @@ class FileDispatcherImpl extends FileDispatcher {
         return result;
     }
 
-    // -- Native methods --
+    static int read0(FileDescriptor fd, long address, int len)
+            throws IOException {
+        return (int) FFIUtils.convertReturnValue(
+                LibC.read(fdAccess.get(fd),
+                        MemoryAddress.ofLong(address),
+                        len),
+                true);
+    }
 
-    static native int read0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static int pread0(FileDescriptor fd, long address, int len,
+                        long position) throws IOException {
+        return (int) FFIUtils.convertReturnValue(
+                LibC.pread(fdAccess.get(fd),
+                        MemoryAddress.ofLong(address),
+                        len, position),
+                true);
+    }
 
-    static native int pread0(FileDescriptor fd, long address, int len,
-                             long position) throws IOException;
+    static long readv0(FileDescriptor fd, long address, int len)
+            throws IOException {
+        return FFIUtils.convertReturnValue(
+                LibC.readv(fdAccess.get(fd),
+                        MemoryAddress.ofLong(address),
+                        len),
+                true);
+    }
 
-    static native long readv0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static int write0(FileDescriptor fd, long address, int len)
+            throws IOException {
+        return (int) FFIUtils.convertReturnValue(
+                LibC.write(fdAccess.get(fd),
+                        MemoryAddress.ofLong(address),
+                        len),
+                false);
+    }
 
-    static native int write0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static int pwrite0(FileDescriptor fd, long address, int len,
+                         long position) throws IOException {
+        return (int) FFIUtils.convertReturnValue(
+                LibC.pwrite(fdAccess.get(fd),
+                        MemoryAddress.ofLong(address),
+                        len, position),
+                false);
+    }
 
-    static native int pwrite0(FileDescriptor fd, long address, int len,
-                             long position) throws IOException;
+    static long writev0(FileDescriptor fd, long address, int len)
+            throws IOException {
+        return FFIUtils.convertReturnValue(
+                LibC.writev(fdAccess.get(fd),
+                        MemoryAddress.ofLong(address),
+                        len),
+                false);
+    }
 
-    static native long writev0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    private static long handle(long rv, String msg) throws IOException {
+        if (rv >= 0) {
+            return rv;
+        } else {
+            int errno = errno();
+            if (errno == EINTR) {
+                return IOStatus.INTERRUPTED;
+            } else {
+                throw new IOException(FFIUtils.getErrorMsg(errno, msg));
+            }
+        }
+    }
 
-    static native int force0(FileDescriptor fd, boolean metaData)
-        throws IOException;
+    static int force0(FileDescriptor fd, boolean metaData)
+            throws IOException {
+        int result = LibC.fcntl(fdAccess.get(fd), F_FULLFSYNC);
+        if (result == -1 && errno() == ENOTSUP) {
+            result = LibC.fsync(fdAccess.get(fd));
+        }
+        return (int) handle(result, "Force failed");
+    }
 
-    static native long seek0(FileDescriptor fd, long offset)
-        throws IOException;
+    static long seek0(FileDescriptor fd, long offset)
+            throws IOException {
+        return handle((offset < 0) ?
+                        LibC.lseek(fdAccess.get(fd), 0, SEEK_CUR) :
+                        LibC.lseek(fdAccess.get(fd), offset, SEEK_SET),
+                "lseek64 failed");
+    }
 
-    static native int truncate0(FileDescriptor fd, long size)
-        throws IOException;
+    static int truncate0(FileDescriptor fd, long size)
+            throws IOException {
+        return (int) handle(LibC.ftruncate(fdAccess.get(fd), size),
+                "Truncation failed");
+    }
 
-    static native long size0(FileDescriptor fd) throws IOException;
+    static long size0(FileDescriptor fd) throws IOException {
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            stat64 fbuf = stat64.allocate(s);
+            if (LibC.fstat64(fdAccess.get(fd), fbuf) < 0) {
+                return handle(-1, "Size failed");
+            }
+            // FIXME: Linux need to use BLKGETSIZE64 for block device
+            /*
+#ifdef BLKGETSIZE64
+            if (S_ISBLK(fbuf.st_mode)) {
+                uint64_t size;
+                if (ioctl(fd, BLKGETSIZE64, &size) < 0)
+                return handle(env, -1, "Size failed");
+                return (jlong)size;
+            }
+#endif
+             */
 
-    static native int lock0(FileDescriptor fd, boolean blocking, long pos,
-                            long size, boolean shared) throws IOException;
+            return fbuf.st_size$get();
+        }
+    }
 
-    static native void release0(FileDescriptor fd, long pos, long size)
-        throws IOException;
+    static int lock0(FileDescriptor fd, boolean blocking, long pos,
+                       long size, boolean shared) throws IOException {
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            flock fl = flock.allocate(s);
+            fl.l_whence$set((short) SEEK_SET);
+            fl.l_len$set((size == Long.MAX_VALUE) ? 0 : size);
+            fl.l_start$set(pos);
+            fl.l_type$set((short) (shared ? F_RDLCK : F_WRLCK));
+            int cmd = blocking ? F_SETLKW : F_SETLK;
+            int lockResult = LibC.fcntl(fdAccess.get(fd), cmd, fl.address());
+            if (lockResult < 0) {
+                int errno = errno();
+                if ((cmd == F_SETLK) && (errno == EAGAIN || errno == EACCES)) {
+                    return NO_LOCK;
+                }
+                if (errno == EINTR) {
+                    return INTERRUPTED;
+                }
+                throw new IOException(FFIUtils.getErrorMsg(errno, "Lock failed"));
+            }
+            return 0;
+        }
+    }
 
-    // Shared with SocketDispatcher and DatagramDispatcher but
-    // NOT used by FileDispatcherImpl
-    static native void close0(FileDescriptor fd) throws IOException;
+    static void release0(FileDescriptor fd, long pos, long size)
+            throws IOException {
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            flock fl = flock.allocate(s);
+            fl.l_whence$set((short) SEEK_SET);
+            fl.l_len$set((size == Long.MAX_VALUE) ? 0 : size);
+            fl.l_start$set(pos);
+            fl.l_type$set((short) F_UNLCK);
+            int lockResult = LibC.fcntl(fdAccess.get(fd), F_SETLK, fl.address());
+            if (lockResult < 0) {
+                throw new IOException(FFIUtils.getLastErrorMsg("Release failed"));
+            }
+        }
+    }
 
-    static native void preClose0(FileDescriptor fd) throws IOException;
+    static void close0(FileDescriptor fd) throws IOException {
+        closeIntFD(fdAccess.get(fd));
+    }
 
-    static native void dup0(FileDescriptor fd1, FileDescriptor fd2) throws IOException;
+    static void preClose0(FileDescriptor fd) throws IOException {
+        if (preCloseFD >= 0) {
+            if (LibC.dup2(preCloseFD, fdAccess.get(fd)) < 0) {
+                throw new IOException(FFIUtils.getLastErrorMsg("dup2 failed"));
+            }
+        }
+    }
 
-    static native void closeIntFD(int fd) throws IOException;
+    static void dup0(FileDescriptor fd1, FileDescriptor fd2) throws IOException {
+        if (LibC.dup2(fdAccess.get(fd1), fdAccess.get(fd2)) < 0) {
+            throw new IOException("dup2 failed");
+        }
+    }
 
-    static native int setDirect0(FileDescriptor fd) throws IOException;
+    static void closeIntFD(int fd) throws IOException {
+        if (fd != -1) {
+            if (LibC.close(fd) < 0) {
+                throw new IOException(FFIUtils.getLastErrorMsg("Close failed"));
+            }
+        }
+    }
 
-    static native void init();
+    static int setDirect0(FileDescriptor fd) throws IOException {
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            int fdInt = fdAccess.get(fd);
+            statvfs file_stat = statvfs.allocate(s);
+            int result = LibC.fcntl(fdInt, F_NOCACHE, 1);
+            if (result == -1) {
+                throw new IOException(FFIUtils.getLastErrorMsg("DirectIO setup failed"));
+            }
+            result = LibC.fstatvfs(fdInt, file_stat);
+            if (result == -1) {
+                throw new IOException(FFIUtils.getLastErrorMsg("DirectIO setup failed"));
+            }
+            return (int) file_stat.f_frsize$get();
+        }
+    }
+
+    static int initFFI() {
+        MemoryLayout layout = MemoryLayout.ofSequence(2, C_INT);
+        VarHandle reader = layout.varHandle(int.class, MemoryLayout.PathElement.sequenceElement());
+        try (MemorySegment sp = MemorySegment.allocateNative(layout)) {
+            if (LibC.socketpair(AF_UNIX, SOCK_STREAM, 0, sp) < 0) {
+                throw new UncheckedIOException(new IOException(
+                        FFIUtils.getLastErrorMsg("socketpair failed")));
+            }
+            int rv = (int) reader.get(sp, 0);
+            LibC.close((int) reader.get(sp, 1));
+            return rv;
+        }
+    }
+
+    static void init() {
+        preCloseFD = initFFI();
+    }
 
 }

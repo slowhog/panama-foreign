@@ -37,20 +37,45 @@ package sun.nio.ch;
 // always returns -1 and the signal(long) method has no effect.
 
 
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.internal.panama.LibC;
+
+import static jdk.internal.panama.LibC.SIGIO;
+
 public class NativeThread {
+    private static final int INTERRUPT_SIGNAL = SIGIO;
 
     // Returns an opaque token representing the native thread underlying the
     // invoking Java thread.  On systems that do not require signalling, this
     // method always returns -1.
     //
     public static native long current();
-
+/*
+    public static long currentFFI() {
+        return ForeignUnsafe.getUnsafeOffset(LibC.pthread_self());
+    }
+*/
     // Signals the given native thread so as to release it from a blocking I/O
     // operation.  On systems that do not require signalling, this method has
     // no effect.
     //
-    public static native void signal(long nt);
-
+    public static void signal(long nt) {
+        LibC.pthread_kill(MemoryAddress.ofLong(nt), INTERRUPT_SIGNAL);
+    }
+/*
+    private static void initFFI() {
+        try (Scope s = FFIUtils.localScope()) {
+            var sa = sigaction.allocate(s);
+            var osa = sigaction.allocate(s);
+            sa.__sigaction_u$get().__sa_handler$set((notUsed -> {}));
+            sa.sa_flags$set(0);
+            LibC.sigemptyset(sa.sa_mask$ptr());
+            if (LibC.sigaction(INTERRUPT_SIGNAL, sa.ptr(), osa.ptr()) < 0) {
+                throw new RuntimeException(FFIUtils.getLastErrorMsg("sigaction"));
+            }
+        }
+    }
+*/
     private static native void init();
 
     static {

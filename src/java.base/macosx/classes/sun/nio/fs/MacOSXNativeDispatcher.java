@@ -32,7 +32,7 @@ import java.security.PrivilegedAction;
  * MacOSX specific system calls.
  */
 
-class MacOSXNativeDispatcher extends BsdNativeDispatcher {
+class MacOSXNativeDispatcher {
     private MacOSXNativeDispatcher() { }
 
     static final int kCFStringNormalizationFormC = 2;

@@ -25,18 +25,30 @@
 
 package sun.nio.fs;
 
-import java.nio.file.*;
 import java.io.IOException;
-import java.util.*;
-import java.security.AccessController;
-import sun.security.action.GetPropertyAction;
+import java.nio.file.FileStore;
+import java.nio.file.WatchService;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.MemoryLayout;
+import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.NativeScope;
+import jdk.incubator.foreign.SequenceLayout;
+import jdk.internal.panama.LibC;
+import jdk.internal.panama.LibC.statfs;
+import sun.nio.FFIUtils;
+
+import static jdk.internal.panama.LibC.MNT_NOWAIT;
+import static jdk.internal.panama.LibC.MNT_WAIT;
 
 /**
  * Bsd implementation of FileSystem
  */
 
 class BsdFileSystem extends UnixFileSystem {
-
     BsdFileSystem(UnixFileSystemProvider provider, String dir) {
         super(provider, dir);
     }
@@ -74,28 +86,35 @@ class BsdFileSystem extends UnixFileSystem {
      */
     @Override
     Iterable<UnixMountEntry> getMountEntries() {
-        ArrayList<UnixMountEntry> entries = new ArrayList<UnixMountEntry>();
+        ArrayList<UnixMountEntry> entries = new ArrayList<>();
         try {
-            long iter = BsdNativeDispatcher.getfsstat();
-            try {
-                for (;;) {
-                    UnixMountEntry entry = new UnixMountEntry();
-                    int res = BsdNativeDispatcher.fsstatEntry(iter, entry);
-                    if (res < 0)
-                        break;
-                    entries.add(entry);
-                }
-            } finally {
-                BsdNativeDispatcher.endfsstat(iter);
-            }
+            int count = 0;
+            int numEntries = LibC.getfsstat(MemoryAddress.NULL, 0, MNT_NOWAIT);
+            UnixNativeDispatcher.throwUnixExceptionIf(numEntries <= 0);
 
-        } catch (UnixException x) {
+            while (count != numEntries) {
+                try (NativeScope s = NativeScope.unboundedScope()) {
+                    MemorySegment buf = s.allocateArray(statfs.$LAYOUT, numEntries);
+                    count = numEntries;
+                    numEntries = LibC.getfsstat(buf, (int) buf.byteSize(), MNT_WAIT);
+                    UnixNativeDispatcher.throwUnixExceptionIf(count <= 0);
+                    // It's possible that a new filesystem gets mounted between
+                    // the first getfsstat and the second so loop until consistent
+                    if (count != numEntries) {
+                        continue;
+                    }
+                    for (int i = 0; i < numEntries; i++) {
+                        UnixMountEntry entry = new UnixMountEntry(statfs.at(buf).offset(i));
+                        entries.add(entry);
+                    }
+                    break;
+                }
+            }
+        } catch (UnixException ex) {
             // nothing we can do
         }
         return entries;
     }
-
-
 
     @Override
     FileStore getFileStore(UnixMountEntry entry) throws IOException {

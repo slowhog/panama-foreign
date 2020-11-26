@@ -1,0 +1,15 @@
+--include-symbols CFStringCreateMutable
+--include-symbols CFStringAppendCharacters
+--include-symbols CFStringNormalize
+--include-symbols CFStringGetLength
+--include-symbols CFStringGetCString
+--include-symbols CFRelease
+--include-symbols CFStringGetCharactersPtr
+--include-symbols CFStringGetCharacters
+--include-symbols CFStringCreateWithCharacters
+--include-symbols __CFRangeMake
+--include-symbols UTTypeCreatePreferredIdentifierForTag
+--include-symbols UTTypeCopyPreferredTagWithClass
+--include-symbols kUTTagClassFilenameExtension
+--include-symbols kUTTagClassMIMEType
+--include-symbols kCFStringEncodingUTF16

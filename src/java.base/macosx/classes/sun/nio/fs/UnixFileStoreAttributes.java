@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2001, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2008, 2009, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,33 +23,46 @@
  * questions.
  */
 
-#include <poll.h>
+package sun.nio.fs;
 
-#include "jni.h"
-#include "jni_util.h"
-#include "jvm.h"
-#include "jlong.h"
-#include "nio.h"
-#include "sun_nio_ch_PollSelectorImpl.h"
+import jdk.internal.panama.LibC.statvfs;
 
-JNIEXPORT jint JNICALL
-Java_sun_nio_ch_PollSelectorImpl_poll(JNIEnv *env, jclass clazz,
-                                      jlong address, jint numfds,
-                                      jint timeout)
-{
-    struct pollfd *a;
-    int res;
+class UnixFileStoreAttributes {
+    private long f_frsize;          // block size
+    private long f_blocks;          // total
+    private long f_bfree;           // free
+    private long f_bavail;          // usable
 
-    a = (struct pollfd *) jlong_to_ptr(address);
-    res = poll(a, numfds, timeout);
-    if (res < 0) {
-        if (errno == EINTR) {
-            return IOS_INTERRUPTED;
-        } else {
-            JNU_ThrowIOExceptionWithLastError(env, "poll failed");
-            return IOS_THROWN;
-        }
+    private UnixFileStoreAttributes() {
     }
-    return (jint) res;
-}
 
+    void init(statvfs vfs) {
+        f_frsize = vfs.f_frsize$get();
+        f_blocks = vfs.f_blocks$get();
+        f_bfree = vfs.f_bfree$get();
+        f_bavail = vfs.f_bavail$get();
+    }
+
+    static UnixFileStoreAttributes get(UnixPath path) throws UnixException {
+        UnixFileStoreAttributes attrs = new UnixFileStoreAttributes();
+        UnixNativeDispatcher.statvfs(path, attrs);
+        return attrs;
+    }
+
+    long blockSize() {
+        return f_frsize;
+    }
+
+    long totalBlocks() {
+        return f_blocks;
+    }
+
+    long freeBlocks() {
+        return f_bfree;
+    }
+
+    long availableBlocks() {
+        return f_bavail;
+    }
+
+}

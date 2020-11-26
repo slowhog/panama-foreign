@@ -27,6 +27,17 @@ package sun.nio.ch;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.net.PortUnreachableException;
+import jdk.incubator.foreign.MemoryAddress;
+import jdk.incubator.foreign.NativeScope;
+import jdk.internal.panama.LibC;
+import jdk.internal.panama.LibC.iovec;
+import jdk.internal.panama.LibC.msghdr;
+import sun.nio.FFIUtils;
+
+import static jdk.internal.panama.LibC.IOV_MAX;
+import static jdk.internal.panama.LibC.ECONNREFUSED;
+import static sun.nio.FFIUtils.errno;
 
 /**
  * Allows different platforms to call different native methods
@@ -67,15 +78,57 @@ class DatagramDispatcher extends NativeDispatcher {
         FileDispatcherImpl.dup0(fd1, fd2);
     }
 
-    static native int read0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static int read0(FileDescriptor fd, long address, int len)
+        throws IOException {
+        long res = LibC.recv(FFIUtils.getFD(fd),
+                MemoryAddress.ofLong(address),
+                len, 0);
+        if (res < 0 && errno() == ECONNREFUSED) {
+            throw new PortUnreachableException();
+        }
+        return (int) FFIUtils.convertReturnValue(res, true);
+    }
 
-    static native long readv0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static long readv0(FileDescriptor fd, long address, int len)
+        throws IOException {
+        iovec buf = iovec.at(FFIUtils.ofNativeSegment(address, iovec.sizeof()));
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            // TODO: Make sure the allocated struct is initialized with 0
+            msghdr m = msghdr.allocate(s);
+            m.msg_iov$set(buf.address());
+            m.msg_iovlen$set(len > IOV_MAX ? IOV_MAX : len);
+            long res = LibC.recvmsg(FFIUtils.getFD(fd), m, 0);
+            if (res < 0 && errno() == ECONNREFUSED) {
+                throw new PortUnreachableException();
+            }
+            return (int) FFIUtils.convertReturnValue(res, true);
+        }
+    }
 
-    static native int write0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static int write0(FileDescriptor fd, long address, int len)
+        throws IOException {
+        long res = LibC.send(FFIUtils.getFD(fd),
+                MemoryAddress.ofLong(address),
+                len, 0);
+        if (res < 0 && errno() == ECONNREFUSED) {
+            throw new PortUnreachableException();
+        }
+        return (int) FFIUtils.convertReturnValue(res, false);
+    }
 
-    static native long writev0(FileDescriptor fd, long address, int len)
-        throws IOException;
+    static long writev0(FileDescriptor fd, long address, int len)
+        throws IOException {
+        iovec buf = iovec.at(FFIUtils.ofNativeSegment(address, iovec.sizeof()));
+        try (NativeScope s = NativeScope.unboundedScope()) {
+            // TODO: Make sure the allocated struct is initialized with 0
+            msghdr m = msghdr.allocate(s);
+            m.msg_iov$set(buf.address());
+            m.msg_iovlen$set(len > IOV_MAX ? IOV_MAX : len);
+            long res = LibC.sendmsg(FFIUtils.getFD(fd), m, 0);
+            if (res < 0 && errno() == ECONNREFUSED) {
+                throw new PortUnreachableException();
+            }
+            return (int) FFIUtils.convertReturnValue(res, false);
+        }
+    }
 }
